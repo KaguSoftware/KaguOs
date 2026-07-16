@@ -109,6 +109,25 @@ export default async function DashboardPage() {
     });
   }
 
+  if (canAccess(ctx, "comms")) {
+    const [{ count: leads }, { count: clients }] = await Promise.all([
+      ctx.supabase
+        .from("contacts")
+        .select("id", { count: "exact", head: true })
+        .eq("kind", "lead"),
+      ctx.supabase
+        .from("contacts")
+        .select("id", { count: "exact", head: true })
+        .eq("kind", "client"),
+    ]);
+    cards.push({
+      section: "comms",
+      href: "/comms",
+      blurb: "Leads, clients, and their linked resources.",
+      stat: `${leads ?? 0} leads · ${clients ?? 0} clients`,
+    });
+  }
+
   // Quick actions — the one-click primitives, gated by what you can reach.
   const actions: QuickAction[] = [];
   if (canAccess(ctx, "debug"))
@@ -123,6 +142,8 @@ export default async function DashboardPage() {
   }
   if (canAccess(ctx, "marketing"))
     actions.push({ label: "New campaign", href: "/marketing/new-campaign" });
+  if (canAccess(ctx, "comms"))
+    actions.push({ label: "New contact", href: "/comms/new" });
   if (ctx.isAdmin)
     actions.push({ label: "New sprint", href: "/learn/new" });
 

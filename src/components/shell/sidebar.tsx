@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   Bug,
+  Contact as ContactIcon,
   FolderKanban,
   GraduationCap,
   Landmark,
@@ -41,6 +42,7 @@ const NAV: NavItem[] = [
   },
   { href: "/debug", label: "Debug", icon: Bug, section: "debug" },
   { href: "/marketing", label: "Marketing", icon: Megaphone, section: "marketing" },
+  { href: "/comms", label: "Comms", icon: ContactIcon, section: "comms" },
 ];
 
 function isActive(pathname: string, href: string) {

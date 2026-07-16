@@ -4,6 +4,7 @@ export const SECTIONS = [
   "management",
   "debug",
   "marketing",
+  "comms",
 ] as const;
 
 export type Section = (typeof SECTIONS)[number];
@@ -14,6 +15,7 @@ export const SECTION_LABELS: Record<Section, string> = {
   management: "Kagu Management",
   debug: "Kagu Debug",
   marketing: "Kagu Marketing",
+  comms: "Kagu Comms",
 };
 
 export type Profile = {
@@ -263,4 +265,39 @@ export type ProjectSecret = {
   created_by: string | null;
   created_at: string;
   updated_at: string;
+};
+
+export type ContactKind = "lead" | "client";
+export type ContactStatus =
+  | "new"
+  | "contacted"
+  | "negotiating"
+  | "won"
+  | "lost"
+  | "active"
+  | "dormant";
+
+export type Contact = {
+  id: string;
+  name: string;
+  company: string | null;
+  kind: ContactKind;
+  status: ContactStatus;
+  email: string | null;
+  phone: string | null;
+  owner_id: string | null;
+  notes: string | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type ContactLink = {
+  id: string;
+  contact_id: string;
+  label: string;
+  url: string | null;
+  note: string | null;
+  created_by: string | null;
+  created_at: string;
 };

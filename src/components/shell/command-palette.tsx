@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   Bug,
+  Contact,
   FolderKanban,
   GraduationCap,
   Landmark,
@@ -41,6 +42,8 @@ const ALL: Command[] = [
   { id: "debug-new", label: "New task", href: "/debug/new", icon: Plus, section: "debug", keywords: "create add bug" },
   { id: "marketing", label: "Marketing", hint: "Campaigns & content", href: "/marketing", icon: Megaphone, section: "marketing" },
   { id: "mkt-new-campaign", label: "New campaign", href: "/marketing/new-campaign", icon: Plus, section: "marketing", keywords: "create add" },
+  { id: "comms", label: "Comms", hint: "Leads & clients", href: "/comms", icon: Contact, section: "comms", keywords: "crm contacts" },
+  { id: "comms-new", label: "New contact", href: "/comms/new", icon: Plus, section: "comms", keywords: "create add lead client" },
   { id: "admin", label: "Admin", hint: "Users & access", href: "/admin", icon: ShieldCheck, adminOnly: true, keywords: "team users" },
   { id: "account", label: "Account settings", href: "/account", icon: ShieldCheck, keywords: "profile name color password" },
 ];
