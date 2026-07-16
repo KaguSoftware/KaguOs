@@ -208,6 +208,9 @@ export default async function DashboardPage() {
         ))}
         {!ctx.showcase && <ShowcaseToggle />}
       </div>
+      <div className="mb-6">
+        <Reminders reminders={reminders} members={members} meId={ctx.userId} />
+      </div>
       <div className="grid gap-6 lg:grid-cols-[1fr_20rem]">
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:content-start">
           {cards.map((card) => (
@@ -232,7 +235,6 @@ export default async function DashboardPage() {
         </div>
         <div className="flex flex-col gap-6">
           <ActivityFeed items={activity} members={members} />
-          <Reminders reminders={reminders} members={members} meId={ctx.userId} />
         </div>
       </div>
     </>

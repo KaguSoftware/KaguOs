@@ -65,6 +65,7 @@ export function AnnouncementHero({
       <div className="mb-6 rounded-lg border border-line bg-surface p-3">
         <textarea
           autoFocus
+          data-no-ring
           value={body}
           onChange={(e) => setBody(e.target.value)}
           placeholder="Announce something to the whole team…"
