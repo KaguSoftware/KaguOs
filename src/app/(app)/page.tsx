@@ -2,6 +2,7 @@ import Link from "next/link";
 import { ArrowUpRight } from "lucide-react";
 import { getSessionContext, canAccess } from "@/lib/data/session";
 import { PageHeader } from "@/components/shell/page-header";
+import { Reminders } from "@/components/shell/reminders";
 import { formatTRY, isActiveRecurring, monthlyAmount, toTRY, type FxRates } from "@/lib/finance";
 import { SECTION_LABELS, type Section } from "@/lib/types";
 
@@ -106,26 +107,29 @@ export default async function DashboardPage() {
         title={`Hey, ${firstName}`}
         description="Everything Kagu runs on, in one quiet place."
       />
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        {cards.map((card) => (
-          <Link
-            key={card.section}
-            href={card.href}
-            className="group rounded-lg border border-line bg-surface p-4 transition-colors duration-150 hover:border-line-strong hover:bg-raised"
-          >
-            <div className="flex items-center justify-between">
-              <h2 className="text-sm font-semibold">{SECTION_LABELS[card.section]}</h2>
-              <ArrowUpRight
-                className="size-4 text-faint transition-colors duration-150 group-hover:text-primary-dim"
-                aria-hidden
-              />
-            </div>
-            <p className="mt-1 text-[13px] text-muted">{card.blurb}</p>
-            {card.stat && (
-              <p className="mt-2 font-mono text-xs text-faint">{card.stat}</p>
-            )}
-          </Link>
-        ))}
+      <div className="grid gap-6 lg:grid-cols-[1fr_20rem]">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:content-start">
+          {cards.map((card) => (
+            <Link
+              key={card.section}
+              href={card.href}
+              className="group rounded-lg border border-line bg-surface p-4 transition-colors duration-150 hover:border-line-strong hover:bg-raised"
+            >
+              <div className="flex items-center justify-between">
+                <h2 className="text-sm font-semibold">{SECTION_LABELS[card.section]}</h2>
+                <ArrowUpRight
+                  className="size-4 text-faint transition-colors duration-150 group-hover:text-primary-dim"
+                  aria-hidden
+                />
+              </div>
+              <p className="mt-1 text-[13px] text-muted">{card.blurb}</p>
+              {card.stat && (
+                <p className="mt-2 font-mono text-xs text-primary-dim/90">{card.stat}</p>
+              )}
+            </Link>
+          ))}
+        </div>
+        <Reminders userId={ctx.userId} />
       </div>
     </>
   );
