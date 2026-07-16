@@ -94,7 +94,7 @@ export function Sidebar({
   return (
     <>
       {/* Desktop sidebar */}
-      <aside className="sticky top-0 hidden h-dvh w-56 shrink-0 flex-col border-r border-line bg-surface md:flex">
+      <aside className="sticky top-0 z-30 hidden h-dvh w-56 shrink-0 flex-col border-r border-line bg-surface md:flex">
         <div className="flex items-center justify-between px-4 pb-5 pt-5">
           <div className="flex items-center gap-2.5">
             <Logo size={24} />

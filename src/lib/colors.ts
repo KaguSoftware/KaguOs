@@ -28,6 +28,13 @@ export const MEMBER_COLORS: MemberColor[] = [
 
 const byKey = new Map(MEMBER_COLORS.map((c) => [c.key, c.css]));
 
+const HEX_RE = /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/;
+
+/** A stored color can be a preset key or a raw `#rgb`/`#rrggbb` hex value. */
+export function isHexColor(value: string): boolean {
+  return HEX_RE.test(value.trim());
+}
+
 /** Deterministic default so everyone has a color before picking one. */
 export function defaultColorKey(userId: string): string {
   let hash = 0;
@@ -39,11 +46,14 @@ export function defaultColorKey(userId: string): string {
 
 export function memberColorCss(
   userId: string,
-  colorKey: string | null | undefined
+  color: string | null | undefined
 ): string {
-  return byKey.get(colorKey ?? "") ?? byKey.get(defaultColorKey(userId))!;
+  const stored = color?.trim() ?? "";
+  if (isHexColor(stored)) return stored;
+  return byKey.get(stored) ?? byKey.get(defaultColorKey(userId))!;
 }
 
-export function isValidColorKey(key: string): boolean {
-  return byKey.has(key);
+/** Accepts either a preset key or a raw hex value — both are valid to store. */
+export function isValidColorKey(value: string): boolean {
+  return byKey.has(value) || isHexColor(value);
 }

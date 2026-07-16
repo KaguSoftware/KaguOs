@@ -146,7 +146,19 @@ export function Reminders({
                   {item.scope === "team" && (
                     <span
                       title={sharer ? `Shared by ${sharer.name}` : "Team reminder"}
-                      className="inline-flex shrink-0 items-center gap-1 rounded-full border border-primary/25 bg-primary/10 px-1.5 py-px text-[11px] text-primary-dim"
+                      style={
+                        sharer
+                          ? {
+                              color: sharer.color,
+                              borderColor: `color-mix(in oklch, ${sharer.color} 30%, transparent)`,
+                              backgroundColor: `color-mix(in oklch, ${sharer.color} 12%, transparent)`,
+                            }
+                          : undefined
+                      }
+                      className={cn(
+                        "inline-flex shrink-0 items-center gap-1 rounded-full border px-1.5 py-px text-[11px]",
+                        !sharer && "border-primary/25 bg-primary/10 text-primary-dim"
+                      )}
                     >
                       <Users className="size-2.5" aria-hidden />
                       {item.created_by === meId ? "you" : (sharer?.name?.split(" ")[0] ?? "team")}

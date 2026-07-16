@@ -75,7 +75,7 @@ export function NotificationBell({
       {open && (
         <div
           className={cn(
-            "absolute z-30 mt-2 w-80 max-w-[calc(100vw-2rem)] animate-pop-in overflow-hidden rounded-lg border border-line bg-raised shadow-lg shadow-black/40",
+            "absolute z-50 mt-2 w-80 max-w-[calc(100vw-2rem)] animate-pop-in overflow-hidden rounded-lg border border-line bg-raised shadow-lg shadow-black/40",
             align === "left"
               ? "left-0 origin-top-left"
               : "right-0 origin-top-right"
