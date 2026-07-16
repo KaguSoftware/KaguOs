@@ -36,7 +36,9 @@ Contracts w/ PDFs), **Debug** (everyone: per-project boards, self-claim-only, re
   lucide-react, recharts, papaparse.
 - Supabase: Auth (invite-only email+password — **public signups must be disabled in dashboard**,
   still to verify), Postgres w/ RLS everywhere, private buckets `contracts` + `learn`, Realtime on
-  `debug_tasks`. Project ref `ibbfptujwtbfwdefllgz`. Migrations 0001–0007 all APPLIED to cloud.
+  `debug_tasks`. Project ref `ibbfptujwtbfwdefllgz`. Migrations 0001–0013 applied via `db push`;
+  **0014 was applied by hand in the SQL Editor** (see incident note in Current status) — so the CLI
+  migration history does NOT know about 0014.
 - Env (`.env.local`, never committed): `NEXT_PUBLIC_SUPABASE_URL`,
   `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_ACCESS_TOKEN`
   (CLI; used for `db push` + Management API).
@@ -57,7 +59,7 @@ Contracts w/ PDFs), **Debug** (everyone: per-project boards, self-claim-only, re
 - Chart colors are validated (dataviz skill): income `oklch(0.62 0.13 160)`, expense
   `oklch(0.55 0.16 25)` — L band 0.48–0.67 on dark; re-validate any new chart palette.
 
-## Current status (2026-07-16)
+## Current status (2026-07-16, late)
 - DONE (code written, `npm run build` clean, pushed): all five sections at full agreed scope, admin
   panel, dashboard, CSV import, design system + field kit + create surfaces + optimistic layer. DB
   seeded: Parsa is admin with all memberships. Now DEPLOYED on Vercel + 2-browser tested.
@@ -93,9 +95,28 @@ Contracts w/ PDFs), **Debug** (everyone: per-project boards, self-claim-only, re
   active. **When adding a NEW query on a demo-able table, you MUST add the `is_demo` filter** or real
   data leaks in demo mode. Known limitation: records CREATED in demo mode are real rows (not flagged
   is_demo) — demos are view-first; thread is_demo through create actions if that becomes a problem.
-- Migrations 0008–0014 all **pushed to cloud & live** (harmless Docker-cache warning on Windows;
-  remote apply still succeeds). ⚠️ SANDBOX: the agent can't auto-confirm `db push` — Parsa runs
-  `npx supabase db push` interactively for every new migration.
+- Migrations 0008–0013 **pushed to cloud & live** via `db push`; 0014 hand-applied in SQL Editor
+  (see incident); **0015 pushed via `db push` (2026-07-16)**. Harmless Docker-cache warning on
+  Windows; remote apply still succeeds. ⚠️ SANDBOX: the agent can't auto-confirm `db push` — Parsa
+  runs `npx supabase db push` interactively for every new migration.
+- **0015_showcase_grant.sql (2026-07-16):** 0014 added `profiles.showcase_mode` but never granted
+  UPDATE on it. `profiles` has UPDATE revoked from `authenticated` (0001), re-granted PER-COLUMN
+  (full_name 0001, color 0006) — so entering showcase mode hit **"permission denied for table
+  profiles"** for everyone, admin included (app `is_admin` ≠ Postgres column grant). 0015 adds
+  `grant update (showcase_mode) … to authenticated`; the `profiles_update_own` RLS already scopes the
+  row. **LESSON: adding a column to `profiles` that users update requires BOTH a column GRANT and the
+  RLS row policy — the grant is easy to forget.**
+- ⚠️ **INCIDENT (2026-07-16): 0014 shipped in code but was NEVER pushed to prod.** Commit `3d06785`
+  added `.eq("is_demo", ctx.showcase)` to every list/count query, but `0014_showcase_mode.sql` (which
+  creates `is_demo` on the demo-able tables + `showcase_mode` on profiles) never ran on cloud. Effect:
+  every list query filtered on a non-existent column → PostgREST errored → the code's `data ?? []`
+  **silently swallowed it → every section showed empty ("No projects yet") for all non-admin users**.
+  Parsa (admin) still saw data only because he was on a dev DB that had 0014. Diagnosed via the tell
+  `column "showcase_mode" does not exist`. **Fixed by pasting `0014_showcase_mode.sql` into the
+  Supabase SQL Editor and running it directly on prod** (`ibbfptujwtbfwdefllgz`). This applied the 4
+  seeded demo projects to prod too (inert unless showcase on). The SQL-Editor apply bypassed the CLI,
+  so history was out of sync — **RESOLVED 2026-07-16 via `npx supabase migration repair --status
+  applied 0014`; the CLI history is now correct and 0015 pushed cleanly after it.**
 - NOT DONE: disabling public signups in the Supabase dashboard; formal E2E with RLS negative checks
   (deferred — 2-browser tested). **The agreed feature plan is now fully built.**
 
@@ -142,7 +163,13 @@ Contracts w/ PDFs), **Debug** (everyone: per-project boards, self-claim-only, re
 
 ## Roadmap / next steps
 DONE this session: notifications, announcements hero, ⌘K palette, task/idea editing, admin-row
-redesign, empty-state CTAs (a–c, f from the old list). REMAINING:
+redesign, empty-state CTAs (a–c, f from the old list). REMAINING (top two added 2026-07-16 after the
+0014 outage):
+0a. ⚠️ **Fix the silent error-swallowing on list pages** (see gotcha) — check `error` on every
+    `.select()` and surface it, so the next schema/migration slip screams instead of showing a fake
+    empty state. Consider a shared `selectOrThrow` helper + a CI guard that blocks deploying code
+    which references a column no applied migration has added. **Still the #1 latent risk.**
+0b. ~~Reconcile CLI migration history with hand-applied 0014~~ — DONE 2026-07-16 (`migration repair`).
 1. Disable "Allow new users to sign up" in Supabase dashboard (Auth → Sign In / Up).
 0. ⚠️ **push migration 0012** (`npx supabase db push`) — widens project_secrets RLS to Work members
    (0011 shipped it Management-gated; Parsa moved it to Work). 0011 already applied.
@@ -185,6 +212,13 @@ surface; run `/impeccable audit` after the batch (design hook was silenced after
 | i18n | English only | next-intl (TR) | if requested |
 
 ## Gotchas / open issues
+- ⚠️ **List queries silently swallow errors.** Pages like `work/page.tsx` do
+  `const { data } = await supabase.from(...).select(...)` then `data ?? []` — the `error` field is
+  ignored, so a failed query (missing column, RLS block, schema drift) renders as a benign empty
+  state instead of throwing. This is what turned the un-pushed-0014 migration into a silent
+  company-wide outage that looked like "no data." **STILL UNFIXED (roadmap 0).** When touching any
+  list page, check `error` and surface it. This is the single biggest reason a schema/migration slip
+  is hard to diagnose here.
 - Secrets only in `.env.local` + Vercel env. Access token + service key were pasted in chat —
   rotate anytime in dashboard.
 - `db push` needs `$env:SUPABASE_ACCESS_TOKEN` set and pipes `"Y"`; Docker warning is harmless.
