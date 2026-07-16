@@ -17,9 +17,12 @@
   --line: oklch(0.255 0.014 165);
   --line-strong: oklch(0.35 0.016 165);
 
-  --ink: oklch(0.94 0.006 160);
-  --muted: oklch(0.7 0.012 160);
-  --faint: oklch(0.55 0.01 160);
+  /* Text ramp tuned for WCAG AA on small text: even --faint (the lightest
+   * of the three, used for metadata/hints) clears 4.5:1 on --surface and
+   * --bg. Don't lower these lightnesses without re-checking contrast. */
+  --ink: oklch(0.95 0.006 160);
+  --muted: oklch(0.78 0.012 160);
+  --faint: oklch(0.66 0.011 160);
 
   --primary: oklch(0.86 0.14 160);
   --primary-ink: oklch(0.16 0.03 160);
