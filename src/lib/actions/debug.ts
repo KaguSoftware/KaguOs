@@ -1,0 +1,94 @@
+"use server";
+
+import { revalidatePath } from "next/cache";
+import { requireSection } from "@/lib/data/session";
+import type { ActionResult } from "@/lib/actions/account";
+import type { DebugPriority, DebugState } from "@/lib/types";
+
+const STATES: DebugState[] = ["open", "in_progress", "done"];
+const PRIORITIES: DebugPriority[] = ["low", "medium", "high", "urgent"];
+
+export async function createTask(
+  _prev: ActionResult,
+  formData: FormData
+): Promise<ActionResult> {
+  const ctx = await requireSection("debug");
+
+  // No required fields (create-flow rule) — fall back so NOT NULL columns stay valid.
+  const title =
+    String(formData.get("title") ?? "").trim().slice(0, 200) || "Untitled task";
+  const description = String(formData.get("description") ?? "").trim();
+  const rawPriority = String(formData.get("priority") ?? "medium") as DebugPriority;
+  const priority = PRIORITIES.includes(rawPriority) ? rawPriority : "medium";
+
+  const { error } = await ctx.supabase.from("debug_tasks").insert({
+    title,
+    description: description || null,
+    priority,
+    created_by: ctx.userId,
+  });
+  if (error) return { ok: false, message: error.message };
+
+  revalidatePath("/debug");
+  return { ok: true, message: "Task posted." };
+}
+
+export async function setTaskState(
+  taskId: string,
+  state: DebugState
+): Promise<ActionResult> {
+  const ctx = await requireSection("debug");
+  if (!STATES.includes(state)) return { ok: false, message: "Invalid state." };
+
+  const { error } = await ctx.supabase
+    .from("debug_tasks")
+    .update({ state })
+    .eq("id", taskId);
+  if (error) return { ok: false, message: error.message };
+
+  revalidatePath("/debug");
+  return { ok: true, message: "State updated." };
+}
+
+/** Claim for YOURSELF only — and only if still unclaimed (first click wins). */
+export async function claimTask(taskId: string): Promise<ActionResult> {
+  const ctx = await requireSection("debug");
+
+  const { data, error } = await ctx.supabase
+    .from("debug_tasks")
+    .update({ assignee_id: ctx.userId })
+    .eq("id", taskId)
+    .is("assignee_id", null)
+    .select("id");
+  if (error) return { ok: false, message: error.message };
+  if (!data || data.length === 0) {
+    return { ok: false, message: "Someone claimed it first." };
+  }
+
+  revalidatePath("/debug");
+  return { ok: true, message: "Claimed." };
+}
+
+export async function unclaimTask(taskId: string): Promise<ActionResult> {
+  const ctx = await requireSection("debug");
+
+  // UI offers this on your own tasks (admins: on any); DB culture allows unclaim generally.
+  const { error } = await ctx.supabase
+    .from("debug_tasks")
+    .update({ assignee_id: null })
+    .eq("id", taskId);
+  if (error) return { ok: false, message: error.message };
+
+  revalidatePath("/debug");
+  return { ok: true, message: "Unclaimed." };
+}
+
+export async function deleteTask(taskId: string): Promise<ActionResult> {
+  const ctx = await requireSection("debug");
+
+  const { error } = await ctx.supabase.from("debug_tasks").delete().eq("id", taskId);
+  if (error) return { ok: false, message: error.message };
+
+  revalidatePath("/debug");
+  return { ok: true, message: "Task deleted." };
+}

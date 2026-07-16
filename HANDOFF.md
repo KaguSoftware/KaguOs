@@ -19,8 +19,9 @@
 ## What this is
 KaguOs — the internal system of Kagu (kagusoftware.com, Istanbul software studio, **8 people
 total**). One login, five membership-gated sections: **Work** (4 ppl: projects + ideas),
-**Learn** (all 8: learning sprints with per-person progress), **Management** (2 ppl:
-multi-currency ledger + contracts w/ PDFs), **Debug** (everyone: claim-a-task board replacing a
+**Learn** (all 8: learning sprints with per-person progress), **Management** (2 ppl: detailed
+Finance tab — one-time transactions + recurring subscriptions/retainers, multi-currency — plus
+contracts w/ PDFs; added by Parsa 2026-07-16), **Debug** (everyone: claim-a-task board replacing a
 Google Sheet), **Marketing** (shell for now). Global admins manage users/memberships from an
 admin panel. **Rule: everyone in Work is ALWAYS also in Learn** (enforced by DB trigger —
 granting work auto-grants learn; learn can't be removed while work is held).
@@ -36,6 +37,19 @@ granting work auto-grants learn; learn can't be removed while work is held).
 - UI quality: Impeccable skill pack installed project-level (`.claude/skills/impeccable`).
 
 ## Conventions
+- **Create flows (Parsa rule, 2026-07-16)**: every "add new X" opens a spacious dedicated create
+  surface (`/section/new` page, or fullscreen overlay for sub-items) — NEVER an inline expander.
+  No required fields; on submit an empty-field confirm lists what's blank ("Title and Details are
+  empty — are you sure?"). Server fills NOT NULL columns with fallbacks ("Untitled…").
+  Component: `src/components/ui/create.tsx` (CreateForm / CreatePage / CreateOverlay).
+- **Typed custom fields everywhere (Parsa rule, 2026-07-16)**: every form control is a dedicated,
+  custom-built component suited to its content — custom Dropdown (no native select UI), custom
+  DatePicker calendar (no native date UI), NumberInput for numbers/amounts, EmailInput for emails,
+  UrlInput for links. No bare string inputs for typed content. Live in `src/components/ui/`;
+  extend the kit when a new field type appears.
+- **macOS-feel motion (Parsa rule, 2026-07-16)**: `--ease-mac` curve everywhere, pop-in popovers,
+  overlay/page fade-rises, button micro-press, frosted translucency on transient surfaces only.
+  Spec in DESIGN.md → Motion.
 - Access model: `profiles.is_admin` + `section_memberships(user_id, section)`; ALL enforcement via
   RLS using `private.is_admin()` / `private.is_member(section)` (SECURITY DEFINER helpers).
 - Text + CHECK constraints instead of Postgres enums (easier migrations).

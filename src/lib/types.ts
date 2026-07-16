@@ -79,7 +79,8 @@ export type SprintResource = {
   id: string;
   sprint_id: string;
   title: string;
-  url: string;
+  url: string | null;
+  file_path: string | null;
   created_at: string;
 };
 

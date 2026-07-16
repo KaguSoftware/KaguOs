@@ -5,6 +5,38 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
+export type ButtonVariant = "primary" | "outline" | "ghost" | "danger";
+export type ButtonSize = "sm" | "md";
+
+const buttonVariants: Record<ButtonVariant, string> = {
+  primary:
+    "bg-primary text-primary-ink font-medium hover:bg-primary-dim active:bg-primary-dim",
+  outline: "border border-line-strong text-ink hover:bg-raised active:bg-raised",
+  ghost: "text-muted hover:text-ink hover:bg-raised",
+  danger:
+    "border border-danger/40 text-danger hover:bg-danger/15 active:bg-danger/15",
+};
+
+const buttonSizes: Record<ButtonSize, string> = {
+  sm: "h-7 gap-1.5 rounded-md px-2.5 text-[13px]",
+  md: "h-9 gap-2 rounded-md px-3.5 text-sm",
+};
+
+export function buttonClasses(
+  variant: ButtonVariant = "outline",
+  size: ButtonSize = "md",
+  className?: string
+) {
+  return cn(
+    "inline-flex shrink-0 items-center justify-center whitespace-nowrap",
+    "transition-[color,background-color,border-color,transform] duration-150 ease-mac active:scale-[0.98]",
+    "disabled:pointer-events-none disabled:opacity-50",
+    buttonVariants[variant],
+    buttonSizes[size],
+    className
+  );
+}
+
 const dateFmt = new Intl.DateTimeFormat("en-GB", {
   day: "numeric",
   month: "short",

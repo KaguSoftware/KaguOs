@@ -7,6 +7,7 @@ import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Field } from "@/components/ui/field";
+import { EmailInput } from "@/components/ui/typed-inputs";
 
 export function LoginForm() {
   const router = useRouter();
@@ -38,11 +39,9 @@ export function LoginForm() {
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       <Field label="Email" htmlFor="email">
-        <Input
+        <EmailInput
           id="email"
           name="email"
-          type="email"
-          autoComplete="email"
           required
           autoFocus
           placeholder="you@kagusoftware.com"

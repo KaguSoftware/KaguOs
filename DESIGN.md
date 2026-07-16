@@ -51,11 +51,16 @@ Input/Textarea/Select (native, on `raised` fill, `line` border), Field (label + 
 Badge (state pills above), Panel, EmptyState (teaches the section, never blank), Skeleton,
 ConfirmDialog (native `<dialog>`; modals only for destructive confirms — everything else inline).
 
-## Motion
+## Motion — macOS feel (Parsa rule, 2026-07-16)
 
-150–200ms, `ease-out`, state feedback only (hover fills, row highlight on realtime update,
-dialog fade). No page-load choreography. `prefers-reduced-motion` collapses all of it (global rule
-in globals.css).
+Curve: `--ease-mac: cubic-bezier(0.32, 0.72, 0, 1)` (Apple's sheet curve) on everything.
+- Popovers (dropdown, date picker): `animate-pop-in` — 180ms scale 0.96→1 + fade, origin at trigger.
+- Fullscreen create overlays: `animate-overlay-in` — 220ms scale 0.985→1 + fade.
+- Route changes: `(app)/template.tsx` wraps pages in `animate-page-in` — 250ms fade + 4px rise.
+- Buttons: `active:scale-[0.98]` micro-press; hovers 150ms.
+- Transient surfaces (menus, popovers, overlays) get frosted translucency (`bg-raised/90
+  backdrop-blur-md`) — macOS material identity. NEVER on cards/panels (glassmorphism ban holds).
+- Motion conveys state only; `prefers-reduced-motion` collapses everything (global rule).
 
 ## Bans (project-specific)
 
