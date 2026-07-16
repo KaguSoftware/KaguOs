@@ -12,9 +12,13 @@ import type { MembersMap, Notification } from "@/lib/types";
 export function NotificationBell({
   notifications,
   members,
+  align = "right",
 }: {
   notifications: Notification[];
   members: MembersMap;
+  /** Which edge the tray anchors to. In the narrow desktop sidebar use
+   *  "left" so the 320px tray opens into the content, not off-screen. */
+  align?: "left" | "right";
 }) {
   const router = useRouter();
   const { run } = useAction();
@@ -69,7 +73,14 @@ export function NotificationBell({
       </button>
 
       {open && (
-        <div className="absolute right-0 z-30 mt-2 w-80 origin-top-right animate-pop-in overflow-hidden rounded-lg border border-line bg-raised shadow-lg shadow-black/40">
+        <div
+          className={cn(
+            "absolute z-30 mt-2 w-80 max-w-[calc(100vw-2rem)] animate-pop-in overflow-hidden rounded-lg border border-line bg-raised shadow-lg shadow-black/40",
+            align === "left"
+              ? "left-0 origin-top-left"
+              : "right-0 origin-top-right"
+          )}
+        >
           <div className="flex items-center justify-between border-b border-line px-3 py-2">
             <span className="text-[13px] font-semibold text-ink">Notifications</span>
             {notifications.length > 0 && (

@@ -97,7 +97,11 @@ export function Sidebar({
             <Logo size={24} />
             <span className="text-[15px] font-semibold tracking-tight">KaguOs</span>
           </div>
-          <NotificationBell notifications={notifications} members={members} />
+          <NotificationBell
+            notifications={notifications}
+            members={members}
+            align="left"
+          />
         </div>
         <nav className="flex-1 space-y-0.5 px-2" aria-label="Sections">
           {visible.map((item) => (
