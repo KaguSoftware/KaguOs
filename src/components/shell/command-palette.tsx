@@ -150,7 +150,7 @@ export function CommandPalette({
               }
             }}
             placeholder="Jump to… or type an action"
-            className="h-12 min-w-0 flex-1 bg-transparent text-sm text-ink placeholder:text-faint focus:outline-none"
+            className="h-12 min-w-0 flex-1 bg-transparent text-sm text-ink placeholder:text-faint focus:outline-none focus-visible:outline-none"
           />
           <kbd className="hidden rounded border border-line px-1.5 py-0.5 font-mono text-[10px] text-faint sm:block">
             esc

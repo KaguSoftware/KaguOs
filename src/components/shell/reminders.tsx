@@ -63,7 +63,7 @@ export function Reminders({
           placeholder="Note to self…"
           maxLength={300}
           disabled={pending}
-          className="min-w-0 flex-1 bg-transparent text-sm text-ink placeholder:text-faint focus:outline-none disabled:opacity-60"
+          className="min-w-0 flex-1 bg-transparent text-sm text-ink placeholder:text-faint focus:outline-none focus-visible:outline-none disabled:opacity-60"
         />
         <button
           type="button"
