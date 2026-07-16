@@ -10,6 +10,7 @@ import {
   LayoutDashboard,
   LogOut,
   Megaphone,
+  Search,
   ShieldCheck,
   type LucideIcon,
 } from "lucide-react";
@@ -102,6 +103,19 @@ export function Sidebar({
             members={members}
             align="left"
           />
+        </div>
+        <div className="px-2 pb-2">
+          <button
+            type="button"
+            onClick={() => window.dispatchEvent(new Event("open-command-palette"))}
+            className="flex w-full items-center gap-2.5 rounded-md border border-line px-2.5 py-1.5 text-[13px] text-faint transition-colors duration-150 hover:border-line-strong hover:text-muted"
+          >
+            <Search className="size-3.5" aria-hidden />
+            <span>Search…</span>
+            <kbd className="ml-auto rounded border border-line px-1 font-mono text-[10px]">
+              ⌘K
+            </kbd>
+          </button>
         </div>
         <nav className="flex-1 space-y-0.5 px-2" aria-label="Sections">
           {visible.map((item) => (

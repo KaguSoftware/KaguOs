@@ -1,6 +1,7 @@
 import { getSessionContext } from "@/lib/data/session";
 import { getMembersMap } from "@/lib/data/members";
 import { Sidebar } from "@/components/shell/sidebar";
+import { CommandPalette } from "@/components/shell/command-palette";
 import { ToastProvider } from "@/components/ui/toast";
 import type { Notification } from "@/lib/types";
 
@@ -23,6 +24,7 @@ export default async function AppLayout({
 
   return (
     <ToastProvider>
+      <CommandPalette sections={[...ctx.sections]} isAdmin={ctx.isAdmin} />
       <div className="flex min-h-dvh flex-col md:flex-row">
         <Sidebar
           sections={[...ctx.sections]}
