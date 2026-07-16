@@ -57,6 +57,55 @@ $$;
 grant execute on function private.is_admin() to authenticated;
 grant execute on function private.is_member(text) to authenticated;
 
+-- Company rule: everyone in Work is ALWAYS also in Learn.
+-- (a) granting work auto-grants learn
+create or replace function private.grant_learn_with_work()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  if new.section = 'work' then
+    insert into public.section_memberships (user_id, section)
+    values (new.user_id, 'learn')
+    on conflict do nothing;
+  end if;
+  return new;
+end;
+$$;
+
+create trigger memberships_grant_learn_with_work
+after insert on public.section_memberships
+for each row execute function private.grant_learn_with_work();
+
+-- (b) learn cannot be removed while work is held (checked at commit so
+-- removing both in one statement, or deleting a whole user, still works)
+create or replace function private.check_work_implies_learn()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  if old.section = 'learn' and exists (
+    select 1 from public.section_memberships w
+    where w.user_id = old.user_id and w.section = 'work'
+  ) and not exists (
+    select 1 from public.section_memberships l
+    where l.user_id = old.user_id and l.section = 'learn'
+  ) then
+    raise exception 'Work members must also be in Learn — remove Work first';
+  end if;
+  return old;
+end;
+$$;
+
+create constraint trigger memberships_work_requires_learn
+after delete on public.section_memberships
+deferrable initially deferred
+for each row execute function private.check_work_implies_learn();
+
 create or replace function private.set_updated_at()
 returns trigger
 language plpgsql

@@ -17,11 +17,13 @@
 - **Keep this file and the memory index in lockstep** (memory dir: Claude's project memory).
 
 ## What this is
-KaguOs — the internal system of Kagu (kagusoftware.com, Istanbul software studio, ~12 people).
-One login, five membership-gated sections: **Work** (4 ppl: projects + ideas), **Learn** (8 ppl:
-learning sprints with per-person progress), **Management** (2 ppl: multi-currency ledger +
-contracts w/ PDFs), **Debug** (everyone: claim-a-task board replacing a Google Sheet),
-**Marketing** (shell for now). Global admins manage users/memberships from an admin panel.
+KaguOs — the internal system of Kagu (kagusoftware.com, Istanbul software studio, **8 people
+total**). One login, five membership-gated sections: **Work** (4 ppl: projects + ideas),
+**Learn** (all 8: learning sprints with per-person progress), **Management** (2 ppl:
+multi-currency ledger + contracts w/ PDFs), **Debug** (everyone: claim-a-task board replacing a
+Google Sheet), **Marketing** (shell for now). Global admins manage users/memberships from an
+admin panel. **Rule: everyone in Work is ALWAYS also in Learn** (enforced by DB trigger —
+granting work auto-grants learn; learn can't be removed while work is held).
 
 ## Stack & environment
 - Next.js 16.2.10 (App Router, TS, Turbopack), React 19.2, Tailwind v4, lucide-react.
