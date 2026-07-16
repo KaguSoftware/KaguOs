@@ -36,6 +36,7 @@ export default async function LearnPage() {
       .select(
         "id, title, description, starts_on, ends_on, sprint_participants(user_id), sprint_goals(count)"
       )
+      .eq("is_demo", ctx.showcase)
       .order("starts_on", { ascending: false }),
     ctx.supabase
       .from("sprint_goal_progress")

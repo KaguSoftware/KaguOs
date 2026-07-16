@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { requireSection } from "@/lib/data/session";
+import { blockIfShowcase, requireSection } from "@/lib/data/session";
 import { notifySection } from "@/lib/actions/notify";
 import type { ActionResult } from "@/lib/actions/account";
 import type { DebugPriority, DebugState } from "@/lib/types";
@@ -13,6 +13,8 @@ export async function createTask(
   _prev: ActionResult,
   formData: FormData
 ): Promise<ActionResult> {
+  const showcaseStop = await blockIfShowcase();
+  if (showcaseStop) return showcaseStop;
   const ctx = await requireSection("debug");
 
   // No required fields (create-flow rule) — fall back so NOT NULL columns stay valid.
@@ -46,6 +48,8 @@ export async function setTaskState(
   taskId: string,
   state: DebugState
 ): Promise<ActionResult> {
+  const showcaseStop = await blockIfShowcase();
+  if (showcaseStop) return showcaseStop;
   const ctx = await requireSection("debug");
   if (!STATES.includes(state)) return { ok: false, message: "Invalid state." };
 
@@ -64,6 +68,8 @@ export async function updateTask(
   taskId: string,
   fields: { title: string; description: string; priority: DebugPriority }
 ): Promise<ActionResult> {
+  const showcaseStop = await blockIfShowcase();
+  if (showcaseStop) return showcaseStop;
   const ctx = await requireSection("debug");
   const title = fields.title.trim().slice(0, 200);
   if (!title) return { ok: false, message: "A task needs a title." };
@@ -85,6 +91,8 @@ export async function updateTask(
 
 /** Claim for YOURSELF only — and only if still unclaimed (first click wins). */
 export async function claimTask(taskId: string): Promise<ActionResult> {
+  const showcaseStop = await blockIfShowcase();
+  if (showcaseStop) return showcaseStop;
   const ctx = await requireSection("debug");
 
   const { data, error } = await ctx.supabase
@@ -103,6 +111,8 @@ export async function claimTask(taskId: string): Promise<ActionResult> {
 }
 
 export async function unclaimTask(taskId: string): Promise<ActionResult> {
+  const showcaseStop = await blockIfShowcase();
+  if (showcaseStop) return showcaseStop;
   const ctx = await requireSection("debug");
 
   // UI offers this on your own tasks (admins: on any); DB culture allows unclaim generally.
@@ -117,6 +127,8 @@ export async function unclaimTask(taskId: string): Promise<ActionResult> {
 }
 
 export async function deleteTask(taskId: string): Promise<ActionResult> {
+  const showcaseStop = await blockIfShowcase();
+  if (showcaseStop) return showcaseStop;
   const ctx = await requireSection("debug");
 
   const { error } = await ctx.supabase.from("debug_tasks").delete().eq("id", taskId);

@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { requireSection } from "@/lib/data/session";
+import { blockIfShowcase, requireSection } from "@/lib/data/session";
 import type { ActionResult } from "@/lib/actions/account";
 import type { ContactKind, ContactStatus } from "@/lib/types";
 
@@ -20,6 +20,8 @@ export async function createContact(
   _prev: ActionResult,
   formData: FormData
 ): Promise<ActionResult> {
+  const showcaseStop = await blockIfShowcase();
+  if (showcaseStop) return showcaseStop;
   const ctx = await requireSection("comms");
   const kind = String(formData.get("kind") ?? "lead") as ContactKind;
   const status = String(formData.get("status") ?? "new") as ContactStatus;
@@ -57,6 +59,8 @@ export async function updateContact(
     notes: string;
   }
 ): Promise<ActionResult> {
+  const showcaseStop = await blockIfShowcase();
+  if (showcaseStop) return showcaseStop;
   const ctx = await requireSection("comms");
   const name = fields.name.trim().slice(0, 160);
   if (!name) return { ok: false, message: "A contact needs a name." };
@@ -84,6 +88,8 @@ export async function setContactStatus(
   contactId: string,
   status: ContactStatus
 ): Promise<ActionResult> {
+  const showcaseStop = await blockIfShowcase();
+  if (showcaseStop) return showcaseStop;
   const ctx = await requireSection("comms");
   if (!STATUSES.includes(status)) return { ok: false, message: "Invalid status." };
 
@@ -99,6 +105,8 @@ export async function setContactStatus(
 }
 
 export async function deleteContact(contactId: string): Promise<ActionResult> {
+  const showcaseStop = await blockIfShowcase();
+  if (showcaseStop) return showcaseStop;
   const ctx = await requireSection("comms");
   const { error } = await ctx.supabase.from("contacts").delete().eq("id", contactId);
   if (error) return { ok: false, message: error.message };
@@ -111,6 +119,8 @@ export async function addContactLink(
   contactId: string,
   formData: FormData
 ): Promise<ActionResult> {
+  const showcaseStop = await blockIfShowcase();
+  if (showcaseStop) return showcaseStop;
   const ctx = await requireSection("comms");
   const label = str(formData.get("label"), 160);
   if (!label) return { ok: false, message: "A link needs a label." };
@@ -135,6 +145,8 @@ export async function deleteContactLink(
   linkId: string,
   contactId: string
 ): Promise<ActionResult> {
+  const showcaseStop = await blockIfShowcase();
+  if (showcaseStop) return showcaseStop;
   const ctx = await requireSection("comms");
   const { error } = await ctx.supabase
     .from("contact_links")

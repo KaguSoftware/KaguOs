@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { requireSection } from "@/lib/data/session";
+import { blockIfShowcase, requireSection } from "@/lib/data/session";
 import type { ActionResult } from "@/lib/actions/account";
 import type {
   ContractStatus,
@@ -33,6 +33,8 @@ export async function setFxRate(
   currency: "USD" | "EUR",
   rate: number
 ): Promise<ActionResult> {
+  const showcaseStop = await blockIfShowcase();
+  if (showcaseStop) return showcaseStop;
   const ctx = await requireSection("management");
   if (!["USD", "EUR"].includes(currency)) return { ok: false, message: "Invalid currency." };
   if (!Number.isFinite(rate) || rate <= 0) {
@@ -56,6 +58,8 @@ export async function createTransaction(
   _prev: ActionResult,
   formData: FormData
 ): Promise<ActionResult> {
+  const showcaseStop = await blockIfShowcase();
+  if (showcaseStop) return showcaseStop;
   const ctx = await requireSection("management");
 
   const type = String(formData.get("type") ?? "expense") as TransactionType;
@@ -83,6 +87,8 @@ export async function updateTransaction(
   _prev: ActionResult,
   formData: FormData
 ): Promise<ActionResult> {
+  const showcaseStop = await blockIfShowcase();
+  if (showcaseStop) return showcaseStop;
   const ctx = await requireSection("management");
   const id = String(formData.get("id") ?? "");
   if (!id) return { ok: false, message: "Missing transaction id." };
@@ -114,6 +120,8 @@ export async function updateRecurring(
   _prev: ActionResult,
   formData: FormData
 ): Promise<ActionResult> {
+  const showcaseStop = await blockIfShowcase();
+  if (showcaseStop) return showcaseStop;
   const ctx = await requireSection("management");
   const id = String(formData.get("id") ?? "");
   if (!id) return { ok: false, message: "Missing item id." };
@@ -144,6 +152,8 @@ export async function updateRecurring(
 }
 
 export async function deleteTransaction(transactionId: string): Promise<ActionResult> {
+  const showcaseStop = await blockIfShowcase();
+  if (showcaseStop) return showcaseStop;
   const ctx = await requireSection("management");
 
   const { error } = await ctx.supabase
@@ -162,6 +172,8 @@ export async function createRecurring(
   _prev: ActionResult,
   formData: FormData
 ): Promise<ActionResult> {
+  const showcaseStop = await blockIfShowcase();
+  if (showcaseStop) return showcaseStop;
   const ctx = await requireSection("management");
 
   const type = String(formData.get("type") ?? "expense") as TransactionType;
@@ -191,6 +203,8 @@ export async function setRecurringCanceled(
   itemId: string,
   canceled: boolean
 ): Promise<ActionResult> {
+  const showcaseStop = await blockIfShowcase();
+  if (showcaseStop) return showcaseStop;
   const ctx = await requireSection("management");
 
   const { error } = await ctx.supabase
@@ -204,6 +218,8 @@ export async function setRecurringCanceled(
 }
 
 export async function deleteRecurring(itemId: string): Promise<ActionResult> {
+  const showcaseStop = await blockIfShowcase();
+  if (showcaseStop) return showcaseStop;
   const ctx = await requireSection("management");
 
   const { error } = await ctx.supabase
@@ -234,6 +250,8 @@ export async function createContract(
   _prev: ActionResult,
   formData: FormData
 ): Promise<ActionResult> {
+  const showcaseStop = await blockIfShowcase();
+  if (showcaseStop) return showcaseStop;
   const ctx = await requireSection("management");
 
   const { data: contract, error } = await ctx.supabase
@@ -251,6 +269,8 @@ export async function updateContract(
   _prev: ActionResult,
   formData: FormData
 ): Promise<ActionResult> {
+  const showcaseStop = await blockIfShowcase();
+  if (showcaseStop) return showcaseStop;
   const ctx = await requireSection("management");
   const id = String(formData.get("id") ?? "");
   if (!id) return { ok: false, message: "Missing contract id." };
@@ -271,6 +291,8 @@ export async function attachContractFile(
   contractId: string,
   filePath: string
 ): Promise<ActionResult> {
+  const showcaseStop = await blockIfShowcase();
+  if (showcaseStop) return showcaseStop;
   const ctx = await requireSection("management");
 
   const { data: existing } = await ctx.supabase
@@ -294,6 +316,8 @@ export async function attachContractFile(
 }
 
 export async function removeContractFile(contractId: string): Promise<ActionResult> {
+  const showcaseStop = await blockIfShowcase();
+  if (showcaseStop) return showcaseStop;
   const ctx = await requireSection("management");
 
   const { data: contract } = await ctx.supabase
@@ -316,6 +340,8 @@ export async function removeContractFile(contractId: string): Promise<ActionResu
 }
 
 export async function deleteContract(contractId: string): Promise<ActionResult> {
+  const showcaseStop = await blockIfShowcase();
+  if (showcaseStop) return showcaseStop;
   const ctx = await requireSection("management");
 
   const { data: contract } = await ctx.supabase

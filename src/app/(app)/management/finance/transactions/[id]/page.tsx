@@ -17,7 +17,7 @@ export default async function EditTransactionPage({
 
   const [{ data: transaction }, { data: projects }] = await Promise.all([
     ctx.supabase.from("transactions").select("*").eq("id", id).maybeSingle(),
-    ctx.supabase.from("projects").select("id, name").order("name"),
+    ctx.supabase.from("projects").select("id, name").eq("is_demo", ctx.showcase).order("name"),
   ]);
   if (!transaction) notFound();
 

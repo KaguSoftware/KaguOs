@@ -31,6 +31,7 @@ export default async function MarketingPage() {
       ctx.supabase
         .from("marketing_items")
         .select("*")
+        .eq("is_demo", ctx.showcase)
         .order("created_at", { ascending: false }),
       getMembersMap(ctx.supabase),
     ]);

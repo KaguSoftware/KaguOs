@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { requireAdmin, requireSection } from "@/lib/data/session";
+import { blockIfShowcase, requireAdmin, requireSection } from "@/lib/data/session";
 import type { ActionResult } from "@/lib/actions/account";
 
 function sprintFields(formData: FormData) {
@@ -24,6 +24,8 @@ export async function createSprint(
   _prev: ActionResult,
   formData: FormData
 ): Promise<ActionResult> {
+  const showcaseStop = await blockIfShowcase();
+  if (showcaseStop) return showcaseStop;
   const ctx = await requireAdmin();
   const fields = sprintFields(formData);
 
@@ -42,6 +44,8 @@ export async function updateSprint(
   _prev: ActionResult,
   formData: FormData
 ): Promise<ActionResult> {
+  const showcaseStop = await blockIfShowcase();
+  if (showcaseStop) return showcaseStop;
   const ctx = await requireAdmin();
   const id = String(formData.get("id") ?? "");
   const fields = sprintFields(formData);
@@ -57,6 +61,8 @@ export async function updateSprint(
 }
 
 export async function deleteSprint(sprintId: string): Promise<ActionResult> {
+  const showcaseStop = await blockIfShowcase();
+  if (showcaseStop) return showcaseStop;
   const ctx = await requireAdmin();
 
   const { error } = await ctx.supabase.from("sprints").delete().eq("id", sprintId);
@@ -70,6 +76,8 @@ export async function setParticipants(
   sprintId: string,
   userIds: string[]
 ): Promise<ActionResult> {
+  const showcaseStop = await blockIfShowcase();
+  if (showcaseStop) return showcaseStop;
   const ctx = await requireAdmin();
 
   const { data: current, error: readError } = await ctx.supabase
@@ -108,6 +116,8 @@ export async function addGoals(
   titles: string[],
   startOrder: number
 ): Promise<ActionResult> {
+  const showcaseStop = await blockIfShowcase();
+  if (showcaseStop) return showcaseStop;
   const ctx = await requireAdmin();
   if (!sprintId) return { ok: false, message: "Missing sprint id." };
 
@@ -129,6 +139,8 @@ export async function addGoals(
 }
 
 export async function removeGoal(goalId: string, sprintId: string): Promise<ActionResult> {
+  const showcaseStop = await blockIfShowcase();
+  if (showcaseStop) return showcaseStop;
   const ctx = await requireAdmin();
 
   const { error } = await ctx.supabase.from("sprint_goals").delete().eq("id", goalId);
@@ -143,6 +155,8 @@ export async function addResource(
   _prev: ActionResult,
   formData: FormData
 ): Promise<ActionResult> {
+  const showcaseStop = await blockIfShowcase();
+  if (showcaseStop) return showcaseStop;
   const ctx = await requireAdmin();
   const sprintId = String(formData.get("sprint_id") ?? "");
   const title =
@@ -166,6 +180,8 @@ export async function removeResource(
   resourceId: string,
   sprintId: string
 ): Promise<ActionResult> {
+  const showcaseStop = await blockIfShowcase();
+  if (showcaseStop) return showcaseStop;
   const ctx = await requireAdmin();
 
   const { data: resource } = await ctx.supabase
@@ -194,6 +210,8 @@ export async function toggleGoalProgress(
   sprintId: string,
   done: boolean
 ): Promise<ActionResult> {
+  const showcaseStop = await blockIfShowcase();
+  if (showcaseStop) return showcaseStop;
   const ctx = await requireSection("learn");
 
   const { error } = done

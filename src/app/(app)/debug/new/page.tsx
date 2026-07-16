@@ -10,6 +10,7 @@ export default async function NewTaskPage() {
   const { data: projects } = await ctx.supabase
     .from("projects")
     .select("id, name")
+    .eq("is_demo", ctx.showcase)
     .order("name");
 
   return (

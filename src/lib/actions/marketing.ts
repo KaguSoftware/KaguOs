@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { requireSection } from "@/lib/data/session";
+import { blockIfShowcase, requireSection } from "@/lib/data/session";
 import type { ActionResult } from "@/lib/actions/account";
 import type { CampaignStatus, PostStatus } from "@/lib/types";
 
@@ -27,6 +27,8 @@ export async function createCampaign(
   _prev: ActionResult,
   formData: FormData
 ): Promise<ActionResult> {
+  const showcaseStop = await blockIfShowcase();
+  if (showcaseStop) return showcaseStop;
   const ctx = await requireSection("marketing");
 
   const budgetRaw = String(formData.get("budget") ?? "").trim();
@@ -59,6 +61,8 @@ export async function setCampaignStatus(
   campaignId: string,
   status: CampaignStatus
 ): Promise<ActionResult> {
+  const showcaseStop = await blockIfShowcase();
+  if (showcaseStop) return showcaseStop;
   const ctx = await requireSection("marketing");
   if (!CAMPAIGN_STATUSES.includes(status)) return { ok: false, message: "Invalid status." };
 
@@ -73,6 +77,8 @@ export async function setCampaignStatus(
 }
 
 export async function deleteCampaign(campaignId: string): Promise<ActionResult> {
+  const showcaseStop = await blockIfShowcase();
+  if (showcaseStop) return showcaseStop;
   const ctx = await requireSection("marketing");
 
   const { error } = await ctx.supabase
@@ -89,6 +95,8 @@ export async function createPost(
   _prev: ActionResult,
   formData: FormData
 ): Promise<ActionResult> {
+  const showcaseStop = await blockIfShowcase();
+  if (showcaseStop) return showcaseStop;
   const ctx = await requireSection("marketing");
 
   const status = String(formData.get("status") ?? "draft") as PostStatus;
@@ -116,6 +124,8 @@ export async function setPostStatus(
   postId: string,
   status: PostStatus
 ): Promise<ActionResult> {
+  const showcaseStop = await blockIfShowcase();
+  if (showcaseStop) return showcaseStop;
   const ctx = await requireSection("marketing");
   if (!POST_STATUSES.includes(status)) return { ok: false, message: "Invalid status." };
 
@@ -130,6 +140,8 @@ export async function setPostStatus(
 }
 
 export async function deletePost(postId: string): Promise<ActionResult> {
+  const showcaseStop = await blockIfShowcase();
+  if (showcaseStop) return showcaseStop;
   const ctx = await requireSection("marketing");
 
   const { error } = await ctx.supabase
@@ -146,6 +158,8 @@ export async function createLink(
   _prev: ActionResult,
   formData: FormData
 ): Promise<ActionResult> {
+  const showcaseStop = await blockIfShowcase();
+  if (showcaseStop) return showcaseStop;
   const ctx = await requireSection("marketing");
 
   const { error } = await ctx.supabase.from("marketing_items").insert({
@@ -161,6 +175,8 @@ export async function createLink(
 }
 
 export async function deleteLink(itemId: string): Promise<ActionResult> {
+  const showcaseStop = await blockIfShowcase();
+  if (showcaseStop) return showcaseStop;
   const ctx = await requireSection("marketing");
 
   const { error } = await ctx.supabase

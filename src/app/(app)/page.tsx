@@ -71,6 +71,7 @@ export default async function DashboardPage() {
     const { count: active } = await ctx.supabase
       .from("sprints")
       .select("id", { count: "exact", head: true })
+      .eq("is_demo", ctx.showcase)
       .lte("starts_on", today)
       .gte("ends_on", today);
     cards.push({

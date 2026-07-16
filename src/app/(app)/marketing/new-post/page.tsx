@@ -9,7 +9,7 @@ export default async function NewPostPage() {
   const ctx = await requireSection("marketing");
 
   const [{ data: campaigns }, { data: marketingMembers }] = await Promise.all([
-    ctx.supabase.from("marketing_campaigns").select("id, name").order("name"),
+    ctx.supabase.from("marketing_campaigns").select("id, name").eq("is_demo", ctx.showcase).order("name"),
     ctx.supabase
       .from("section_memberships")
       .select("user_id, profiles(id, full_name, email)")

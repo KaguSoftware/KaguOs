@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { after } from "next/server";
 import { redirect } from "next/navigation";
-import { requireSection, type SessionContext } from "@/lib/data/session";
+import { blockIfShowcase, requireSection, type SessionContext } from "@/lib/data/session";
 import { notifySection, notifyUser } from "@/lib/actions/notify";
 import type { ActionResult } from "@/lib/actions/account";
 import type { ProjectStatus } from "@/lib/types";
@@ -58,6 +58,8 @@ export async function createProject(
   _prev: ActionResult,
   formData: FormData
 ): Promise<ActionResult> {
+  const showcaseStop = await blockIfShowcase();
+  if (showcaseStop) return showcaseStop;
   const ctx = await requireSection("work");
   const fields = projectFields(formData);
 
@@ -74,6 +76,8 @@ export async function updateProject(
   _prev: ActionResult,
   formData: FormData
 ): Promise<ActionResult> {
+  const showcaseStop = await blockIfShowcase();
+  if (showcaseStop) return showcaseStop;
   const ctx = await requireSection("work");
   const id = String(formData.get("id") ?? "");
   const fields = projectFields(formData);
@@ -88,6 +92,8 @@ export async function updateProject(
 }
 
 export async function deleteProject(projectId: string): Promise<ActionResult> {
+  const showcaseStop = await blockIfShowcase();
+  if (showcaseStop) return showcaseStop;
   const ctx = await requireSection("work");
 
   const { error } = await ctx.supabase.from("projects").delete().eq("id", projectId);
@@ -101,6 +107,8 @@ export async function createIdea(
   _prev: ActionResult,
   formData: FormData
 ): Promise<ActionResult> {
+  const showcaseStop = await blockIfShowcase();
+  if (showcaseStop) return showcaseStop;
   const ctx = await requireSection("work");
   const title =
     String(formData.get("title") ?? "").trim().slice(0, 200) || "Untitled idea";
@@ -127,6 +135,8 @@ export async function updateIdea(
   ideaId: string,
   fields: { title: string; body: string }
 ): Promise<ActionResult> {
+  const showcaseStop = await blockIfShowcase();
+  if (showcaseStop) return showcaseStop;
   const ctx = await requireSection("work");
   const title = fields.title.trim().slice(0, 200);
   if (!title) return { ok: false, message: "An idea needs a title." };
@@ -143,6 +153,8 @@ export async function updateIdea(
 }
 
 export async function toggleVote(ideaId: string, hasVoted: boolean): Promise<ActionResult> {
+  const showcaseStop = await blockIfShowcase();
+  if (showcaseStop) return showcaseStop;
   const ctx = await requireSection("work");
 
   const { error } = hasVoted
@@ -165,6 +177,8 @@ export async function addComment(
   _prev: ActionResult,
   formData: FormData
 ): Promise<ActionResult> {
+  const showcaseStop = await blockIfShowcase();
+  if (showcaseStop) return showcaseStop;
   const ctx = await requireSection("work");
   const ideaId = String(formData.get("idea_id") ?? "");
   const body = String(formData.get("body") ?? "").trim();
@@ -188,6 +202,8 @@ export async function deleteComment(
   commentId: string,
   ideaId: string
 ): Promise<ActionResult> {
+  const showcaseStop = await blockIfShowcase();
+  if (showcaseStop) return showcaseStop;
   const ctx = await requireSection("work");
 
   const { error } = await ctx.supabase
@@ -202,6 +218,8 @@ export async function deleteComment(
 
 /** Idea → project. Creates the project, then marks the idea promoted. */
 export async function promoteIdea(ideaId: string): Promise<ActionResult> {
+  const showcaseStop = await blockIfShowcase();
+  if (showcaseStop) return showcaseStop;
   const ctx = await requireSection("work");
 
   const { data: idea, error: readError } = await ctx.supabase
@@ -256,6 +274,8 @@ export async function setIdeaStatus(
   ideaId: string,
   status: "open" | "archived"
 ): Promise<ActionResult> {
+  const showcaseStop = await blockIfShowcase();
+  if (showcaseStop) return showcaseStop;
   const ctx = await requireSection("work");
 
   const { error } = await ctx.supabase
@@ -270,6 +290,8 @@ export async function setIdeaStatus(
 }
 
 export async function deleteIdea(ideaId: string): Promise<ActionResult> {
+  const showcaseStop = await blockIfShowcase();
+  if (showcaseStop) return showcaseStop;
   const ctx = await requireSection("work");
 
   const { error } = await ctx.supabase.from("ideas").delete().eq("id", ideaId);

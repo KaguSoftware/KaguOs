@@ -86,6 +86,21 @@ export async function requireSection(section: Section): Promise<SessionContext> 
   return ctx;
 }
 
+/**
+ * Showcase mode is a read-only tour: while it's on, the user roams every
+ * section (see canAccess) but must not mutate anything — writing would create
+ * real rows in sections they don't belong to, or pollute the demo set. Mutating
+ * server actions call this first and return its result when it's non-null.
+ *
+ *   const stop = await blockIfShowcase(); if (stop) return stop;
+ */
+export async function blockIfShowcase(): Promise<{ ok: false; message: string } | null> {
+  const ctx = await getSessionContext();
+  return ctx.showcase
+    ? { ok: false, message: "Showcase mode is read-only — exit showcase to make changes." }
+    : null;
+}
+
 export async function requireAdmin(): Promise<SessionContext> {
   const ctx = await getSessionContext();
   if (!ctx.isAdmin) redirect("/");

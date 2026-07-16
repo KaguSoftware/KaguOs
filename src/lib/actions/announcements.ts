@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { requireAdmin } from "@/lib/data/session";
+import { blockIfShowcase, requireAdmin } from "@/lib/data/session";
 import type { ActionResult } from "@/lib/actions/account";
 
 type Tone = "info" | "primary" | "warning";
@@ -11,6 +11,8 @@ export async function postAnnouncement(
   body: string,
   tone: Tone
 ): Promise<ActionResult> {
+  const showcaseStop = await blockIfShowcase();
+  if (showcaseStop) return showcaseStop;
   const ctx = await requireAdmin();
   const clean = body.trim().slice(0, 500);
   if (!clean) return { ok: false, message: "Write something first." };
@@ -33,6 +35,8 @@ export async function postAnnouncement(
 }
 
 export async function dismissAnnouncement(id: string): Promise<ActionResult> {
+  const showcaseStop = await blockIfShowcase();
+  if (showcaseStop) return showcaseStop;
   const ctx = await requireAdmin();
   const { error } = await ctx.supabase
     .from("announcements")
