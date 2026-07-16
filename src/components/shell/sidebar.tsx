@@ -1,0 +1,172 @@
+"use client";
+
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import {
+  Bug,
+  FolderKanban,
+  GraduationCap,
+  Landmark,
+  LayoutDashboard,
+  LogOut,
+  Megaphone,
+  ShieldCheck,
+  type LucideIcon,
+} from "lucide-react";
+import { cn } from "@/lib/utils";
+import type { Section } from "@/lib/types";
+import { signOut } from "@/lib/actions/account";
+
+type NavItem = {
+  href: string;
+  label: string;
+  icon: LucideIcon;
+  section?: Section;
+  adminOnly?: boolean;
+};
+
+const NAV: NavItem[] = [
+  { href: "/", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/work", label: "Work", icon: FolderKanban, section: "work" },
+  { href: "/learn", label: "Learn", icon: GraduationCap, section: "learn" },
+  {
+    href: "/management/transactions",
+    label: "Management",
+    icon: Landmark,
+    section: "management",
+  },
+  { href: "/debug", label: "Debug", icon: Bug, section: "debug" },
+  { href: "/marketing", label: "Marketing", icon: Megaphone, section: "marketing" },
+];
+
+function isActive(pathname: string, href: string) {
+  if (href === "/") return pathname === "/";
+  const root = href.split("/").slice(0, 2).join("/");
+  return pathname === href || pathname.startsWith(root + "/") || pathname === root;
+}
+
+function NavLink({ item, pathname }: { item: NavItem; pathname: string }) {
+  const active = isActive(pathname, item.href);
+  const Icon = item.icon;
+  return (
+    <Link
+      href={item.href}
+      aria-current={active ? "page" : undefined}
+      className={cn(
+        "flex items-center gap-2.5 rounded-md px-2.5 py-1.5 text-sm transition-colors duration-150",
+        active
+          ? "bg-raised text-ink"
+          : "text-muted hover:bg-raised/60 hover:text-ink"
+      )}
+    >
+      <Icon className={cn("size-4", active && "text-primary-dim")} aria-hidden />
+      {item.label}
+    </Link>
+  );
+}
+
+export function Sidebar({
+  sections,
+  isAdmin,
+  name,
+  email,
+}: {
+  sections: Section[];
+  isAdmin: boolean;
+  name: string | null;
+  email: string;
+}) {
+  const pathname = usePathname();
+  const visible = NAV.filter(
+    (item) => !item.section || isAdmin || sections.includes(item.section)
+  );
+
+  return (
+    <>
+      {/* Desktop sidebar */}
+      <aside className="sticky top-0 hidden h-dvh w-56 shrink-0 flex-col border-r border-line bg-surface md:flex">
+        <div className="flex items-center gap-2.5 px-4 pb-5 pt-5">
+          <span className="size-2 rounded-full bg-primary" aria-hidden />
+          <span className="text-[15px] font-semibold tracking-tight">KaguOs</span>
+        </div>
+        <nav className="flex-1 space-y-0.5 px-2" aria-label="Sections">
+          {visible.map((item) => (
+            <NavLink key={item.href} item={item} pathname={pathname} />
+          ))}
+          {isAdmin && (
+            <>
+              <hr className="my-2 border-line" />
+              <NavLink
+                item={{ href: "/admin", label: "Admin", icon: ShieldCheck }}
+                pathname={pathname}
+              />
+            </>
+          )}
+        </nav>
+        <div className="flex items-center gap-2 border-t border-line p-3">
+          <Link
+            href="/account"
+            className="min-w-0 flex-1 rounded-md px-2 py-1.5 transition-colors duration-150 hover:bg-raised"
+          >
+            <p className="truncate text-[13px] font-medium text-ink">
+              {name || email}
+            </p>
+            <p className="truncate text-xs text-faint">{email}</p>
+          </Link>
+          <form action={signOut}>
+            <button
+              type="submit"
+              title="Sign out"
+              aria-label="Sign out"
+              className="rounded-md p-2 text-muted transition-colors duration-150 hover:bg-raised hover:text-ink"
+            >
+              <LogOut className="size-4" aria-hidden />
+            </button>
+          </form>
+        </div>
+      </aside>
+
+      {/* Mobile top bar */}
+      <header className="sticky top-0 z-20 flex flex-col border-b border-line bg-surface md:hidden">
+        <div className="flex items-center justify-between px-4 py-3">
+          <div className="flex items-center gap-2.5">
+            <span className="size-2 rounded-full bg-primary" aria-hidden />
+            <span className="text-[15px] font-semibold tracking-tight">KaguOs</span>
+          </div>
+          <div className="flex items-center gap-1">
+            <Link
+              href="/account"
+              className="rounded-md px-2 py-1 text-[13px] text-muted hover:bg-raised hover:text-ink"
+            >
+              {name || email}
+            </Link>
+            <form action={signOut}>
+              <button
+                type="submit"
+                title="Sign out"
+                aria-label="Sign out"
+                className="rounded-md p-1.5 text-muted hover:bg-raised hover:text-ink"
+              >
+                <LogOut className="size-4" aria-hidden />
+              </button>
+            </form>
+          </div>
+        </div>
+        <nav
+          className="flex gap-1 overflow-x-auto px-2 pb-2"
+          aria-label="Sections"
+        >
+          {visible.map((item) => (
+            <NavLink key={item.href} item={item} pathname={pathname} />
+          ))}
+          {isAdmin && (
+            <NavLink
+              item={{ href: "/admin", label: "Admin", icon: ShieldCheck }}
+              pathname={pathname}
+            />
+          )}
+        </nav>
+      </header>
+    </>
+  );
+}
