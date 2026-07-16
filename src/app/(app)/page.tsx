@@ -13,6 +13,7 @@ export default async function DashboardPage() {
   const firstName = ctx.profile.full_name?.split(" ")[0] ?? ctx.profile.email;
 
   const cards: Card[] = [];
+  let myTasks = 0;
 
   if (canAccess(ctx, "debug")) {
     const [{ count: open }, { count: mine }] = await Promise.all([
@@ -26,6 +27,7 @@ export default async function DashboardPage() {
         .eq("assignee_id", ctx.userId)
         .neq("state", "done"),
     ]);
+    myTasks = mine ?? 0;
     cards.push({
       section: "debug",
       href: "/debug",
@@ -105,7 +107,11 @@ export default async function DashboardPage() {
     <>
       <PageHeader
         title={`Hey, ${firstName}`}
-        description="Everything Kagu runs on, in one quiet place."
+        description={
+          canAccess(ctx, "debug") && myTasks > 0
+            ? `You have ${myTasks} debug ${myTasks === 1 ? "task" : "tasks"} on your plate.`
+            : "Everything Kagu runs on, in one quiet place."
+        }
       />
       <div className="grid gap-6 lg:grid-cols-[1fr_20rem]">
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:content-start">
