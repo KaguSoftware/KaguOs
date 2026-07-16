@@ -10,9 +10,10 @@ import {
   setIdeaStatus,
   toggleVote,
 } from "@/lib/actions/work";
-import type { ActionResult } from "@/lib/actions/account";
 import { Button, ConfirmButton, SubmitButton } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/input";
+import { useAction } from "@/lib/use-action";
+import { useToast } from "@/components/ui/toast";
 import { cn } from "@/lib/utils";
 
 export function VoteButton({
@@ -25,6 +26,7 @@ export function VoteButton({
   voted: boolean;
 }) {
   const [, startTransition] = useTransition();
+  const toast = useToast();
   // Optimistic: the vote lands instantly, the server reconciles after.
   const [local, setLocal] = useState({ votes, voted });
 
@@ -43,7 +45,10 @@ export function VoteButton({
         });
         startTransition(async () => {
           const result = await toggleVote(ideaId, was.voted);
-          if (result && !result.ok) setLocal(was);
+          if (result && !result.ok) {
+            setLocal(was);
+            toast.error(result.message);
+          }
         });
       }}
       aria-pressed={local.voted}
@@ -70,16 +75,7 @@ export function IdeaActions({
   status: "open" | "promoted" | "archived";
   canDelete: boolean;
 }) {
-  const [pending, startTransition] = useTransition();
-  const [error, setError] = useState<string | null>(null);
-
-  function run(fn: () => Promise<ActionResult>) {
-    setError(null);
-    startTransition(async () => {
-      const result = await fn();
-      if (result && !result.ok) setError(result.message);
-    });
-  }
+  const { pending, run } = useAction();
 
   return (
     <div className="flex flex-wrap items-center gap-2">
@@ -98,7 +94,9 @@ export function IdeaActions({
             variant="ghost"
             size="sm"
             disabled={pending}
-            onClick={() => run(() => setIdeaStatus(ideaId, "archived"))}
+            onClick={() =>
+              run(() => setIdeaStatus(ideaId, "archived"), { success: "Idea archived." })
+            }
           >
             Archive
           </Button>
@@ -109,7 +107,9 @@ export function IdeaActions({
           variant="outline"
           size="sm"
           disabled={pending}
-          onClick={() => run(() => setIdeaStatus(ideaId, "open"))}
+          onClick={() =>
+            run(() => setIdeaStatus(ideaId, "open"), { success: "Idea reopened." })
+          }
         >
           Reopen
         </Button>
@@ -119,16 +119,11 @@ export function IdeaActions({
           size="sm"
           disabled={pending}
           confirmLabel="Really delete?"
-          onConfirm={() => run(() => deleteIdea(ideaId))}
+          onConfirm={() => run(() => deleteIdea(ideaId), { success: "Idea deleted." })}
         >
           <Trash2 className="size-3.5" aria-hidden />
           Delete
         </ConfirmButton>
-      )}
-      {error && (
-        <p role="status" className="text-[13px] text-danger">
-          {error}
-        </p>
       )}
     </div>
   );
@@ -168,16 +163,12 @@ export function DeleteCommentButton({
   commentId: string;
   ideaId: string;
 }) {
-  const [pending, startTransition] = useTransition();
+  const { pending, run } = useAction();
   return (
     <button
       type="button"
       disabled={pending}
-      onClick={() =>
-        startTransition(async () => {
-          await deleteComment(commentId, ideaId);
-        })
-      }
+      onClick={() => run(() => deleteComment(commentId, ideaId))}
       title="Delete comment"
       aria-label="Delete comment"
       className="text-faint transition-colors duration-150 hover:text-danger disabled:opacity-50"

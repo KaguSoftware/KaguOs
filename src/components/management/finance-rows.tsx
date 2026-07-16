@@ -1,6 +1,5 @@
 "use client";
 
-import { useState, useTransition } from "react";
 import Link from "next/link";
 import { Pencil, Trash2 } from "lucide-react";
 import {
@@ -10,12 +9,13 @@ import {
 } from "@/lib/actions/management";
 import { Badge } from "@/components/ui/badge";
 import { Button, ConfirmButton } from "@/components/ui/button";
+import { useAction } from "@/lib/use-action";
 import { monthlyAmount, formatTRY, toTRY, type FxRates } from "@/lib/finance";
 import { cn, formatDate, formatMoney } from "@/lib/utils";
 import type { RecurringItem, Transaction } from "@/lib/types";
 
 export function TransactionRow({ transaction }: { transaction: Transaction }) {
-  const [pending, startTransition] = useTransition();
+  const { pending, run } = useAction();
   const income = transaction.type === "income";
 
   return (
@@ -56,8 +56,8 @@ export function TransactionRow({ transaction }: { transaction: Transaction }) {
             disabled={pending}
             confirmLabel="Delete?"
             onConfirm={() =>
-              startTransition(async () => {
-                await deleteTransaction(transaction.id);
+              run(() => deleteTransaction(transaction.id), {
+                success: "Transaction deleted.",
               })
             }
           >
@@ -77,8 +77,7 @@ export function RecurringRow({
   item: RecurringItem;
   rates: FxRates;
 }) {
-  const [pending, startTransition] = useTransition();
-  const [error, setError] = useState<string | null>(null);
+  const { pending, run } = useAction();
   const income = item.type === "income";
   const active = item.canceled_on === null;
   const monthlyTRY = toTRY(monthlyAmount(item), item.currency, rates);
@@ -120,13 +119,11 @@ export function RecurringRow({
           variant="ghost"
           size="sm"
           disabled={pending}
-          onClick={() => {
-            setError(null);
-            startTransition(async () => {
-              const result = await setRecurringCanceled(item.id, active);
-              if (result && !result.ok) setError(result.message);
-            });
-          }}
+          onClick={() =>
+            run(() => setRecurringCanceled(item.id, active), {
+              success: active ? "Marked canceled." : "Reactivated.",
+            })
+          }
         >
           {active ? "Cancel" : "Reactivate"}
         </Button>
@@ -135,20 +132,13 @@ export function RecurringRow({
           disabled={pending}
           confirmLabel="Delete?"
           onConfirm={() =>
-            startTransition(async () => {
-              await deleteRecurring(item.id);
-            })
+            run(() => deleteRecurring(item.id), { success: "Recurring item deleted." })
           }
         >
           <Trash2 className="size-3.5" aria-hidden />
           <span className="sr-only">Delete recurring item</span>
         </ConfirmButton>
       </div>
-      {error && (
-        <p role="status" className="mt-1.5 text-[13px] text-danger">
-          {error}
-        </p>
-      )}
     </li>
   );
 }

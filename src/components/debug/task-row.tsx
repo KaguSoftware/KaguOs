@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState } from "react";
 import { Hand, Loader2, Trash2, Undo2 } from "lucide-react";
 import {
   claimTask,
@@ -10,6 +10,7 @@ import {
 } from "@/lib/actions/debug";
 import { Badge, type BadgeTone } from "@/components/ui/badge";
 import { Button, ConfirmButton } from "@/components/ui/button";
+import { useAction } from "@/lib/use-action";
 import { cn, formatDate } from "@/lib/utils";
 import type { DebugPriority, DebugState, DebugTask, MembersMap } from "@/lib/types";
 
@@ -45,27 +46,21 @@ export function TaskRow({
   onRemove: (id: string) => void;
   onRestore: (task: DebugTask) => void;
 }) {
-  const [pending, startTransition] = useTransition();
-  const [error, setError] = useState<string | null>(null);
+  const { pending, run } = useAction();
   const [expanded, setExpanded] = useState(false);
 
   const mine = task.assignee_id === meId;
   const canDelete = isAdmin || task.created_by === meId;
 
-  /** Optimistic: apply the patch immediately, revert if the server says no. */
-  function run(
+  /** Optimistic: apply the patch immediately, revert (and toast) if rejected. */
+  function patchTask(
     fn: () => Promise<{ ok: boolean; message: string } | null>,
     patch?: Partial<DebugTask>
   ) {
-    setError(null);
     const before = { ...task };
-    if (patch) onPatch(task.id, patch);
-    startTransition(async () => {
-      const result = await fn();
-      if (result && !result.ok) {
-        if (patch) onRestore(before);
-        setError(result.message);
-      }
+    run(fn, {
+      optimistic: patch ? () => onPatch(task.id, patch) : undefined,
+      rollback: patch ? () => onRestore(before) : undefined,
     });
   }
 
@@ -118,7 +113,7 @@ export function TaskRow({
               key={state}
               type="button"
               disabled={task.state === state}
-              onClick={() => run(() => setTaskState(task.id, state), { state })}
+              onClick={() => patchTask(() => setTaskState(task.id, state), { state })}
               className={cn(
                 "px-2 py-1 text-xs transition-colors duration-150",
                 task.state === state
@@ -154,7 +149,7 @@ export function TaskRow({
                   size="sm"
                   title="Unclaim"
                   onClick={() =>
-                    run(() => unclaimTask(task.id), { assignee_id: null })
+                    patchTask(() => unclaimTask(task.id), { assignee_id: null })
                   }
                 >
                   <Undo2 className="size-3.5" aria-hidden />
@@ -166,7 +161,7 @@ export function TaskRow({
               variant="outline"
               size="sm"
               onClick={() =>
-                run(() => claimTask(task.id), { assignee_id: meId })
+                patchTask(() => claimTask(task.id), { assignee_id: meId })
               }
             >
               <Hand className="size-3.5" aria-hidden />
@@ -188,12 +183,10 @@ export function TaskRow({
               disabled={pending}
               onConfirm={() => {
                 const before = { ...task };
-                onRemove(task.id);
-                setError(null);
-                run(async () => {
-                  const result = await deleteTask(task.id);
-                  if (result && !result.ok) onRestore(before);
-                  return result;
+                run(() => deleteTask(task.id), {
+                  optimistic: () => onRemove(task.id),
+                  rollback: () => onRestore(before),
+                  success: "Task deleted.",
                 });
               }}
             >
@@ -202,12 +195,6 @@ export function TaskRow({
             </ConfirmButton>
           )}
         </div>
-      )}
-
-      {error && (
-        <p role="status" className="mt-2 text-[13px] text-danger">
-          {error}
-        </p>
       )}
     </li>
   );

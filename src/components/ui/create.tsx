@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { X } from "lucide-react";
 import type { ActionResult } from "@/lib/actions/account";
 import { Button, SubmitButton } from "@/components/ui/button";
+import { useToast } from "@/components/ui/toast";
 import { cn } from "@/lib/utils";
 
 /**
@@ -32,15 +33,23 @@ export function CreateForm({
   const [emptyWarning, setEmptyWarning] = useState<string[] | null>(null);
   const confirmedRef = useRef(false);
   const formRef = useRef<HTMLFormElement>(null);
+  const toast = useToast();
+  const seen = useRef<ActionResult>(null);
 
   useEffect(() => {
-    if (result?.ok) {
+    // Only react to a fresh result object, so re-renders don't re-toast.
+    if (!result || result === seen.current) return;
+    seen.current = result;
+    if (result.ok) {
       formRef.current?.reset();
       confirmedRef.current = false;
       setEmptyWarning(null);
+      if (result.message) toast.success(result.message);
       onDone?.();
+    } else {
+      toast.error(result.message);
     }
-  }, [result, onDone]);
+  }, [result, onDone, toast]);
 
   function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     if (confirmedRef.current) {
@@ -104,11 +113,6 @@ export function CreateForm({
             <Button type="button" variant="ghost" onClick={onCancel}>
               Cancel
             </Button>
-          )}
-          {result && !result.ok && (
-            <p role="status" className="text-[13px] text-danger">
-              {result.message}
-            </p>
           )}
         </div>
       )}

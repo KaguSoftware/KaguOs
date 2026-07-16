@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { ExternalLink, Loader2, Trash2 } from "lucide-react";
+import { useAction } from "@/lib/use-action";
 import {
   createCampaign,
   createLink,
@@ -48,9 +49,8 @@ const POST_STATES: { key: PostStatus; label: string }[] = [
 ];
 
 export function CampaignRow({ campaign }: { campaign: MarketingCampaign }) {
-  const [pending, startTransition] = useTransition();
+  const { pending, run } = useAction();
   const [status, setStatus] = useState<CampaignStatus>(campaign.status);
-  const [error, setError] = useState<string | null>(null);
 
   return (
     <li className="px-4 py-3">
@@ -87,17 +87,9 @@ export function CampaignRow({ campaign }: { campaign: MarketingCampaign }) {
           disabled={pending}
           onChange={(next) => {
             const was = status;
-            setStatus(next as CampaignStatus);
-            setError(null);
-            startTransition(async () => {
-              const result = await setCampaignStatus(
-                campaign.id,
-                next as CampaignStatus
-              );
-              if (result && !result.ok) {
-                setStatus(was);
-                setError(result.message);
-              }
+            run(() => setCampaignStatus(campaign.id, next as CampaignStatus), {
+              optimistic: () => setStatus(next as CampaignStatus),
+              rollback: () => setStatus(was),
             });
           }}
         />
@@ -106,10 +98,7 @@ export function CampaignRow({ campaign }: { campaign: MarketingCampaign }) {
           disabled={pending}
           confirmLabel="Really delete?"
           onConfirm={() =>
-            startTransition(async () => {
-              const result = await deleteCampaign(campaign.id);
-              if (result && !result.ok) setError(result.message);
-            })
+            run(() => deleteCampaign(campaign.id), { success: "Campaign deleted." })
           }
         >
           <Trash2 className="size-3.5" aria-hidden />
@@ -117,11 +106,6 @@ export function CampaignRow({ campaign }: { campaign: MarketingCampaign }) {
       </div>
       {campaign.notes && (
         <p className="mt-1.5 max-w-[70ch] text-[13px] text-muted">{campaign.notes}</p>
-      )}
-      {error && (
-        <p role="status" className="mt-1.5 text-[13px] text-danger">
-          {error}
-        </p>
       )}
     </li>
   );
@@ -136,9 +120,8 @@ export function PostRow({
   members: MembersMap;
   campaignName: string | null;
 }) {
-  const [pending, startTransition] = useTransition();
+  const { pending, run } = useAction();
   const [status, setStatus] = useState<PostStatus>(post.status);
-  const [error, setError] = useState<string | null>(null);
 
   return (
     <li className="px-4 py-3">
@@ -186,14 +169,9 @@ export function PostRow({
               disabled={status === s.key}
               onClick={() => {
                 const was = status;
-                setStatus(s.key);
-                setError(null);
-                startTransition(async () => {
-                  const result = await setPostStatus(post.id, s.key);
-                  if (result && !result.ok) {
-                    setStatus(was);
-                    setError(result.message);
-                  }
+                run(() => setPostStatus(post.id, s.key), {
+                  optimistic: () => setStatus(s.key),
+                  rollback: () => setStatus(was),
                 });
               }}
               className={cn(
@@ -219,21 +197,13 @@ export function PostRow({
             disabled={pending}
             confirmLabel="Really delete?"
             onConfirm={() =>
-              startTransition(async () => {
-                const result = await deletePost(post.id);
-                if (result && !result.ok) setError(result.message);
-              })
+              run(() => deletePost(post.id), { success: "Post deleted." })
             }
           >
             <Trash2 className="size-3.5" aria-hidden />
           </ConfirmButton>
         </span>
       </div>
-      {error && (
-        <p role="status" className="mt-1.5 text-[13px] text-danger">
-          {error}
-        </p>
-      )}
     </li>
   );
 }
@@ -243,7 +213,7 @@ export function LinkRow({
 }: {
   item: { id: string; title: string; url: string | null; note: string | null };
 }) {
-  const [pending, startTransition] = useTransition();
+  const { pending, run } = useAction();
 
   return (
     <li className="flex items-center gap-3 px-4 py-3">
@@ -266,11 +236,7 @@ export function LinkRow({
         size="sm"
         disabled={pending}
         confirmLabel="Really delete?"
-        onConfirm={() =>
-          startTransition(async () => {
-            await deleteLink(item.id);
-          })
-        }
+        onConfirm={() => run(() => deleteLink(item.id), { success: "Link deleted." })}
       >
         <Trash2 className="size-3.5" aria-hidden />
       </ConfirmButton>
