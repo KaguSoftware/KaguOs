@@ -7,6 +7,7 @@ import { PageHeader } from "@/components/shell/page-header";
 import { Reminders } from "@/components/shell/reminders";
 import { ActivityFeed } from "@/components/shell/activity-feed";
 import { AnnouncementHero } from "@/components/shell/announcement-hero";
+import { PrefetchHeavy } from "@/components/shell/prefetch-heavy";
 import { formatTRY, isActiveRecurring, monthlyAmount, toTRY, type FxRates } from "@/lib/finance";
 import { SECTION_LABELS, type Announcement, type Reminder, type Section } from "@/lib/types";
 
@@ -125,6 +126,11 @@ export default async function DashboardPage() {
   if (ctx.isAdmin)
     actions.push({ label: "New sprint", href: "/learn/new" });
 
+  // Heavy, data-dense routes worth warming in the background from the dashboard.
+  const heavyRoutes: string[] = [];
+  if (canAccess(ctx, "management")) heavyRoutes.push("/management/finance");
+  if (canAccess(ctx, "debug")) heavyRoutes.push("/debug");
+
   const [activity, members, { data: reminderRows }, { data: annRows }] =
     await Promise.all([
       getActivity(ctx),
@@ -155,6 +161,7 @@ export default async function DashboardPage() {
         }
       />
       <AnnouncementHero announcement={announcement} isAdmin={ctx.isAdmin} />
+      <PrefetchHeavy routes={heavyRoutes} />
       {actions.length > 0 && (
         <div className="mb-6 flex flex-wrap gap-2">
           {actions.map((action) => (
