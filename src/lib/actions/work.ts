@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireSection } from "@/lib/data/session";
+import { notifySection, notifyUser } from "@/lib/actions/notify";
 import type { ActionResult } from "@/lib/actions/account";
 import type { ProjectStatus } from "@/lib/types";
 
@@ -90,6 +91,12 @@ export async function createIdea(
     .insert({ title, body: body || null, sector, type, created_by: ctx.userId });
   if (error) return { ok: false, message: error.message };
 
+  await notifySection(ctx, "work", {
+    kind: "idea_new",
+    title: `New idea: ${title}`,
+    href: "/work?tab=ideas",
+  });
+
   revalidatePath("/work");
   return { ok: true, message: "Idea posted." };
 }
@@ -127,6 +134,20 @@ export async function addComment(
     .from("idea_comments")
     .insert({ idea_id: ideaId, body, created_by: ctx.userId });
   if (error) return { ok: false, message: error.message };
+
+  // Let the idea's author know someone weighed in.
+  const { data: idea } = await ctx.supabase
+    .from("ideas")
+    .select("title, created_by")
+    .eq("id", ideaId)
+    .single();
+  if (idea?.created_by) {
+    await notifyUser(ctx, idea.created_by, {
+      kind: "idea_comment",
+      title: `New comment on "${idea.title}"`,
+      href: `/work/ideas/${ideaId}`,
+    });
+  }
 
   revalidatePath(`/work/ideas/${ideaId}`);
   return { ok: true, message: "Comment added." };
@@ -186,6 +207,14 @@ export async function promoteIdea(ideaId: string): Promise<ActionResult> {
     // Roll the orphan project back, best effort.
     await ctx.supabase.from("projects").delete().eq("id", project.id);
     return { ok: false, message: updateError.message };
+  }
+
+  if (idea.created_by) {
+    await notifyUser(ctx, idea.created_by, {
+      kind: "idea_promoted",
+      title: `Your idea "${idea.title}" became a project`,
+      href: `/work/projects/${project.id}`,
+    });
   }
 
   revalidatePath("/work");

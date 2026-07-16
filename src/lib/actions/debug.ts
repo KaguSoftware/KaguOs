@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { requireSection } from "@/lib/data/session";
+import { notifySection } from "@/lib/actions/notify";
 import type { ActionResult } from "@/lib/actions/account";
 import type { DebugPriority, DebugState } from "@/lib/types";
 
@@ -30,6 +31,12 @@ export async function createTask(
     created_by: ctx.userId,
   });
   if (error) return { ok: false, message: error.message };
+
+  await notifySection(ctx, "debug", {
+    kind: "debug_task_new",
+    title: `New task: ${title}`,
+    href: "/debug",
+  });
 
   revalidatePath("/debug");
   return { ok: true, message: "Task posted." };

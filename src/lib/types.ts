@@ -225,3 +225,19 @@ export type Reminder = {
   created_by: string | null;
   created_at: string;
 };
+
+export type Notification = {
+  id: string;
+  recipient_id: string;
+  actor_id: string | null;
+  kind:
+    | "debug_task_new"
+    | "idea_new"
+    | "idea_promoted"
+    | "idea_comment"
+    | "reminder_shared";
+  title: string;
+  href: string | null;
+  read_at: string | null;
+  created_at: string;
+};

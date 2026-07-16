@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { getSessionContext } from "@/lib/data/session";
+import { notifyEveryone } from "@/lib/actions/notify";
 import type { ActionResult } from "@/lib/actions/account";
 
 export type ReminderScope = "personal" | "team";
@@ -21,6 +22,14 @@ export async function addReminder(
     created_by: ctx.userId,
   });
   if (error) return { ok: false, message: error.message };
+
+  if (scope === "team") {
+    await notifyEveryone(ctx, {
+      kind: "reminder_shared",
+      title: `Team reminder: ${clean}`,
+      href: "/",
+    });
+  }
 
   revalidatePath("/");
   return { ok: true, message: scope === "team" ? "Shared with the team." : "Added." };

@@ -17,6 +17,8 @@ import { cn } from "@/lib/utils";
 import type { Section } from "@/lib/types";
 import { signOut } from "@/lib/actions/account";
 import { Logo } from "@/components/shell/logo";
+import { NotificationBell } from "@/components/shell/notification-bell";
+import type { MembersMap, Notification } from "@/lib/types";
 
 type NavItem = {
   href: string;
@@ -71,11 +73,15 @@ export function Sidebar({
   isAdmin,
   name,
   email,
+  notifications,
+  members,
 }: {
   sections: Section[];
   isAdmin: boolean;
   name: string | null;
   email: string;
+  notifications: Notification[];
+  members: MembersMap;
 }) {
   const pathname = usePathname();
   const visible = NAV.filter(
@@ -86,9 +92,12 @@ export function Sidebar({
     <>
       {/* Desktop sidebar */}
       <aside className="sticky top-0 hidden h-dvh w-56 shrink-0 flex-col border-r border-line bg-surface md:flex">
-        <div className="flex items-center gap-2.5 px-4 pb-5 pt-5">
-          <Logo size={24} />
-          <span className="text-[15px] font-semibold tracking-tight">KaguOs</span>
+        <div className="flex items-center justify-between px-4 pb-5 pt-5">
+          <div className="flex items-center gap-2.5">
+            <Logo size={24} />
+            <span className="text-[15px] font-semibold tracking-tight">KaguOs</span>
+          </div>
+          <NotificationBell notifications={notifications} members={members} />
         </div>
         <nav className="flex-1 space-y-0.5 px-2" aria-label="Sections">
           {visible.map((item) => (
@@ -135,6 +144,7 @@ export function Sidebar({
             <span className="text-[15px] font-semibold tracking-tight">KaguOs</span>
           </div>
           <div className="flex items-center gap-1">
+            <NotificationBell notifications={notifications} members={members} />
             <Link
               href="/account"
               className="rounded-md px-2 py-1 text-[13px] text-muted hover:bg-raised hover:text-ink"
