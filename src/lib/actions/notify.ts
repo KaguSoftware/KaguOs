@@ -1,4 +1,5 @@
 import "server-only";
+import { after } from "next/server";
 import type { SessionContext } from "@/lib/data/session";
 import type { Section } from "@/lib/types";
 
@@ -43,30 +44,42 @@ async function insertFor(
   }
 }
 
+// Notifications are best-effort and off the user's critical path. Everything
+// below runs inside after(), so the SELECT (recipient lookup) + INSERT happen
+// AFTER the response is sent — the save no longer waits ~1–2 round-trips on
+// them. On Vercel, after() extends the invocation via waitUntil so the work
+// still completes. Errors are swallowed; they must never surface to the user.
+
 /** Notify everyone who belongs to a section (minus the actor). */
-export async function notifySection(
+export function notifySection(
   ctx: SessionContext,
   section: Section,
   input: NotifyInput
 ) {
-  const { data } = await ctx.supabase
-    .from("section_memberships")
-    .select("user_id")
-    .eq("section", section);
-  await insertFor(ctx, (data ?? []).map((m) => m.user_id), input);
+  after(async () => {
+    const { data } = await ctx.supabase
+      .from("section_memberships")
+      .select("user_id")
+      .eq("section", section);
+    await insertFor(ctx, (data ?? []).map((m) => m.user_id), input);
+  });
 }
 
 /** Notify everyone with an account (minus the actor) — e.g. team reminders. */
-export async function notifyEveryone(ctx: SessionContext, input: NotifyInput) {
-  const { data } = await ctx.supabase.from("profiles").select("id");
-  await insertFor(ctx, (data ?? []).map((p) => p.id), input);
+export function notifyEveryone(ctx: SessionContext, input: NotifyInput) {
+  after(async () => {
+    const { data } = await ctx.supabase.from("profiles").select("id");
+    await insertFor(ctx, (data ?? []).map((p) => p.id), input);
+  });
 }
 
 /** Notify one specific person (minus the actor, if they're the same). */
-export async function notifyUser(
+export function notifyUser(
   ctx: SessionContext,
   recipientId: string,
   input: NotifyInput
 ) {
-  await insertFor(ctx, [recipientId], input);
+  after(async () => {
+    await insertFor(ctx, [recipientId], input);
+  });
 }

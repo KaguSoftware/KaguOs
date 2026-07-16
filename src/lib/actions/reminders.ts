@@ -24,7 +24,7 @@ export async function addReminder(
   if (error) return { ok: false, message: error.message };
 
   if (scope === "team") {
-    await notifyEveryone(ctx, {
+    notifyEveryone(ctx, {
       kind: "reminder_shared",
       title: `Team reminder: ${clean}`,
       href: "/",

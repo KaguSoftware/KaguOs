@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { getUserId } from "@/lib/data/session";
 import { isValidColorKey } from "@/lib/colors";
 
 export type ActionResult = { ok: boolean; message: string } | null;
@@ -23,15 +24,13 @@ export async function updateName(
   }
 
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { ok: false, message: "Not signed in." };
+  const userId = await getUserId(supabase);
+  if (!userId) return { ok: false, message: "Not signed in." };
 
   const { error } = await supabase
     .from("profiles")
     .update({ full_name: fullName })
-    .eq("id", user.id);
+    .eq("id", userId);
   if (error) return { ok: false, message: error.message };
 
   revalidatePath("/", "layout");
@@ -42,15 +41,13 @@ export async function updateMyColor(colorKey: string): Promise<ActionResult> {
   if (!isValidColorKey(colorKey)) return { ok: false, message: "Pick a color from the set." };
 
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { ok: false, message: "Not signed in." };
+  const userId = await getUserId(supabase);
+  if (!userId) return { ok: false, message: "Not signed in." };
 
   const { error } = await supabase
     .from("profiles")
     .update({ color: colorKey })
-    .eq("id", user.id);
+    .eq("id", userId);
   if (error) return { ok: false, message: error.message };
 
   revalidatePath("/", "layout");

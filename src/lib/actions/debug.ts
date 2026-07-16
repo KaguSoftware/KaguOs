@@ -32,7 +32,7 @@ export async function createTask(
   });
   if (error) return { ok: false, message: error.message };
 
-  await notifySection(ctx, "debug", {
+  notifySection(ctx, "debug", {
     kind: "debug_task_new",
     title: `New task: ${title}`,
     href: "/debug",

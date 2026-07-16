@@ -60,6 +60,33 @@ Contracts w/ PDFs), **Debug** (everyone: per-project boards, self-claim-only, re
   `oklch(0.55 0.16 25)` — L band 0.48–0.67 on dark; re-validate any new chart palette.
 
 ## Current status (2026-07-16, late)
+- ⚡ **DB/save latency pass (2026-07-16) — measured & fixed.** Saves felt "insanely slow." A latency
+  probe against prod (`ibbfptujwtbfwdefllgz`) found: raw HTTPS floor **64ms**, `auth.getUser()`
+  **~300ms** (a full auth-server round-trip, NOT a local decode), single DB select ~300–600ms; the
+  serial save critical path measured **~1,500ms** before `revalidatePath` even re-ran the page.
+  Two root causes fixed:
+  1. **Double auth round-trip.** The proxy calls `getUser()` (needed — refreshes token) AND
+     `getSessionContext()` called it AGAIN (~300ms wasted/save). Project uses **ES256 asymmetric JWT
+     keys** (verified via JWKS), so `getClaims()` verifies the token **LOCALLY** — measured
+     **299ms → 0ms**. `getSessionContext` + new `getUserId(supabase)` helper (session.ts) + both
+     `account.ts` actions now use `getClaims()`. **Only the proxy still calls `getUser()`** (don't
+     touch — comment there warns it must stay put or random logouts happen). **LESSON: never call
+     `getUser()` in an action/page for identity — use `getClaims()` (local, free) or `getUserId()`.**
+  2. **Notifications blocked the save.** `notifySection/notifyEveryone/notifyUser` (notify.ts) did a
+     SELECT + INSERT the user waited on; `addComment`/`promoteIdea` added more. All now run inside
+     Next's **`after()`** (`next/server`) — they execute AFTER the response ships (Vercel `waitUntil`
+     completes them). The notify helpers are now **fire-and-forget (return void, not Promise)** — call
+     them WITHOUT `await`. `work.ts` gained `notifyIdeaAuthor()` (defers the author lookup too).
+  Combined: ~1,500ms critical path → ~500–600ms.
+- 🌏 **REGION = THE MULTIPLIER (confirmed 2026-07-16).** Project `ibbfptujwtbfwdefllgz` lives in
+  **`ap-northeast-1` (Tokyo)** — ~9,000km from Istanbul. That IS the 64ms floor + inflated auth cost;
+  every round-trip pays a Tokyo tax. **Moving to an EU region (`eu-central-1` Frankfurt, or nearer EU)
+  cuts the floor to ~15–25ms and scales every remaining trip down** → saves head toward ~150–250ms
+  with the code fixes already in. ⚠️ **Supabase can't relocate a project in place — it's a MIGRATION**:
+  spin up a NEW project in the EU region, dump/restore into it, then swap the new ref/URL/keys into
+  `.env.local` + Vercel env + re-run `db push` history. The DB was created **2026-07-16** and is nearly
+  empty, so **now is the cheapest this move will ever be.** Not yet done — deliberate task, do it with
+  the team briefly offline. **NEXT BIGGEST PERF WIN by far.**
 - DONE (code written, `npm run build` clean, pushed): all five sections at full agreed scope, admin
   panel, dashboard, CSV import, design system + field kit + create surfaces + optimistic layer. DB
   seeded: Parsa is admin with all memberships. Now DEPLOYED on Vercel + 2-browser tested.
@@ -154,7 +181,9 @@ Contracts w/ PDFs), **Debug** (everyone: per-project boards, self-claim-only, re
   `/brand/kagu-logo-source.png`). App icons: `src/app/icon.png` + `apple-icon.png`.
 - `src/lib/actions/notify.ts` (helper: notifySection/notifyEveryone/notifyUser, best-effort, actor
   excluded) + `notifications.ts` (markAllRead/clearAll). `shell/notification-bell.tsx` renders the
-  bell; layout fetches the feed. Events fire from debug/work/reminders actions.
+  bell; layout fetches the feed. Events fire from debug/work/reminders actions. **The three notify
+  helpers are FIRE-AND-FORGET (return void, run inside `after()`) — call them WITHOUT `await`; the
+  SELECT+INSERT happens after the response ships. Don't re-add `await` or they'll block the save.**
 - `src/components/shell/announcement-hero.tsx` + `lib/actions/announcements.ts` — admin banner
   (one active at a time). `src/components/shell/command-palette.tsx` — ⌘K nav+actions.
 - `supabase/migrations/0001–0010` — full schema history (0008 reminders, 0009 notifications,
@@ -163,8 +192,12 @@ Contracts w/ PDFs), **Debug** (everyone: per-project boards, self-claim-only, re
 
 ## Roadmap / next steps
 DONE this session: notifications, announcements hero, ⌘K palette, task/idea editing, admin-row
-redesign, empty-state CTAs (a–c, f from the old list). REMAINING (top two added 2026-07-16 after the
-0014 outage):
+redesign, empty-state CTAs (a–c, f from the old list); **DB/save latency pass — double-auth killed via
+`getClaims()`, notifications deferred via `after()` (see Current status).** REMAINING:
+00. 🌏 **MIGRATE the Supabase project from Tokyo (`ap-northeast-1`) to an EU region** — confirmed the
+    single biggest remaining perf win (see Current status). Not in-place: new EU project → dump/restore
+    → swap ref/URL/keys in `.env.local` + Vercel + re-run migration history. Cheapest to do NOW while
+    the DB is near-empty. Do it with the team briefly offline.
 0a. ⚠️ **Fix the silent error-swallowing on list pages** (see gotcha) — check `error` on every
     `.select()` and surface it, so the next schema/migration slip screams instead of showing a fake
     empty state. Consider a shared `selectOrThrow` helper + a CI guard that blocks deploying code

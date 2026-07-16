@@ -1,11 +1,33 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { after } from "next/server";
 import { redirect } from "next/navigation";
-import { requireSection } from "@/lib/data/session";
+import { requireSection, type SessionContext } from "@/lib/data/session";
 import { notifySection, notifyUser } from "@/lib/actions/notify";
 import type { ActionResult } from "@/lib/actions/account";
 import type { ProjectStatus } from "@/lib/types";
+
+/**
+ * After the response, look up an idea's author and notify them a comment
+ * landed. The SELECT is deferred so the comment save never waits on it.
+ */
+function notifyIdeaAuthor(ctx: SessionContext, ideaId: string) {
+  after(async () => {
+    const { data: idea } = await ctx.supabase
+      .from("ideas")
+      .select("title, created_by")
+      .eq("id", ideaId)
+      .single();
+    if (idea?.created_by) {
+      notifyUser(ctx, idea.created_by, {
+        kind: "idea_comment",
+        title: `New comment on "${idea.title}"`,
+        href: `/work/ideas/${ideaId}`,
+      });
+    }
+  });
+}
 
 const PROJECT_STATUSES: ProjectStatus[] = ["planning", "active", "paused", "done"];
 
@@ -91,7 +113,7 @@ export async function createIdea(
     .insert({ title, body: body || null, sector, type, created_by: ctx.userId });
   if (error) return { ok: false, message: error.message };
 
-  await notifySection(ctx, "work", {
+  notifySection(ctx, "work", {
     kind: "idea_new",
     title: `New idea: ${title}`,
     href: "/work?tab=ideas",
@@ -154,19 +176,9 @@ export async function addComment(
     .insert({ idea_id: ideaId, body, created_by: ctx.userId });
   if (error) return { ok: false, message: error.message };
 
-  // Let the idea's author know someone weighed in.
-  const { data: idea } = await ctx.supabase
-    .from("ideas")
-    .select("title, created_by")
-    .eq("id", ideaId)
-    .single();
-  if (idea?.created_by) {
-    await notifyUser(ctx, idea.created_by, {
-      kind: "idea_comment",
-      title: `New comment on "${idea.title}"`,
-      href: `/work/ideas/${ideaId}`,
-    });
-  }
+  // Let the idea's author know someone weighed in — off the critical path.
+  // The author lookup + notify run after the response (inside notifyIdeaAuthor).
+  notifyIdeaAuthor(ctx, ideaId);
 
   revalidatePath(`/work/ideas/${ideaId}`);
   return { ok: true, message: "Comment added." };
@@ -229,7 +241,7 @@ export async function promoteIdea(ideaId: string): Promise<ActionResult> {
   }
 
   if (idea.created_by) {
-    await notifyUser(ctx, idea.created_by, {
+    notifyUser(ctx, idea.created_by, {
       kind: "idea_promoted",
       title: `Your idea "${idea.title}" became a project`,
       href: `/work/projects/${project.id}`,

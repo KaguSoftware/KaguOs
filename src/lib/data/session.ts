@@ -20,14 +20,19 @@ export type SessionContext = {
  */
 export const getSessionContext = cache(async function getSessionContext(): Promise<SessionContext> {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
+
+  // getClaims() verifies the JWT LOCALLY against the project's ES256 JWKS —
+  // no auth-server round-trip (unlike getUser(), which costs a full ~300ms
+  // network call). The proxy already refreshed the token on this request, so
+  // the claims are fresh. If the project ever reverts to a legacy HS256 shared
+  // secret, getClaims() would fall back to a network call — still correct.
+  const { data: claims } = await supabase.auth.getClaims();
+  const userId = claims?.claims.sub;
+  if (!userId) redirect("/login");
 
   const [{ data: profile }, { data: memberships }] = await Promise.all([
-    supabase.from("profiles").select("*").eq("id", user.id).single(),
-    supabase.from("section_memberships").select("section").eq("user_id", user.id),
+    supabase.from("profiles").select("*").eq("id", userId).single(),
+    supabase.from("section_memberships").select("section").eq("user_id", userId),
   ]);
   if (!profile) redirect("/login");
 
@@ -37,7 +42,7 @@ export const getSessionContext = cache(async function getSessionContext(): Promi
 
   return {
     supabase,
-    userId: user.id,
+    userId,
     profile: profile as Profile,
     sections,
     isAdmin: (profile as Profile).is_admin,
@@ -47,6 +52,18 @@ export const getSessionContext = cache(async function getSessionContext(): Promi
 
 export function canAccess(ctx: SessionContext, section: Section) {
   return ctx.isAdmin || ctx.sections.has(section);
+}
+
+/**
+ * The signed-in user's id from the LOCAL JWT (getClaims → ES256 verify, no
+ * network). Use this in lightweight actions that only need the id and don't
+ * want the full session-context fetch. Returns null when signed out.
+ */
+export async function getUserId(
+  supabase: Awaited<ReturnType<typeof createClient>>
+): Promise<string | null> {
+  const { data: claims } = await supabase.auth.getClaims();
+  return claims?.claims.sub ?? null;
 }
 
 /**
