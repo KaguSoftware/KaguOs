@@ -251,3 +251,16 @@ export type Announcement = {
   created_at: string;
   updated_at: string;
 };
+
+export type ProjectSecret = {
+  id: string;
+  project_id: string;
+  label: string;
+  username: string | null;
+  secret: string | null;
+  url: string | null;
+  note: string | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+};

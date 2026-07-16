@@ -2,12 +2,13 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft, Lightbulb } from "lucide-react";
-import { requireSection } from "@/lib/data/session";
+import { requireSection, canAccess } from "@/lib/data/session";
 import { PageHeader } from "@/components/shell/page-header";
 import { Panel, PanelHeader } from "@/components/ui/panel";
 import { EditProjectForm } from "@/components/work/project-form";
 import { ProjectActions } from "@/components/work/project-actions";
-import type { Project } from "@/lib/types";
+import { ProjectSecrets } from "@/components/work/project-secrets";
+import type { Project, ProjectSecret } from "@/lib/types";
 
 export const metadata: Metadata = { title: "Project" };
 
@@ -28,6 +29,18 @@ export default async function ProjectPage({
       .maybeSingle(),
   ]);
   if (!project) notFound();
+
+  // Credentials are Management-only — fetch them just for those users.
+  const canSeeSecrets = canAccess(ctx, "management");
+  const secrets = canSeeSecrets
+    ? (((
+        await ctx.supabase
+          .from("project_secrets")
+          .select("*")
+          .eq("project_id", id)
+          .order("created_at", { ascending: true })
+      ).data ?? []) as ProjectSecret[])
+    : [];
 
   return (
     <>
@@ -61,6 +74,9 @@ export default async function ProjectPage({
           <PanelHeader title="Details" />
           <EditProjectForm project={project as Project} />
         </Panel>
+        {canSeeSecrets && (
+          <ProjectSecrets projectId={project.id} secrets={secrets} />
+        )}
         <ProjectActions projectId={project.id} />
       </div>
     </>
