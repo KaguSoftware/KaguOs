@@ -7,15 +7,19 @@
  * for states only. Restrained strategy: accents mark state, never decoration.
  */
 :root {
-  --bg: oklch(0.11 0 0);
-  --surface: oklch(0.145 0 0);
-  --raised: oklch(0.185 0 0);
-  --line: oklch(0.235 0 0);
-  --line-strong: oklch(0.33 0 0);
+  /* Neutrals carry a whisper of the brand hue (160) so the dark reads as a
+   * deliberate deep-teal graphite, not dead gray. Chroma stays tiny — the
+   * tint is felt, not seen — and rises slightly as surfaces lift, giving the
+   * stack real depth instead of flat gray-on-gray. */
+  --bg: oklch(0.1 0.008 165);
+  --surface: oklch(0.15 0.01 165);
+  --raised: oklch(0.2 0.013 165);
+  --line: oklch(0.255 0.014 165);
+  --line-strong: oklch(0.35 0.016 165);
 
-  --ink: oklch(0.93 0.005 160);
-  --muted: oklch(0.68 0.008 160);
-  --faint: oklch(0.53 0.006 160);
+  --ink: oklch(0.94 0.006 160);
+  --muted: oklch(0.7 0.012 160);
+  --faint: oklch(0.55 0.01 160);
 
   --primary: oklch(0.86 0.14 160);
   --primary-ink: oklch(0.16 0.03 160);
@@ -86,6 +90,13 @@
 
 body {
   background: var(--bg);
+  /* Faint brand-hued light pooling from the top — depth, not decoration. */
+  background-image: radial-gradient(
+    120% 60% at 50% -10%,
+    oklch(0.86 0.14 160 / 5%),
+    transparent 60%
+  );
+  background-attachment: fixed;
   color: var(--ink);
   font-family: var(--font-sans), system-ui, sans-serif;
   font-size: 0.9375rem; /* 15px — daily-tool density without squinting */
