@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowUpRight } from "lucide-react";
+import { ArrowUpRight, Plus } from "lucide-react";
 import { getSessionContext, canAccess } from "@/lib/data/session";
 import { PageHeader } from "@/components/shell/page-header";
 import { Reminders } from "@/components/shell/reminders";
@@ -7,6 +7,7 @@ import { formatTRY, isActiveRecurring, monthlyAmount, toTRY, type FxRates } from
 import { SECTION_LABELS, type Section } from "@/lib/types";
 
 type Card = { section: Section; href: string; blurb: string; stat?: string };
+type QuickAction = { label: string; href: string };
 
 export default async function DashboardPage() {
   const ctx = await getSessionContext();
@@ -103,6 +104,23 @@ export default async function DashboardPage() {
     });
   }
 
+  // Quick actions — the one-click primitives, gated by what you can reach.
+  const actions: QuickAction[] = [];
+  if (canAccess(ctx, "debug"))
+    actions.push({ label: "New task", href: "/debug/new" });
+  if (canAccess(ctx, "work")) {
+    actions.push({ label: "New idea", href: "/work/ideas/new" });
+    actions.push({ label: "New project", href: "/work/projects/new" });
+  }
+  if (canAccess(ctx, "management")) {
+    actions.push({ label: "New transaction", href: "/management/finance/new-transaction" });
+    actions.push({ label: "New contract", href: "/management/contracts/new" });
+  }
+  if (canAccess(ctx, "marketing"))
+    actions.push({ label: "New campaign", href: "/marketing/new-campaign" });
+  if (ctx.isAdmin)
+    actions.push({ label: "New sprint", href: "/learn/new" });
+
   return (
     <>
       <PageHeader
@@ -113,6 +131,20 @@ export default async function DashboardPage() {
             : "Everything Kagu runs on, in one quiet place."
         }
       />
+      {actions.length > 0 && (
+        <div className="mb-6 flex flex-wrap gap-2">
+          {actions.map((action) => (
+            <Link
+              key={action.href}
+              href={action.href}
+              className="inline-flex items-center gap-1.5 rounded-md border border-line bg-surface px-3 py-1.5 text-[13px] text-muted transition-colors duration-150 hover:border-primary/40 hover:bg-raised hover:text-ink"
+            >
+              <Plus className="size-3.5 text-faint" aria-hidden />
+              {action.label}
+            </Link>
+          ))}
+        </div>
+      )}
       <div className="grid gap-6 lg:grid-cols-[1fr_20rem]">
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:content-start">
           {cards.map((card) => (
