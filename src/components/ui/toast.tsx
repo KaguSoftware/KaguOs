@@ -20,7 +20,12 @@ type Toast = {
   message: string;
   /** loading toasts persist until dismissed/updated; others auto-dismiss. */
   duration: number | null;
+  /** true once dismissed: plays the exit animation, then unmounts. */
+  exiting?: boolean;
 };
+
+/** Keep in sync with the toast-out keyframe duration in globals.css. */
+const EXIT_MS = 180;
 
 type ToastInput = { tone?: ToastTone; message: string; duration?: number | null };
 
@@ -91,12 +96,23 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
+  const remove = useCallback((id: string) => {
+    setToasts((prev) => prev.filter((t) => t.id !== id));
+  }, []);
+
+  /** Two-phase: flag as exiting (plays the out animation), then unmount. */
   const dismiss = useCallback(
     (id: string) => {
       clearTimer(id);
-      setToasts((prev) => prev.filter((t) => t.id !== id));
+      setToasts((prev) =>
+        prev.map((t) => (t.id === id ? { ...t, exiting: true } : t))
+      );
+      timers.current.set(
+        `${id}:exit`,
+        setTimeout(() => remove(id), EXIT_MS)
+      );
     },
-    [clearTimer]
+    [clearTimer, remove]
   );
 
   const arm = useCallback(
@@ -217,7 +233,9 @@ function ToastViewport({
             aria-live={meta.live}
             className={cn(
               "pointer-events-auto flex w-full max-w-sm items-start gap-2.5 rounded-lg border bg-raised px-3.5 py-3 shadow-lg shadow-black/40",
-              "motion-safe:animate-[toast-in_220ms_var(--ease-mac)_both]",
+              t.exiting
+                ? "motion-safe:animate-[toast-out_180ms_var(--ease-mac)_both]"
+                : "motion-safe:animate-[toast-in_220ms_var(--ease-mac)_both]",
               meta.className
             )}
           >
