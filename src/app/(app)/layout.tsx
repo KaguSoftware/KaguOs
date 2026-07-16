@@ -30,6 +30,7 @@ export default async function AppLayout({
         <Sidebar
           sections={[...ctx.sections]}
           isAdmin={ctx.isAdmin}
+          showcase={ctx.showcase}
           name={ctx.profile.full_name}
           email={ctx.profile.email}
           notifications={(notifRows ?? []) as Notification[]}

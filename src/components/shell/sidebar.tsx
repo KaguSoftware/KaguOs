@@ -74,6 +74,7 @@ function NavLink({ item, pathname }: { item: NavItem; pathname: string }) {
 export function Sidebar({
   sections,
   isAdmin,
+  showcase,
   name,
   email,
   notifications,
@@ -81,6 +82,7 @@ export function Sidebar({
 }: {
   sections: Section[];
   isAdmin: boolean;
+  showcase: boolean;
   name: string | null;
   email: string;
   notifications: Notification[];
@@ -88,7 +90,7 @@ export function Sidebar({
 }) {
   const pathname = usePathname();
   const visible = NAV.filter(
-    (item) => !item.section || isAdmin || sections.includes(item.section)
+    (item) => !item.section || isAdmin || showcase || sections.includes(item.section)
   );
 
   return (

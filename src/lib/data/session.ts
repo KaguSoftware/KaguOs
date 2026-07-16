@@ -51,7 +51,9 @@ export const getSessionContext = cache(async function getSessionContext(): Promi
 });
 
 export function canAccess(ctx: SessionContext, section: Section) {
-  return ctx.isAdmin || ctx.sections.has(section);
+  // In showcase mode everyone can roam every section — it's all demo data, so
+  // there's nothing real to protect and the point is to show the whole app off.
+  return ctx.isAdmin || ctx.showcase || ctx.sections.has(section);
 }
 
 /**
