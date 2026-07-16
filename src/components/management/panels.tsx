@@ -10,6 +10,7 @@ import {
   type BreakdownItem,
 } from "@/components/management/finance-charts";
 import { RecurringRow, TransactionRow } from "@/components/management/finance-rows";
+import { ExportButton } from "@/components/management/export-button";
 import {
   buildCashflowSeries,
   formatTRY,
@@ -179,7 +180,25 @@ export function FinancePanel({
         </div>
 
         <Panel>
-          <PanelHeader title={`Recurring items (${recurring.length})`} />
+          <PanelHeader
+            title={`Recurring items (${recurring.length})`}
+            action={
+              <ExportButton
+                filename="recurring-items.csv"
+                columns={["Name", "Type", "Amount", "Currency", "Cadence", "Counterparty", "Started", "Canceled"]}
+                rows={recurring.map((r) => [
+                  r.name,
+                  r.type,
+                  Number(r.amount),
+                  r.currency,
+                  r.cadence,
+                  r.counterparty ?? "",
+                  r.started_on,
+                  r.canceled_on ?? "",
+                ])}
+              />
+            }
+          />
           {recurring.length === 0 ? (
             <EmptyState
               icon={RefreshCcw}
@@ -196,7 +215,23 @@ export function FinancePanel({
         </Panel>
 
         <Panel>
-          <PanelHeader title="Transactions" />
+          <PanelHeader
+            title="Transactions"
+            action={
+              <ExportButton
+                filename="transactions.csv"
+                columns={["Date", "Type", "Amount", "Currency", "Client", "Notes"]}
+                rows={transactions.map((t) => [
+                  t.occurred_on,
+                  t.type,
+                  Number(t.amount),
+                  t.currency,
+                  t.client ?? "",
+                  t.notes ?? "",
+                ])}
+              />
+            }
+          />
           {transactions.length === 0 ? (
             <EmptyState
               icon={ReceiptText}
