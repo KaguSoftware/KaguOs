@@ -185,7 +185,7 @@ export function CreateOverlay({
       aria-label={title}
       className={cn("fixed inset-0 z-40 overflow-y-auto bg-bg")}
     >
-      <div className="mx-auto max-w-xl px-6 py-10 md:py-16">
+      <div className="mx-auto max-w-xl animate-overlay-in px-6 py-10 md:py-16">
         <div className="mb-6 flex items-start justify-between gap-3">
           <div>
             <h1 className="text-[22px] font-semibold tracking-tight">{title}</h1>
