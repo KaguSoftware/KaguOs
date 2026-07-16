@@ -129,11 +129,15 @@ Contracts w/ PDFs), **Debug** (everyone: per-project boards, self-claim-only, re
 DONE this session: notifications, announcements hero, ⌘K palette, task/idea editing, admin-row
 redesign, empty-state CTAs (a–c, f from the old list). REMAINING:
 1. Disable "Allow new users to sign up" in Supabase dashboard (Auth → Sign In / Up).
-0. ⚠️ **push migration 0011** (`npx supabase db push`) — project_secrets table for the credentials
-   feature (already coded + committed; panel is empty until pushed).
+0. ⚠️ **push migration 0012** (`npx supabase db push`) — widens project_secrets RLS to Work members
+   (0011 shipped it Management-gated; Parsa moved it to Work). 0011 already applied.
 2. **Communications / CRM section** — leads + clients, status, links to everything tied to them.
    (New section: table + RLS + CRUD + nav entry. NOT started — the one remaining buildable feature.)
-3. ~~Project credentials store~~ — DONE (project detail page, Management-gated, migration 0011).
+3. ~~Project credentials store~~ — DONE (project detail page; now **Work-gated**, migrations 0011+0012).
+   Everyone in Work sees/manages per-project credentials.
+4. **Loading/perf strategy** — Parsa + I agreed on a hybrid (see the perf note at the bottom): SSR
+   the shell for instant paint, client-route between sections, aggressively prefetch heavy modules
+   in the background. Implement incrementally; not a rewrite. (Discussion 2026-07-16.)
 4. **Showcase mode** — DEFERRED, needs a design decision before building. "Click → all data becomes
    fake demo data; leaving needs the account password." Touches EVERY section's data path + is
    security-sensitive (must be enforced server-side, not a client flag). Recommended shape: a
