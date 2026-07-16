@@ -79,6 +79,70 @@ export async function createTransaction(
   return { ok: true, message: "Transaction recorded." };
 }
 
+export async function updateTransaction(
+  _prev: ActionResult,
+  formData: FormData
+): Promise<ActionResult> {
+  const ctx = await requireSection("management");
+  const id = String(formData.get("id") ?? "");
+  if (!id) return { ok: false, message: "Missing transaction id." };
+
+  const type = String(formData.get("type") ?? "expense") as TransactionType;
+  const currency = String(formData.get("currency") ?? "TRY") as Currency;
+  const amount = parseAmount(formData.get("amount"));
+  if (amount === null) return { ok: false, message: "Amount must be a positive number." };
+
+  const { error } = await ctx.supabase
+    .from("transactions")
+    .update({
+      type: TYPES.includes(type) ? type : "expense",
+      amount,
+      currency: CURRENCIES.includes(currency) ? currency : "TRY",
+      occurred_on: String(formData.get("occurred_on") ?? "") || today(),
+      client: String(formData.get("client") ?? "").trim() || null,
+      project_id: String(formData.get("project_id") ?? "").trim() || null,
+      notes: String(formData.get("notes") ?? "").trim() || null,
+    })
+    .eq("id", id);
+  if (error) return { ok: false, message: error.message };
+
+  revalidatePath("/management/finance");
+  return { ok: true, message: "Transaction saved." };
+}
+
+export async function updateRecurring(
+  _prev: ActionResult,
+  formData: FormData
+): Promise<ActionResult> {
+  const ctx = await requireSection("management");
+  const id = String(formData.get("id") ?? "");
+  if (!id) return { ok: false, message: "Missing item id." };
+
+  const type = String(formData.get("type") ?? "expense") as TransactionType;
+  const currency = String(formData.get("currency") ?? "TRY") as Currency;
+  const cadence = String(formData.get("cadence") ?? "monthly") as RecurringCadence;
+  const amount = parseAmount(formData.get("amount"));
+  if (amount === null) return { ok: false, message: "Amount must be a positive number." };
+
+  const { error } = await ctx.supabase
+    .from("recurring_items")
+    .update({
+      type: TYPES.includes(type) ? type : "expense",
+      name: String(formData.get("name") ?? "").trim().slice(0, 160) || "Untitled item",
+      counterparty: String(formData.get("counterparty") ?? "").trim() || null,
+      amount,
+      currency: CURRENCIES.includes(currency) ? currency : "TRY",
+      cadence: CADENCES.includes(cadence) ? cadence : "monthly",
+      started_on: String(formData.get("started_on") ?? "") || today(),
+      notes: String(formData.get("notes") ?? "").trim() || null,
+    })
+    .eq("id", id);
+  if (error) return { ok: false, message: error.message };
+
+  revalidatePath("/management/finance");
+  return { ok: true, message: "Recurring item saved." };
+}
+
 export async function deleteTransaction(transactionId: string): Promise<ActionResult> {
   const ctx = await requireSection("management");
 

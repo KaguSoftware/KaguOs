@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Trash2 } from "lucide-react";
+import Link from "next/link";
+import { Pencil, Trash2 } from "lucide-react";
 import {
   deleteRecurring,
   deleteTransaction,
@@ -41,19 +42,29 @@ export function TransactionRow({ transaction }: { transaction: Transaction }) {
         {transaction.notes || ""}
       </td>
       <td className="px-4 py-2.5 text-right">
-        <ConfirmButton
-          size="sm"
-          disabled={pending}
-          confirmLabel="Delete?"
-          onConfirm={() =>
-            startTransition(async () => {
-              await deleteTransaction(transaction.id);
-            })
-          }
-        >
-          <Trash2 className="size-3.5" aria-hidden />
-          <span className="sr-only">Delete transaction</span>
-        </ConfirmButton>
+        <span className="inline-flex items-center gap-1">
+          <Link
+            href={`/management/finance/transactions/${transaction.id}`}
+            title="Edit transaction"
+            className="inline-flex h-7 items-center rounded-md px-2 text-muted transition-colors duration-150 hover:bg-raised hover:text-ink"
+          >
+            <Pencil className="size-3.5" aria-hidden />
+            <span className="sr-only">Edit transaction</span>
+          </Link>
+          <ConfirmButton
+            size="sm"
+            disabled={pending}
+            confirmLabel="Delete?"
+            onConfirm={() =>
+              startTransition(async () => {
+                await deleteTransaction(transaction.id);
+              })
+            }
+          >
+            <Trash2 className="size-3.5" aria-hidden />
+            <span className="sr-only">Delete transaction</span>
+          </ConfirmButton>
+        </span>
       </td>
     </tr>
   );
@@ -97,6 +108,14 @@ export function RecurringRow({
           {monthlyTRY !== null ? `${formatTRY(monthlyTRY)}/mo` : "no rate"}
         </span>
         <Badge tone={active ? "green" : "faint"}>{active ? "active" : "canceled"}</Badge>
+        <Link
+          href={`/management/finance/recurring/${item.id}`}
+          title="Edit recurring item"
+          className="inline-flex h-7 items-center rounded-md px-2 text-muted transition-colors duration-150 hover:bg-raised hover:text-ink"
+        >
+          <Pencil className="size-3.5" aria-hidden />
+          <span className="sr-only">Edit recurring item</span>
+        </Link>
         <Button
           variant="ghost"
           size="sm"

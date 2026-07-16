@@ -45,6 +45,7 @@ export function CreateForm({
   function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     if (confirmedRef.current) {
       confirmedRef.current = false;
+      setEmptyWarning(null);
       return; // proceed with the server action
     }
     const data = new FormData(event.currentTarget);
@@ -76,11 +77,12 @@ export function CreateForm({
           <div className="flex gap-2">
             <Button
               type="submit"
-              variant="outline"
+              variant="primary"
               size="sm"
               onClick={() => {
+                // No state change here — a re-render before the submit event
+                // would swallow the click. handleSubmit clears the warning.
                 confirmedRef.current = true;
-                setEmptyWarning(null);
               }}
             >
               Submit anyway
