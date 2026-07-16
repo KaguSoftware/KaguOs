@@ -135,9 +135,14 @@ redesign, empty-state CTAs (a–c, f from the old list). REMAINING:
    (New section: table + RLS + CRUD + nav entry. NOT started — the one remaining buildable feature.)
 3. ~~Project credentials store~~ — DONE (project detail page; now **Work-gated**, migrations 0011+0012).
    Everyone in Work sees/manages per-project credentials.
-4. **Loading/perf strategy** — Parsa + I agreed on a hybrid (see the perf note at the bottom): SSR
-   the shell for instant paint, client-route between sections, aggressively prefetch heavy modules
-   in the background. Implement incrementally; not a rewrite. (Discussion 2026-07-16.)
+4. **Loading/perf strategy — AGREED (2026-07-16), partly shipped.** The app is already the hybrid
+   "sweet spot": SSR shell for instant paint + client-side routing (instant tabs) + `staleTimes`
+   route caching. Decision: **eager-prefetch only the heavy routes** (Finance charts, Debug board)
+   from the dashboard during idle — shipped in `shell/prefetch-heavy.tsx` (mounted on the dashboard,
+   membership-gated). Lighter sections stay on Next's default hover/viewport prefetch. Do NOT
+   eager-prefetch everything (wasteful for 8 users). Add `loading.tsx` skeletons only where a route's
+   data is genuinely slow — not as a blanket. When adding a new heavy route, add it to `heavyRoutes`
+   in `app/(app)/page.tsx`.
 4. **Showcase mode** — DEFERRED, needs a design decision before building. "Click → all data becomes
    fake demo data; leaving needs the account password." Touches EVERY section's data path + is
    security-sensitive (must be enforced server-side, not a client flag). Recommended shape: a
