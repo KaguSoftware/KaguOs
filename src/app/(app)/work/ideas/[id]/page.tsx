@@ -10,6 +10,7 @@ import { Badge, type BadgeTone } from "@/components/ui/badge";
 import {
   CommentForm,
   DeleteCommentButton,
+  EditableIdeaBody,
   IdeaActions,
   VoteButton,
 } from "@/components/work/idea-bits";
@@ -90,11 +91,15 @@ export default async function IdeaPage({
           )}
         </div>
 
-        {idea.body && (
-          <p className="max-w-[70ch] whitespace-pre-wrap text-sm leading-relaxed text-muted">
-            {idea.body}
-          </p>
-        )}
+        <EditableIdeaBody
+          ideaId={idea.id}
+          title={idea.title}
+          body={idea.body}
+          canEdit={
+            idea.status !== "promoted" &&
+            (ctx.isAdmin || idea.created_by === ctx.userId)
+          }
+        />
 
         <IdeaActions
           ideaId={idea.id}

@@ -1,18 +1,28 @@
 "use client";
 
 import { useState } from "react";
-import { Hand, Loader2, Trash2, Undo2 } from "lucide-react";
+import { Hand, Loader2, Pencil, Trash2, Undo2 } from "lucide-react";
 import {
   claimTask,
   deleteTask,
   setTaskState,
   unclaimTask,
+  updateTask,
 } from "@/lib/actions/debug";
 import { Badge, type BadgeTone } from "@/components/ui/badge";
 import { Button, ConfirmButton } from "@/components/ui/button";
+import { Input, Textarea } from "@/components/ui/input";
+import { Dropdown } from "@/components/ui/dropdown";
 import { useAction } from "@/lib/use-action";
 import { cn, formatDate } from "@/lib/utils";
 import type { DebugPriority, DebugState, DebugTask, MembersMap } from "@/lib/types";
+
+const PRIORITY_OPTIONS = [
+  { value: "low", label: "Low" },
+  { value: "medium", label: "Medium" },
+  { value: "high", label: "High" },
+  { value: "urgent", label: "Urgent" },
+];
 
 const PRIORITY_TONE: Record<DebugPriority, BadgeTone> = {
   low: "faint",
@@ -48,9 +58,32 @@ export function TaskRow({
 }) {
   const { pending, run } = useAction();
   const [expanded, setExpanded] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState({
+    title: task.title,
+    description: task.description ?? "",
+    priority: task.priority as DebugPriority,
+  });
 
   const mine = task.assignee_id === meId;
   const canDelete = isAdmin || task.created_by === meId;
+
+  function saveEdit() {
+    const patch = {
+      title: draft.title.trim() || task.title,
+      description: draft.description.trim() || null,
+      priority: draft.priority,
+    };
+    const before = { ...task };
+    run(() => updateTask(task.id, draft), {
+      optimistic: () => {
+        onPatch(task.id, patch);
+        setEditing(false);
+      },
+      rollback: () => onRestore(before),
+      success: "Task updated.",
+    });
+  }
 
   /** Optimistic: apply the patch immediately, revert (and toast) if rejected. */
   function patchTask(
@@ -171,29 +204,85 @@ export function TaskRow({
         </div>
       </div>
 
-      {expanded && (
+      {expanded && !editing && (
         <div className="mt-2 flex items-start justify-between gap-4 pl-0.5">
           <p className="max-w-[70ch] whitespace-pre-wrap text-[13px] leading-relaxed text-muted">
             {task.description || "No details."}
           </p>
-          {canDelete && (
-            <ConfirmButton
+          <div className="flex shrink-0 items-center gap-1.5">
+            <Button
+              variant="ghost"
               size="sm"
-              confirmLabel="Really delete?"
-              disabled={pending}
-              onConfirm={() => {
-                const before = { ...task };
-                run(() => deleteTask(task.id), {
-                  optimistic: () => onRemove(task.id),
-                  rollback: () => onRestore(before),
-                  success: "Task deleted.",
+              onClick={() => {
+                setDraft({
+                  title: task.title,
+                  description: task.description ?? "",
+                  priority: task.priority,
                 });
+                setEditing(true);
               }}
             >
-              <Trash2 className="size-3.5" aria-hidden />
-              Delete
-            </ConfirmButton>
-          )}
+              <Pencil className="size-3.5" aria-hidden />
+              Edit
+            </Button>
+            {canDelete && (
+              <ConfirmButton
+                size="sm"
+                confirmLabel="Really delete?"
+                disabled={pending}
+                onConfirm={() => {
+                  const before = { ...task };
+                  run(() => deleteTask(task.id), {
+                    optimistic: () => onRemove(task.id),
+                    rollback: () => onRestore(before),
+                    success: "Task deleted.",
+                  });
+                }}
+              >
+                <Trash2 className="size-3.5" aria-hidden />
+                Delete
+              </ConfirmButton>
+            )}
+          </div>
+        </div>
+      )}
+
+      {expanded && editing && (
+        <div className="mt-2 space-y-2.5 pl-0.5">
+          <Input
+            value={draft.title}
+            onChange={(e) => setDraft((d) => ({ ...d, title: e.target.value }))}
+            maxLength={200}
+            aria-label="Task title"
+          />
+          <Textarea
+            value={draft.description}
+            onChange={(e) => setDraft((d) => ({ ...d, description: e.target.value }))}
+            rows={3}
+            placeholder="Details…"
+            aria-label="Task description"
+          />
+          <div className="flex flex-wrap items-center gap-2">
+            <Dropdown
+              className="w-32"
+              value={draft.priority}
+              options={PRIORITY_OPTIONS}
+              onChange={(v) => setDraft((d) => ({ ...d, priority: v as DebugPriority }))}
+            />
+            <div className="ml-auto flex gap-2">
+              <Button variant="ghost" size="sm" onClick={() => setEditing(false)}>
+                Cancel
+              </Button>
+              <Button
+                variant="primary"
+                size="sm"
+                disabled={pending}
+                onClick={saveEdit}
+              >
+                Save
+              </Button>
+            </div>
+          </div>
         </div>
       )}
     </li>

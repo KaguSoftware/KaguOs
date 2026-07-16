@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState, useEffect, useRef, useState, useTransition } from "react";
-import { ArrowBigUp, Loader2, Trash2 } from "lucide-react";
+import { ArrowBigUp, Loader2, Pencil, Trash2 } from "lucide-react";
 import {
   addComment,
   deleteComment,
@@ -9,11 +9,13 @@ import {
   promoteIdea,
   setIdeaStatus,
   toggleVote,
+  updateIdea,
 } from "@/lib/actions/work";
 import { Button, ConfirmButton, SubmitButton } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/input";
+import { Input, Textarea } from "@/components/ui/input";
 import { useAction } from "@/lib/use-action";
 import { useToast } from "@/components/ui/toast";
+import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 
 export function VoteButton({
@@ -63,6 +65,91 @@ export function VoteButton({
       <ArrowBigUp className="size-4" aria-hidden />
       <span className="font-mono text-xs">{local.votes}</span>
     </button>
+  );
+}
+
+export function EditableIdeaBody({
+  ideaId,
+  title,
+  body,
+  canEdit,
+}: {
+  ideaId: string;
+  title: string;
+  body: string | null;
+  canEdit: boolean;
+}) {
+  const router = useRouter();
+  const { pending, run } = useAction();
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState({ title, body: body ?? "" });
+
+  if (!editing) {
+    return (
+      <div className="flex items-start justify-between gap-4">
+        <div className="min-w-0">
+          {body ? (
+            <p className="max-w-[70ch] whitespace-pre-wrap text-sm leading-relaxed text-muted">
+              {body}
+            </p>
+          ) : (
+            <p className="text-sm text-faint">No details.</p>
+          )}
+        </div>
+        {canEdit && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              setDraft({ title, body: body ?? "" });
+              setEditing(true);
+            }}
+          >
+            <Pencil className="size-3.5" aria-hidden />
+            Edit
+          </Button>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-2.5">
+      <Input
+        value={draft.title}
+        onChange={(e) => setDraft((d) => ({ ...d, title: e.target.value }))}
+        maxLength={200}
+        aria-label="Idea title"
+      />
+      <Textarea
+        value={draft.body}
+        onChange={(e) => setDraft((d) => ({ ...d, body: e.target.value }))}
+        rows={5}
+        placeholder="Describe the idea…"
+        aria-label="Idea details"
+      />
+      <div className="flex justify-end gap-2">
+        <Button variant="ghost" size="sm" onClick={() => setEditing(false)}>
+          Cancel
+        </Button>
+        <Button
+          variant="primary"
+          size="sm"
+          disabled={pending}
+          onClick={() =>
+            run(() => updateIdea(ideaId, draft), {
+              success: "Idea updated.",
+              onSuccess: () => {
+                setEditing(false);
+                router.refresh();
+              },
+            })
+          }
+        >
+          Save
+        </Button>
+      </div>
+    </div>
   );
 }
 

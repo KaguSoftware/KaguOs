@@ -101,6 +101,25 @@ export async function createIdea(
   return { ok: true, message: "Idea posted." };
 }
 
+export async function updateIdea(
+  ideaId: string,
+  fields: { title: string; body: string }
+): Promise<ActionResult> {
+  const ctx = await requireSection("work");
+  const title = fields.title.trim().slice(0, 200);
+  if (!title) return { ok: false, message: "An idea needs a title." };
+
+  const { error } = await ctx.supabase
+    .from("ideas")
+    .update({ title, body: fields.body.trim() || null })
+    .eq("id", ideaId);
+  if (error) return { ok: false, message: error.message };
+
+  revalidatePath("/work");
+  revalidatePath(`/work/ideas/${ideaId}`);
+  return { ok: true, message: "Idea updated." };
+}
+
 export async function toggleVote(ideaId: string, hasVoted: boolean): Promise<ActionResult> {
   const ctx = await requireSection("work");
 

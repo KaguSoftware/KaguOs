@@ -59,6 +59,30 @@ export async function setTaskState(
   return { ok: true, message: "State updated." };
 }
 
+/** Edit a task's title / description / priority (RLS restricts who can). */
+export async function updateTask(
+  taskId: string,
+  fields: { title: string; description: string; priority: DebugPriority }
+): Promise<ActionResult> {
+  const ctx = await requireSection("debug");
+  const title = fields.title.trim().slice(0, 200);
+  if (!title) return { ok: false, message: "A task needs a title." };
+  const priority = PRIORITIES.includes(fields.priority) ? fields.priority : "medium";
+
+  const { error } = await ctx.supabase
+    .from("debug_tasks")
+    .update({
+      title,
+      description: fields.description.trim() || null,
+      priority,
+    })
+    .eq("id", taskId);
+  if (error) return { ok: false, message: error.message };
+
+  revalidatePath("/debug");
+  return { ok: true, message: "Task updated." };
+}
+
 /** Claim for YOURSELF only — and only if still unclaimed (first click wins). */
 export async function claimTask(taskId: string): Promise<ActionResult> {
   const ctx = await requireSection("debug");
