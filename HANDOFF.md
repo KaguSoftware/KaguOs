@@ -70,12 +70,19 @@ Contracts w/ PDFs), **Debug** (everyone: per-project boards, self-claim-only, re
   toast-on-failure. High-traffic flows refactored onto it; create forms toast success/error. Every
   action now tells the user what happened. Lower-traffic admin flows (fx-editor, sprint-forms,
   user-row, contract-bits, progress-grid, color-form, import-debug) still use inline errors — fine.
-- ⚠️ PENDING MANUAL STEP: **migration 0008 (reminders table) is written + committed but NOT pushed
-  to cloud.** The reminders widget will error until you run `supabase db push` (see Running it). It's
-  additive (new table + RLS), safe. The auto-confirm push was blocked by the sandbox — push it
-  interactively so you review the diff.
+- Features shipped (2026-07-16): **in-app notifications** (bell in sidebar, unread badge, event
+  fan-out via `lib/actions/notify.ts`); **announcements hero** (admin-posted dashboard banner);
+  **⌘K command palette** (`shell/command-palette.tsx`, mounted in (app) layout, sidebar Search
+  button); **editing flows** for debug tasks (inline in expanded row) and ideas (inline on detail
+  page) — projects already had it; **admin Team rows redesigned** (calm summary + expandable Manage
+  panel instead of ~10 inline controls); empty-state CTAs on work panels.
+- Migrations 0008 (reminders) / 0009 (notifications) / 0010 (announcements) all **pushed to cloud
+  & live**. Note: `supabase db push` prints a harmless Docker-cache warning on this Windows box —
+  the remote apply still succeeds ("Finished supabase db push").
+- ⚠️ SANDBOX NOTE: the agent's auto-confirm of `db push` is blocked (guardrail on prod schema
+  changes); Parsa runs `npx supabase db push` interactively. Future migrations need the same.
 - NOT DONE: disabling public signups in the Supabase dashboard; formal E2E with RLS negative checks
-  (deferred — you've 2-browser tested); the feature queue below.
+  (deferred — you've 2-browser tested); the remaining queue below.
 
 ## File map (key files)
 - `src/lib/data/session.ts` — cached session context + `requireSection`/`requireAdmin` guards.
@@ -109,22 +116,31 @@ Contracts w/ PDFs), **Debug** (everyone: per-project boards, self-claim-only, re
   reminders (Share button posts a team one; RLS in migration 0008). `Reminder` type in types.ts.
 - `src/components/shell/logo.tsx` — the brand mark (`/kagu-mark.png`, 0.4KB, downscaled from
   `/brand/kagu-logo-source.png`). App icons: `src/app/icon.png` + `apple-icon.png`.
-- `supabase/migrations/0001–0008` — full schema history (0008 = reminders, **cloud-push pending**).
+- `src/lib/actions/notify.ts` (helper: notifySection/notifyEveryone/notifyUser, best-effort, actor
+  excluded) + `notifications.ts` (markAllRead/clearAll). `shell/notification-bell.tsx` renders the
+  bell; layout fetches the feed. Events fire from debug/work/reminders actions.
+- `src/components/shell/announcement-hero.tsx` + `lib/actions/announcements.ts` — admin banner
+  (one active at a time). `src/components/shell/command-palette.tsx` — ⌘K nav+actions.
+- `supabase/migrations/0001–0010` — full schema history (0008 reminders, 0009 notifications,
+  0010 announcements; all applied to cloud).
 - `scripts/seed-admin.ts` — idempotent first-admin seed.
 
 ## Roadmap / next steps
-0. ➡️ **ACTIVE — DO FIRST: push migration 0008** (`supabase db push`) so reminders have a table.
+DONE this session: notifications, announcements hero, ⌘K palette, task/idea editing, admin-row
+redesign, empty-state CTAs (a–c, f from the old list). REMAINING:
 1. Disable "Allow new users to sign up" in Supabase dashboard (Auth → Sign In / Up).
-2. Big feature batch Parsa green-lit (2026-07-16), in-progress order:
-   a. In-app notification center (bell + unread feed, driven by activity data). *(next up)*
-   b. Search / command palette (⌘K).
-   c. Editing flows for tasks / ideas / projects (title/desc are currently fixed after post).
-   d. **Communications / CRM section** — leads + clients, status, links to everything tied to them.
-   e. **Project credentials store** — per-project accounts (Supabase email/password etc).
-      DECISION: plaintext, RLS-gated to management/admins, masked with reveal-on-click. ⚠️ A DB leak
-      exposes these — a real secrets manager is the safer long-term move; revisit.
-   f. Empty / first-run states across sections. g. Finance exports + budgets + per-client P&L.
-3. Onboard the team (create the other 7 accounts), import the old sheet, retire it.
+2. **Communications / CRM section** — leads + clients, status, links to everything tied to them.
+   (New section: table + RLS + CRUD + nav entry. Not started.)
+3. **Project credentials store** — per-project accounts (Supabase email/password etc).
+   DECISION (Parsa): plaintext, RLS-gated to management/admins, masked with reveal-on-click.
+   ⚠️ A DB leak exposes these — a real secrets manager is the safer long-term move; revisit.
+4. **Showcase mode** — DEFERRED, needs a design decision before building. "Click → all data becomes
+   fake demo data; leaving needs the account password." Touches EVERY section's data path + is
+   security-sensitive (must be enforced server-side, not a client flag). Recommended shape: a
+   separate read-only demo dataset that showcase mode reads from, + a re-auth gate to exit. Scope
+   this with Parsa first.
+5. Finance exports + budgets + per-client P&L.
+6. Onboard the team (create the other 7 accounts), import the old sheet, retire it.
 
 Cross-cutting: keep weaving the perf pass and the `useAction`/toast HCI pattern into every new
 surface; run `/impeccable audit` after the batch (design hook was silenced after 6 edits/file).
@@ -132,15 +148,16 @@ surface; run `/impeccable audit` after the batch (design hook was silenced after
 ## Deliberately partial — grows later (scope ledger)
 | Area | What shipped now | Intended full shape | Grows in |
 |---|---|---|---|
-| Notifications | none yet | in-app center now (Telegram later) | in progress (2a) |
-| Reminders | personal + team, DB-backed | (done) — migration 0008 needs cloud push | — |
-| Comms/CRM | none | leads/clients + linked resources | in progress (2d) |
-| Project creds | none | plaintext RLS-gated accounts store | in progress (2e) |
+| Notifications | in-app center (done) | Telegram bot later | later |
+| Reminders | personal + team, DB-backed (done) | — | — |
+| Editing | tasks/ideas/projects inline (done) | — | — |
+| Comms/CRM | none | leads/clients + linked resources | next (roadmap 2) |
+| Project creds | none | plaintext RLS-gated accounts store | next (roadmap 3) |
+| Showcase mode | none | fake-data demo mode w/ re-auth exit | deferred, needs design (4) |
 | Invites | admin sets temp password | email invites via SMTP | when SMTP exists |
 | Roles | membership + global admin | per-section roles (Learn owner) | when needed |
-| Finance reports | 12-mo chart + tiles + recurring breakdown | exports, budgets, per-client P&L | in progress (2g) |
+| Finance reports | 12-mo chart + tiles + recurring breakdown | exports, budgets, per-client P&L | roadmap 5 |
 | Marketing | campaigns/content/links CRUD | analytics pulls, approval flows | next phase |
-| Task editing | title/desc fixed after post (state/claim/delete only) | edit page | in progress (2c) |
 | i18n | English only | next-intl (TR) | if requested |
 
 ## Gotchas / open issues
@@ -154,7 +171,7 @@ surface; run `/impeccable audit` after the batch (design hook was silenced after
 
 ## Running it
 - `npm run dev` · `npm run build` · `npm run lint`
-- `$env:SUPABASE_ACCESS_TOKEN='<token>'; "Y" | npx supabase db push` — apply new migrations
-  (⚠️ 0008 reminders is pending this). `npx supabase migration list` shows local-vs-remote drift.
+- `npx supabase db push` — apply new migrations (Parsa runs interactively; token in `.env.local`;
+  harmless Docker-cache warning on Windows, apply still succeeds). 0008–0010 are all applied.
 - `npx tsx scripts/seed-admin.ts` — re-seed admin (idempotent)
 - `node .claude/skills/impeccable/scripts/detect.mjs src` — design lint (clean as of today)
