@@ -39,7 +39,9 @@ Contracts w/ PDFs), **Debug** (everyone: per-project boards, self-claim-only, re
 - Env (`.env.local`, never committed): `NEXT_PUBLIC_SUPABASE_URL`,
   `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_ACCESS_TOKEN`
   (CLI; used for `db push` + Management API).
-- GitHub `KaguSoftware/KaguOs` (main). Windows 11 + PowerShell. Impeccable installed project-level.
+- GitHub `KaguSoftware/KaguOs` (main). Windows 11 + PowerShell. Impeccable installed project-level
+  but LOCAL-ONLY (`.claude/` is gitignored — Parsa wants only app code on GitHub; re-install on a
+  new machine with `npx impeccable install`, answers `"1`nproject"`).
 
 ## Conventions
 - Access: `profiles.is_admin` + `section_memberships`; RLS via `private.is_admin()` /
