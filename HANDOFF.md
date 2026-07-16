@@ -62,7 +62,8 @@ Contracts w/ PDFs), **Debug** (everyone: per-project boards, self-claim-only, re
   scope, admin panel (users/memberships/colors/passwords), dashboard w/ live counts, CSV import,
   design system + field kit + create surfaces + optimistic layer. DB seeded: Parsa is admin with
   all memberships. UI polish (2026-07-16): custom `Checkbox` primitive replaced native checkboxes
-  app-wide; marketing tabs now switch instantly as client state (single page, no per-tab fetch).
+  app-wide; all tabbed sections (Marketing, Work, Management) now switch instantly as client state —
+  each is one page that fetches every tab's data up front, no per-tab navigation/fetch.
 - NOT DONE / NOT VERIFIED: end-to-end testing in a browser with real users (nothing beyond build
   has been exercised!), Vercel deploy, disabling public signups in the Supabase dashboard,
   auth URL config after deploy.
@@ -77,10 +78,19 @@ Contracts w/ PDFs), **Debug** (everyone: per-project boards, self-claim-only, re
   number-input, typed-inputs, color-picker, **checkbox**, badge, panel, empty-state, skeleton…).
   `checkbox.tsx` is the one styled checkbox (peer input under a brand box, controlled or
   uncontrolled) — use it everywhere, never a native `type="checkbox"`.
-- `src/components/<section>/*` + `src/app/(app)/<section>/…` — per-section UI/pages. Marketing is
-  now a SINGLE page (`marketing/page.tsx`) that fetches all three datasets and hands them to
-  `components/marketing/workspace.tsx`; Campaigns/Content/Links switch as client state (instant, no
-  navigation). `/marketing/content` + `/marketing/links` are redirect stubs → `/marketing?tab=…`.
+- `src/components/shell/tabbed-panels.tsx` — the shared instant-tab shell. Owns the PageHeader +
+  tab bar; each panel's content (and its per-tab header action) is rendered on the server and passed
+  in, so switching is pure client state — no navigation, no refetch, URL reflects `?tab=…`. Used by
+  Work + Management; Marketing predates it and uses its own `marketing/workspace.tsx` (same pattern).
+- `src/components/<section>/*` + `src/app/(app)/<section>/…` — per-section UI/pages. **Tabbed
+  sections are single pages that fetch every tab's data up front and switch client-side:**
+  - Work → `work/page.tsx` + `work/panels.tsx` (Projects/Ideas). `/work/ideas` → `/work?tab=ideas`.
+  - Management → `management/finance/page.tsx` + `management/panels.tsx` (Finance/Contracts).
+    `/management` → `/management/finance`; `/management/contracts` → `…finance?tab=contracts`.
+  - Marketing → `marketing/page.tsx` + `marketing/workspace.tsx` (Campaigns/Content/Links).
+    `/marketing/content|links` → `/marketing?tab=…`.
+  Old sub-routes are redirect stubs; list-level `revalidatePath`, form `onDone`, and detail back-links
+  all point at the `?tab=` URLs. `SectionTabs` + per-section `tabs.ts` were retired.
 - `supabase/migrations/0001–0007` — full schema history (source of truth).
 - `scripts/seed-admin.ts` — idempotent first-admin seed.
 
