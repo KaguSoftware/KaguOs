@@ -215,3 +215,13 @@ export type MarketingItem = {
   created_by: string | null;
   created_at: string;
 };
+
+export type Reminder = {
+  id: string;
+  scope: "personal" | "team";
+  owner_id: string | null;
+  text: string;
+  done: boolean;
+  created_by: string | null;
+  created_at: string;
+};

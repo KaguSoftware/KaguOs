@@ -7,7 +7,7 @@ import { PageHeader } from "@/components/shell/page-header";
 import { Reminders } from "@/components/shell/reminders";
 import { ActivityFeed } from "@/components/shell/activity-feed";
 import { formatTRY, isActiveRecurring, monthlyAmount, toTRY, type FxRates } from "@/lib/finance";
-import { SECTION_LABELS, type Section } from "@/lib/types";
+import { SECTION_LABELS, type Reminder, type Section } from "@/lib/types";
 
 type Card = { section: Section; href: string; blurb: string; stat?: string };
 type QuickAction = { label: string; href: string };
@@ -124,10 +124,16 @@ export default async function DashboardPage() {
   if (ctx.isAdmin)
     actions.push({ label: "New sprint", href: "/learn/new" });
 
-  const [activity, members] = await Promise.all([
+  const [activity, members, { data: reminderRows }] = await Promise.all([
     getActivity(ctx),
     getMembersMap(ctx.supabase),
+    ctx.supabase
+      .from("reminders")
+      .select("*")
+      .order("done", { ascending: true })
+      .order("created_at", { ascending: false }),
   ]);
+  const reminders = (reminderRows ?? []) as Reminder[];
 
   return (
     <>
@@ -177,7 +183,7 @@ export default async function DashboardPage() {
         </div>
         <div className="flex flex-col gap-6">
           <ActivityFeed items={activity} members={members} />
-          <Reminders userId={ctx.userId} />
+          <Reminders reminders={reminders} members={members} meId={ctx.userId} />
         </div>
       </div>
     </>

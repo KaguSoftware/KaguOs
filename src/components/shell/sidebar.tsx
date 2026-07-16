@@ -16,6 +16,7 @@ import {
 import { cn } from "@/lib/utils";
 import type { Section } from "@/lib/types";
 import { signOut } from "@/lib/actions/account";
+import { Logo } from "@/components/shell/logo";
 
 type NavItem = {
   href: string;
@@ -86,7 +87,7 @@ export function Sidebar({
       {/* Desktop sidebar */}
       <aside className="sticky top-0 hidden h-dvh w-56 shrink-0 flex-col border-r border-line bg-surface md:flex">
         <div className="flex items-center gap-2.5 px-4 pb-5 pt-5">
-          <span className="size-2 rounded-full bg-primary" aria-hidden />
+          <Logo size={24} />
           <span className="text-[15px] font-semibold tracking-tight">KaguOs</span>
         </div>
         <nav className="flex-1 space-y-0.5 px-2" aria-label="Sections">
@@ -130,7 +131,7 @@ export function Sidebar({
       <header className="sticky top-0 z-20 flex flex-col border-b border-line bg-surface md:hidden">
         <div className="flex items-center justify-between px-4 py-3">
           <div className="flex items-center gap-2.5">
-            <span className="size-2 rounded-full bg-primary" aria-hidden />
+            <Logo size={22} />
             <span className="text-[15px] font-semibold tracking-tight">KaguOs</span>
           </div>
           <div className="flex items-center gap-1">
