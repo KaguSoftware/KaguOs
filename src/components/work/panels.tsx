@@ -1,7 +1,8 @@
 import Link from "next/link";
-import { ExternalLink, FolderKanban, GitBranch, Lightbulb, MessageSquare } from "lucide-react";
+import { ExternalLink, FolderKanban, GitBranch, Lightbulb, MessageSquare, Plus } from "lucide-react";
 import { Badge, type BadgeTone } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
+import { LinkButton } from "@/components/ui/link-button";
 import { VoteButton } from "@/components/work/idea-bits";
 import { formatDate } from "@/lib/utils";
 import { optionLabel, PROJECT_TYPE_OPTIONS, SECTOR_OPTIONS } from "@/lib/options";
@@ -38,6 +39,12 @@ export function ProjectsPanel({ projects }: { projects: Project[] }) {
           icon={FolderKanban}
           title="No projects yet"
           hint="Create the first one, or promote an idea from the Ideas tab."
+          action={
+            <LinkButton href="/work/projects/new">
+              <Plus className="size-3.5" aria-hidden />
+              New project
+            </LinkButton>
+          }
         />
       ) : (
         <div className="overflow-x-auto">
@@ -141,6 +148,12 @@ export function IdeasPanel({
           icon={Lightbulb}
           title="No ideas yet"
           hint="Post the first one — teammates vote, discuss, and the good ones become projects."
+          action={
+            <LinkButton href="/work/ideas/new">
+              <Plus className="size-3.5" aria-hidden />
+              New idea
+            </LinkButton>
+          }
         />
       ) : (
         <ul className="divide-y divide-line">
