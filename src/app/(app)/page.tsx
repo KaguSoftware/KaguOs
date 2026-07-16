@@ -1,8 +1,11 @@
 import Link from "next/link";
 import { ArrowUpRight, Plus } from "lucide-react";
 import { getSessionContext, canAccess } from "@/lib/data/session";
+import { getMembersMap } from "@/lib/data/members";
+import { getActivity } from "@/lib/data/activity";
 import { PageHeader } from "@/components/shell/page-header";
 import { Reminders } from "@/components/shell/reminders";
+import { ActivityFeed } from "@/components/shell/activity-feed";
 import { formatTRY, isActiveRecurring, monthlyAmount, toTRY, type FxRates } from "@/lib/finance";
 import { SECTION_LABELS, type Section } from "@/lib/types";
 
@@ -121,6 +124,11 @@ export default async function DashboardPage() {
   if (ctx.isAdmin)
     actions.push({ label: "New sprint", href: "/learn/new" });
 
+  const [activity, members] = await Promise.all([
+    getActivity(ctx),
+    getMembersMap(ctx.supabase),
+  ]);
+
   return (
     <>
       <PageHeader
@@ -167,7 +175,10 @@ export default async function DashboardPage() {
             </Link>
           ))}
         </div>
-        <Reminders userId={ctx.userId} />
+        <div className="flex flex-col gap-6">
+          <ActivityFeed items={activity} members={members} />
+          <Reminders userId={ctx.userId} />
+        </div>
       </div>
     </>
   );

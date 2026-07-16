@@ -48,6 +48,26 @@ export function formatDate(value: string | Date | null | undefined) {
   return dateFmt.format(typeof value === "string" ? new Date(value) : value);
 }
 
+const relFmt = new Intl.RelativeTimeFormat("en", { numeric: "auto" });
+
+/** Compact relative time ("3h ago", "2d ago"). Snapshot at render time. */
+export function formatRelative(value: string | Date, now: Date = new Date()) {
+  const then = typeof value === "string" ? new Date(value) : value;
+  const diffMs = then.getTime() - now.getTime();
+  const sec = Math.round(diffMs / 1000);
+  const abs = Math.abs(sec);
+  if (abs < 60) return "just now";
+  const min = Math.round(sec / 60);
+  if (Math.abs(min) < 60) return relFmt.format(min, "minute");
+  const hr = Math.round(min / 60);
+  if (Math.abs(hr) < 24) return relFmt.format(hr, "hour");
+  const day = Math.round(hr / 24);
+  if (Math.abs(day) < 30) return relFmt.format(day, "day");
+  const mon = Math.round(day / 30);
+  if (Math.abs(mon) < 12) return relFmt.format(mon, "month");
+  return relFmt.format(Math.round(mon / 12), "year");
+}
+
 export function formatMoney(amount: number, currency: string) {
   return new Intl.NumberFormat("en-US", {
     style: "currency",
