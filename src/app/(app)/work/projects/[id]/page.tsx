@@ -30,8 +30,8 @@ export default async function ProjectPage({
   ]);
   if (!project) notFound();
 
-  // Credentials are Management-only — fetch them just for those users.
-  const canSeeSecrets = canAccess(ctx, "management");
+  // Credentials are visible to Work members (builders own their projects).
+  const canSeeSecrets = canAccess(ctx, "work");
   const secrets = canSeeSecrets
     ? (((
         await ctx.supabase

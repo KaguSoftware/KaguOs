@@ -13,7 +13,7 @@ export async function addSecret(
   projectId: string,
   formData: FormData
 ): Promise<ActionResult> {
-  const ctx = await requireSection("management");
+  const ctx = await requireSection("work");
   const label = clean(formData.get("label"), 120);
   if (!label) return { ok: false, message: "A credential needs a label." };
 
@@ -36,7 +36,7 @@ export async function deleteSecret(
   secretId: string,
   projectId: string
 ): Promise<ActionResult> {
-  const ctx = await requireSection("management");
+  const ctx = await requireSection("work");
   const { error } = await ctx.supabase
     .from("project_secrets")
     .delete()

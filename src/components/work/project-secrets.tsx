@@ -45,8 +45,8 @@ export function ProjectSecrets({
       <div className="p-4">
         <p className="mb-3 flex items-start gap-1.5 text-xs text-faint">
           <KeyRound className="mt-0.5 size-3 shrink-0" aria-hidden />
-          Visible to Management only. Stored for the team&apos;s convenience — treat
-          a shared login as shared.
+          Visible to the Work team. Stored for convenience — treat a shared login
+          as shared, and rotate anything sensitive elsewhere.
         </p>
 
         {adding && (
