@@ -1,113 +1,111 @@
 # KaguOs — Handoff
 
-> Read this first when starting a fresh chat. Companion: the approved plan at
-> `C:\Users\p.mansouri\.claude\plans\we-are-kagu-this-precious-teacup.md` (full schema/RLS detail).
+> Read this first when starting a fresh chat. Companions: PRODUCT.md · DESIGN.md ·
+> plan at `C:\Users\p.mansouri\.claude\plans\we-are-kagu-this-precious-teacup.md`.
 
 ## Working style
 - **Git authorship — ABSOLUTE RULE**: Parsa is the SOLE author of every commit. NEVER add Claude as
-  co-author (`Co-Authored-By` trailers are banned), never mention Claude/AI in commit messages or PR
-  bodies. Parsa deleted and recreated the GitHub repo on 2026-07-16 to purge one such trailer —
-  do not make that mistake again.
-- **Collaborate**: agree with Parsa before locking significant/user-facing decisions; propose with a
-  recommendation, don't unilaterally commit. Decisions below were agreed on 2026-07-16.
-- **Plan mode** for direction-setting work; owner approves before build.
-- **No subagents/orchestration** for this project unless Parsa asks — he prefers direct work.
-- **Make partial scope OBVIOUS**: deliberately-small areas live in the scope ledger below, carry a
-  `// SCOPE(mvp): … GROWS LATER → …` code tag, and show a "coming soon" affordance in-app.
-- **Keep this file and the memory index in lockstep** (memory dir: Claude's project memory).
+  co-author (`Co-Authored-By` trailers banned), never mention Claude/AI in commit messages or PR
+  bodies. He deleted and recreated the repo on 2026-07-16 to purge one such trailer.
+- **Collaborate**: agree with Parsa before locking significant decisions; propose with a
+  recommendation. No subagents/orchestration unless he asks.
+- **Create flows (Parsa rule)**: every "add new X" is a spacious dedicated surface (`/…/new` page
+  or fullscreen overlay) — never an inline expander. No required fields; empty-field confirm
+  ("Title and Details are empty — sure?"). `src/components/ui/create.tsx`.
+- **Typed custom fields (Parsa rule)**: every control is custom + typed — Dropdown, DatePicker,
+  NumberInput, EmailInput, UrlInput, FileInput, ColorPicker in `src/components/ui/`. No native
+  select/date UI, no bare strings for typed content. Custom scrollbars too (globals.css).
+- **macOS-feel motion (Parsa rule)**: `--ease-mac` curve, pop-in popovers, page/overlay fade-rises,
+  button micro-press, frosted translucency on transient surfaces only. Spec: DESIGN.md → Motion.
+- **Fast (Parsa rule)**: optimistic updates on claims/states/goal-ticks/votes, client-side board
+  switching, React `cache()` session dedupe, router `staleTimes`, streaming `loading.tsx`.
+- **Make partial scope OBVIOUS** (ledger below) · keep this file + memory index in lockstep.
 
 ## What this is
-KaguOs — the internal system of Kagu (kagusoftware.com, Istanbul software studio, **8 people
-total**). One login, five membership-gated sections: **Work** (4 ppl: projects + ideas),
-**Learn** (all 8: learning sprints with per-person progress), **Management** (2 ppl: detailed
-Finance tab — one-time transactions + recurring subscriptions/retainers, multi-currency — plus
-contracts w/ PDFs; added by Parsa 2026-07-16), **Debug** (everyone: claim-a-task board replacing a
-Google Sheet), **Marketing** (shell for now). Global admins manage users/memberships from an
-admin panel. **Rule: everyone in Work is ALWAYS also in Learn** (enforced by DB trigger —
-granting work auto-grants learn; learn can't be removed while work is held).
+KaguOs — internal system of Kagu (kagusoftware.com, Istanbul, **8 people**). One login, five
+membership-gated sections: **Work** (4: projects+ideas w/ sector+type, promote idea→project),
+**Learn** (all 8: sprints, per-person goals, file resources; Work⊆Learn enforced by DB trigger),
+**Management** (2: Finance in TL w/ manual FX + charts + recurring items + one-time transactions,
+Contracts w/ PDFs), **Debug** (everyone: per-project boards, self-claim-only, realtime),
+**Marketing** (digital: campaigns, content calendar, shared links). Per-member identity colors
+(picked from 20 vibrant swatches; admin can override) color-code names app-wide.
 
 ## Stack & environment
-- Next.js 16.2.10 (App Router, TS, Turbopack), React 19.2, Tailwind v4, lucide-react.
-- Supabase: Auth (invite-only email+password, public signups DISABLED in dashboard),
-  Postgres w/ RLS, private Storage bucket `contracts`, Realtime on `debug_tasks`.
-- Vercel deploy. GitHub: `KaguSoftware/KaguOs` (main).
-- Dev machine: Windows 11 + PowerShell. Supabase CLI as dev dep (no Docker; `db push` to cloud).
-- Env vars (values in `.env.local`, NEVER committed): `NEXT_PUBLIC_SUPABASE_URL`,
-  `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SERVICE_ROLE_KEY`.
-- UI quality: Impeccable skill pack installed project-level (`.claude/skills/impeccable`).
+- Next.js 16.2.10 (App Router, Turbopack, `staleTimes` experiment), React 19.2, Tailwind v4,
+  lucide-react, recharts, papaparse.
+- Supabase: Auth (invite-only email+password — **public signups must be disabled in dashboard**,
+  still to verify), Postgres w/ RLS everywhere, private buckets `contracts` + `learn`, Realtime on
+  `debug_tasks`. Project ref `ibbfptujwtbfwdefllgz`. Migrations 0001–0007 all APPLIED to cloud.
+- Env (`.env.local`, never committed): `NEXT_PUBLIC_SUPABASE_URL`,
+  `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_ACCESS_TOKEN`
+  (CLI; used for `db push` + Management API).
+- GitHub `KaguSoftware/KaguOs` (main). Windows 11 + PowerShell. Impeccable installed project-level.
 
 ## Conventions
-- **Create flows (Parsa rule, 2026-07-16)**: every "add new X" opens a spacious dedicated create
-  surface (`/section/new` page, or fullscreen overlay for sub-items) — NEVER an inline expander.
-  No required fields; on submit an empty-field confirm lists what's blank ("Title and Details are
-  empty — are you sure?"). Server fills NOT NULL columns with fallbacks ("Untitled…").
-  Component: `src/components/ui/create.tsx` (CreateForm / CreatePage / CreateOverlay).
-- **Typed custom fields everywhere (Parsa rule, 2026-07-16)**: every form control is a dedicated,
-  custom-built component suited to its content — custom Dropdown (no native select UI), custom
-  DatePicker calendar (no native date UI), NumberInput for numbers/amounts, EmailInput for emails,
-  UrlInput for links. No bare string inputs for typed content. Live in `src/components/ui/`;
-  extend the kit when a new field type appears.
-- **macOS-feel motion (Parsa rule, 2026-07-16)**: `--ease-mac` curve everywhere, pop-in popovers,
-  overlay/page fade-rises, button micro-press, frosted translucency on transient surfaces only.
-  Spec in DESIGN.md → Motion.
-- Access model: `profiles.is_admin` + `section_memberships(user_id, section)`; ALL enforcement via
-  RLS using `private.is_admin()` / `private.is_member(section)` (SECURITY DEFINER helpers).
-- Text + CHECK constraints instead of Postgres enums (easier migrations).
-- Server actions re-check auth server-side every time; service-role client only in
-  `src/lib/supabase/service.ts`, used only after an explicit admin check.
-- Next 16: `proxy.ts` (not middleware.ts); `cookies()`/`params`/`searchParams` are async.
-- Debug board rule: anyone can change state; you can only claim a task for YOURSELF
-  (`assignee_id IS NULL OR = auth.uid() OR admin`) — mirrors the old sheet culture.
-- Sprint create/edit: admin-only for MVP. Package name is `kaguos` (folder `kaguOs` broke npm naming).
+- Access: `profiles.is_admin` + `section_memberships`; RLS via `private.is_admin()` /
+  `private.is_member()`. Server actions re-check auth; service client only in
+  `lib/supabase/service.ts` after admin check. Column grants protect `profiles.is_admin`
+  (authenticated may update only `full_name`, `color`).
+- Debug claim rule (DB): assignee may only be set to yourself/null unless admin.
+- Files upload from the BROWSER straight to storage (RLS-gated), then a server action saves the
+  path; downloads via signed URLs (1h).
+- Text+CHECK not enums; created_by nullable `on delete set null`; `updated_at` triggers.
+- Next 16: `src/proxy.ts` (not middleware); async cookies/params.
+- Chart colors are validated (dataviz skill): income `oklch(0.62 0.13 160)`, expense
+  `oklch(0.55 0.16 25)` — L band 0.48–0.67 on dark; re-validate any new chart palette.
 
 ## Current status (2026-07-16)
-- DONE: scaffold (create-next-app), Impeccable installed (project-level), deps installed,
-  repo pushed to GitHub main.
-- IN PROGRESS: Supabase wiring (env, clients, proxy).
-- NOT STARTED: schema/RLS migration, seed, auth shell, admin panel, dashboard, five sections,
-  CSV import, deploy. Nothing is verified yet.
+- DONE (code written, `npm run build` clean, 29 routes; pushed): all five sections at full agreed
+  scope, admin panel (users/memberships/colors/passwords), dashboard w/ live counts, CSV import,
+  design system + field kit + create surfaces + optimistic layer. DB seeded: Parsa is admin with
+  all memberships.
+- NOT DONE / NOT VERIFIED: end-to-end testing in a browser with real users (nothing beyond build
+  has been exercised!), Vercel deploy, disabling public signups in the Supabase dashboard,
+  auth URL config after deploy.
 
 ## File map (key files)
-- `HANDOFF.md` — this file.
-- `src/app/(auth)/login/` + `src/app/(app)/…` — public login vs protected app (per plan).
-- `src/lib/supabase/{client,server,service}.ts` — browser / SSR / service-role Supabase clients.
-- `src/lib/actions/*.ts`, `src/lib/data/*.ts` — server actions & queries per section.
-- `proxy.ts` — session refresh (Next 16 middleware replacement).
-- `supabase/migrations/0001_init.sql` — full schema + RLS + bucket + realtime (source of truth).
-- `scripts/seed-admin.ts` — creates first admin (parsaa.mansourii@gmail.com) via service role.
+- `src/lib/data/session.ts` — cached session context + `requireSection`/`requireAdmin` guards.
+- `src/lib/actions/*.ts` — server actions per section (account, admin, debug, work, learn,
+  management, marketing).
+- `src/lib/{types,options,colors,finance,utils}.ts` — domain types, dropdown vocabularies,
+  member colors, TL/FX math, cn+formatters.
+- `src/components/ui/*` — the design system (button, create surfaces, dropdown, date-picker,
+  number-input, typed-inputs, color-picker, badge, panel, empty-state, skeleton…).
+- `src/components/<section>/*` + `src/app/(app)/<section>/…` — per-section UI/pages.
+- `supabase/migrations/0001–0007` — full schema history (source of truth).
+- `scripts/seed-admin.ts` — idempotent first-admin seed.
 
 ## Roadmap / next steps
-1. ✅ Scaffold + Impeccable + git push
-2. ➡️ **ACTIVE: Supabase wiring (.env.local, 3 clients, proxy.ts)**
-3. Migration 0001 (schema+RLS+bucket+realtime) applied to cloud
-4. Seed admin; disable public signups (dashboard)
-5. Auth shell (login, protected layout, membership-aware sidebar, account page)
-6. Admin panel (users, memberships, is_admin)
-7. Dashboard cards → 8. Debug board (claim + realtime) → 9. Work → 10. Learn → 11. Management
-12. Marketing shell → 13. CSV import → 14. polish + build → 15. E2E verify (3 test users, RLS
-negative tests) → 16. Vercel deploy + Supabase auth URLs → 17. sync this file.
+1. ➡️ **ACTIVE: E2E verify** — `npm run dev`, sign in as Parsa, create 2 test users w/ different
+   memberships in /admin, walk every section; RLS negative checks (learn-only user must get
+   nothing from /work, /management, contract files); two-browser realtime claim test; CSV import.
+2. Disable "Allow new users to sign up" in Supabase dashboard (Auth → Sign In / Up).
+3. Deploy: import repo in Vercel, set the 3 env vars (NOT the access token), deploy; then
+   Supabase Auth → URL config: Site URL = Vercel domain. Smoke test prod.
+4. Onboard the team (create the other 7 accounts), import the old sheet, retire it.
 
 ## Deliberately partial — grows later (scope ledger)
 | Area | What shipped now | Intended full shape | Grows in |
 |---|---|---|---|
-| Marketing | gated shell + shared links/notes | real marketing tooling (campaigns, calendar) | next phase |
 | Notifications | none (realtime board only) | Telegram bot on task create/claim | fast follow |
 | Invites | admin sets temp password | email invites via SMTP | when SMTP exists |
-| Roles | binary membership + global admin | per-section roles (Learn owner plans sprints) | when needed |
-| Mgmt reporting | month/client totals | charts, FX normalization, exports | when needed |
-| i18n | English only | next-intl (TR) if wanted | if requested |
+| Roles | membership + global admin | per-section roles (Learn owner) | when needed |
+| Finance reports | 12-mo chart + tiles + recurring breakdown | exports, budgets, per-client P&L | when needed |
+| Marketing | campaigns/content/links CRUD | analytics pulls, approval flows | next phase |
+| Task editing | title/desc fixed after post (state/claim/delete only) | edit page | if asked |
+| i18n | English only | next-intl (TR) | if requested |
 
 ## Gotchas / open issues
-- **Secrets**: service role key lives ONLY in `.env.local` + Vercel env. Never in repo/docs/memory.
-  Owner can rotate it in Supabase dashboard anytime (it was pasted in chat once).
-- Supabase project uses NEW api-key scheme (`sb_publishable_…`); service key is legacy JWT — both work.
-- `npx impeccable install` is interactive — pipe answers (`"1`nproject"`) if re-running.
-- Applying migrations needs owner auth: `npx supabase login` + `link` + `db push`, or paste SQL in
-  dashboard SQL editor (file in repo stays source of truth).
-- Manual dashboard steps: disable "Allow new users to sign up"; after deploy set Site URL/redirects.
+- Secrets only in `.env.local` + Vercel env. Access token + service key were pasted in chat —
+  rotate anytime in dashboard.
+- `db push` needs `$env:SUPABASE_ACCESS_TOKEN` set and pipes `"Y"`; Docker warning is harmless.
+- Realtime respects RLS; if the debug board shows "connecting…" forever, check Realtime is
+  enabled for the project and `debug_tasks` is in the publication (it is, migration 0001).
+- Deleting a user cascades cleanly (created_by set-null everywhere).
+- `staleTimes` is experimental — if a Next upgrade breaks it, drop it from next.config.ts.
 
 ## Running it
-- `npm run dev` — local dev (http://localhost:3000)
-- `npm run build` — prod build; `npm run lint` — eslint
-- `npx supabase db push` — apply migrations to cloud (after `login`+`link`, owner-interactive)
-- `npx tsx scripts/seed-admin.ts` — seed first admin (reads env)
+- `npm run dev` · `npm run build` · `npm run lint`
+- `$env:SUPABASE_ACCESS_TOKEN='<token>'; "Y" | npx supabase db push` — apply new migrations
+- `npx tsx scripts/seed-admin.ts` — re-seed admin (idempotent)
+- `node .claude/skills/impeccable/scripts/detect.mjs src` — design lint (clean as of today)
