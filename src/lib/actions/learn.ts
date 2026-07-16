@@ -102,25 +102,30 @@ export async function setParticipants(
   return { ok: true, message: "Participants updated." };
 }
 
-export async function addGoal(
-  _prev: ActionResult,
-  formData: FormData
+/** Add one or many goals at once (one per line). Batch is the default flow. */
+export async function addGoals(
+  sprintId: string,
+  titles: string[],
+  startOrder: number
 ): Promise<ActionResult> {
   const ctx = await requireAdmin();
-  const sprintId = String(formData.get("sprint_id") ?? "");
-  const title =
-    String(formData.get("title") ?? "").trim().slice(0, 200) || "Untitled goal";
-  const sortOrder = Number(formData.get("sort_order") ?? 0);
-
   if (!sprintId) return { ok: false, message: "Missing sprint id." };
 
-  const { error } = await ctx.supabase
-    .from("sprint_goals")
-    .insert({ sprint_id: sprintId, title, sort_order: sortOrder });
+  const rows = titles
+    .map((t) => t.trim().slice(0, 200))
+    .filter(Boolean)
+    .map((title, i) => ({ sprint_id: sprintId, title, sort_order: startOrder + i }));
+
+  if (rows.length === 0) return { ok: false, message: "Write at least one goal." };
+
+  const { error } = await ctx.supabase.from("sprint_goals").insert(rows);
   if (error) return { ok: false, message: error.message };
 
   revalidatePath(`/learn/${sprintId}`);
-  return { ok: true, message: "Goal added." };
+  return {
+    ok: true,
+    message: rows.length === 1 ? "Goal added." : `${rows.length} goals added.`,
+  };
 }
 
 export async function removeGoal(goalId: string, sprintId: string): Promise<ActionResult> {

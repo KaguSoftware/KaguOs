@@ -1,9 +1,9 @@
 "use client";
 
-import { useActionState, useState, useTransition } from "react";
+import { useActionState, useEffect, useState, useTransition } from "react";
 import { FileText, Link2, Loader2, Plus, Trash2 } from "lucide-react";
 import {
-  addGoal,
+  addGoals,
   addResource,
   deleteSprint,
   removeGoal,
@@ -20,6 +20,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { DatePicker } from "@/components/ui/date-picker";
 import { FileInput, UrlInput } from "@/components/ui/typed-inputs";
 import { CreateForm, CreateOverlay } from "@/components/ui/create";
+import { useAction } from "@/lib/use-action";
 import { cn } from "@/lib/utils";
 import type { Sprint, SprintGoal, SprintResource } from "@/lib/types";
 
@@ -77,17 +78,20 @@ export function ParticipantsEditor({
   people: { id: string; name: string }[];
   current: string[];
 }) {
-  const [pending, startTransition] = useTransition();
-  const [error, setError] = useState<string | null>(null);
+  const { run } = useAction();
+  // Optimistic: the checkbox flips instantly; the server reconciles after.
+  const [selected, setSelected] = useState<Set<string>>(() => new Set(current));
+
+  useEffect(() => setSelected(new Set(current)), [current]);
 
   function toggle(userId: string) {
-    const next = current.includes(userId)
-      ? current.filter((id) => id !== userId)
-      : [...current, userId];
-    setError(null);
-    startTransition(async () => {
-      const result = await setParticipants(sprintId, next);
-      if (result && !result.ok) setError(result.message);
+    const was = new Set(selected);
+    const next = new Set(selected);
+    if (next.has(userId)) next.delete(userId);
+    else next.add(userId);
+    setSelected(next);
+    run(() => setParticipants(sprintId, [...next]), {
+      rollback: () => setSelected(was),
     });
   }
 
@@ -98,19 +102,10 @@ export function ParticipantsEditor({
           <Checkbox
             key={person.id}
             label={person.name}
-            checked={current.includes(person.id)}
+            checked={selected.has(person.id)}
             onChange={() => toggle(person.id)}
-            disabled={pending}
           />
         ))}
-      </div>
-      <div className="flex items-center gap-2">
-        {pending && <Loader2 className="size-3.5 animate-spin text-faint" aria-hidden />}
-        {error && (
-          <p role="status" className="text-[13px] text-danger">
-            {error}
-          </p>
-        )}
       </div>
     </div>
   );
@@ -123,68 +118,117 @@ export function GoalsEditor({
   sprintId: string;
   goals: SprintGoal[];
 }) {
+  const { pending, run } = useAction();
   const [adding, setAdding] = useState(false);
-  const [pending, startTransition] = useTransition();
+  const [text, setText] = useState("");
+  const [list, setList] = useState<SprintGoal[]>(goals);
+
+  useEffect(() => setList(goals), [goals]);
+
+  const draftCount = text
+    .split("\n")
+    .map((l) => l.trim())
+    .filter(Boolean).length;
+
+  function save() {
+    const titles = text
+      .split("\n")
+      .map((l) => l.trim())
+      .filter(Boolean);
+    if (titles.length === 0) return;
+    run(() => addGoals(sprintId, titles, list.length), {
+      success: titles.length === 1 ? "Goal added." : `${titles.length} goals added.`,
+      onSuccess: () => {
+        setText("");
+        setAdding(false);
+      },
+    });
+  }
+
+  function remove(goal: SprintGoal) {
+    setList((prev) => prev.filter((g) => g.id !== goal.id));
+    run(() => removeGoal(goal.id, sprintId), {
+      rollback: () =>
+        setList((prev) =>
+          [...prev, goal].sort((a, b) => a.sort_order - b.sort_order)
+        ),
+    });
+  }
 
   return (
     <div className="space-y-3 p-4">
       <ul className="space-y-1.5">
-        {goals.map((goal) => (
+        {list.map((goal) => (
           <li key={goal.id} className="flex items-center justify-between gap-2 text-sm">
             <span className="text-ink">{goal.title}</span>
             <button
               type="button"
-              disabled={pending}
-              onClick={() =>
-                startTransition(async () => {
-                  await removeGoal(goal.id, sprintId);
-                })
-              }
+              onClick={() => remove(goal)}
               title="Remove goal"
               aria-label={`Remove goal ${goal.title}`}
-              className="text-faint hover:text-danger disabled:opacity-50"
+              className="text-faint hover:text-danger"
             >
               <Trash2 className="size-3.5" aria-hidden />
             </button>
           </li>
         ))}
-        {goals.length === 0 && (
+        {list.length === 0 && (
           <li className="text-[13px] text-faint">
             No goals yet — the checklist everyone ticks lives here.
           </li>
         )}
       </ul>
-      <Button variant="outline" size="sm" onClick={() => setAdding(true)}>
-        <Plus className="size-3.5" aria-hidden />
-        Add goal
-      </Button>
 
-      <CreateOverlay
-        title="Add a goal"
-        hint="One checklist item — every participant ticks it off individually."
-        open={adding}
-        onClose={() => setAdding(false)}
-      >
-        <CreateForm
-          action={addGoal}
-          fieldLabels={{ title: "Goal" }}
-          submitLabel="Add goal"
-          onCancel={() => setAdding(false)}
-          onDone={() => setAdding(false)}
-        >
-          <input type="hidden" name="sprint_id" value={sprintId} />
-          <input type="hidden" name="sort_order" value={goals.length} />
-          <Field label="Goal" htmlFor="goal-title">
-            <Input
-              id="goal-title"
-              name="title"
-              maxLength={200}
-              autoFocus
-              placeholder="e.g. Finish chapters 1–3"
-            />
-          </Field>
-        </CreateForm>
-      </CreateOverlay>
+      {adding ? (
+        <div className="space-y-2 rounded-md border border-line bg-surface p-3">
+          <Textarea
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            rows={5}
+            autoFocus
+            placeholder={"One goal per line:\nFinish chapters 1–3\nBuild the demo project\nWrite up notes"}
+            onKeyDown={(e) => {
+              // ⌘/Ctrl+Enter to save quickly.
+              if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+                e.preventDefault();
+                save();
+              }
+            }}
+          />
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-xs text-faint">
+              {draftCount > 0
+                ? `${draftCount} goal${draftCount === 1 ? "" : "s"} — one per line`
+                : "One goal per line"}
+            </span>
+            <div className="flex gap-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setAdding(false);
+                  setText("");
+                }}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="primary"
+                size="sm"
+                disabled={pending || draftCount === 0}
+                onClick={save}
+              >
+                Add {draftCount > 1 ? `${draftCount} goals` : "goal"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : (
+        <Button variant="outline" size="sm" onClick={() => setAdding(true)}>
+          <Plus className="size-3.5" aria-hidden />
+          Add goals
+        </Button>
+      )}
     </div>
   );
 }

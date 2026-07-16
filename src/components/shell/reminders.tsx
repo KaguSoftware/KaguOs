@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Plus, Users, X } from "lucide-react";
 import {
@@ -15,8 +15,11 @@ import type { MembersMap, Reminder } from "@/lib/types";
 
 /**
  * Personal + team reminders in one place. Personal ones are yours alone;
- * "Share" posts a team reminder everyone can see, tick, and clear. Backed by
- * the reminders table (RLS-gated), optimistic-refreshed after each change.
+ * "Share" posts a team reminder everyone can see, tick, and clear.
+ *
+ * All mutations are OPTIMISTIC against local state — the checkbox flips (or a
+ * row disappears) instantly and the server reconciles in the background. No
+ * full-page refresh on every tick, so it stays snappy.
  */
 export function Reminders({
   reminders,
@@ -28,18 +31,45 @@ export function Reminders({
   meId: string;
 }) {
   const router = useRouter();
-  const { pending, run } = useAction();
+  const { run } = useAction();
   const [draft, setDraft] = useState("");
+  const [items, setItems] = useState<Reminder[]>(reminders);
 
-  const openCount = reminders.filter((r) => !r.done).length;
+  // Reconcile if the server sends a fresh list (e.g. another tab added one).
+  useEffect(() => setItems(reminders), [reminders]);
+
+  const pending = false;
+  const openCount = items.filter((r) => !r.done).length;
 
   function submit(scope: "personal" | "team") {
     const text = draft.trim();
     if (!text) return;
     setDraft("");
+    // Adds still refresh (we need the server-generated id), but the input is
+    // already cleared so it doesn't feel blocking.
     run(() => addReminder(text, scope), {
       success: scope === "team" ? "Shared with the team." : undefined,
       onSuccess: () => router.refresh(),
+    });
+  }
+
+  function toggle(r: Reminder) {
+    const next = !r.done;
+    setItems((prev) =>
+      prev.map((i) => (i.id === r.id ? { ...i, done: next } : i))
+    );
+    run(() => toggleReminder(r.id, next), {
+      rollback: () =>
+        setItems((prev) =>
+          prev.map((i) => (i.id === r.id ? { ...i, done: r.done } : i))
+        ),
+    });
+  }
+
+  function remove(r: Reminder) {
+    setItems((prev) => prev.filter((i) => i.id !== r.id));
+    run(() => deleteReminder(r.id), {
+      rollback: () => setItems((prev) => [r, ...prev]),
     });
   }
 
@@ -62,8 +92,8 @@ export function Reminders({
           onChange={(e) => setDraft(e.target.value)}
           placeholder="Note to self…"
           maxLength={300}
-          disabled={pending}
-          className="min-w-0 flex-1 bg-transparent text-sm text-ink placeholder:text-faint focus:outline-none focus-visible:outline-none disabled:opacity-60"
+          data-no-ring
+          className="min-w-0 flex-1 bg-transparent text-sm text-ink placeholder:text-faint focus:outline-none disabled:opacity-60"
         />
         <button
           type="button"
@@ -86,13 +116,13 @@ export function Reminders({
         </button>
       </form>
 
-      {reminders.length === 0 ? (
+      {items.length === 0 ? (
         <p className="px-4 py-6 text-center text-[13px] text-faint">
           Nothing to remember yet — jot a note, or Share one with the team.
         </p>
       ) : (
         <ul className="divide-y divide-line">
-          {reminders.map((item) => {
+          {items.map((item) => {
             const sharer =
               item.scope === "team" && item.created_by
                 ? members[item.created_by]
@@ -102,12 +132,7 @@ export function Reminders({
                 <Checkbox
                   size="sm"
                   checked={item.done}
-                  disabled={pending}
-                  onChange={() =>
-                    run(() => toggleReminder(item.id, !item.done), {
-                      onSuccess: () => router.refresh(),
-                    })
-                  }
+                  onChange={() => toggle(item)}
                 />
                 <span className="flex min-w-0 flex-1 items-center gap-1.5">
                   <span
@@ -130,12 +155,7 @@ export function Reminders({
                 </span>
                 <button
                   type="button"
-                  disabled={pending}
-                  onClick={() =>
-                    run(() => deleteReminder(item.id), {
-                      onSuccess: () => router.refresh(),
-                    })
-                  }
+                  onClick={() => remove(item)}
                   className="text-faint opacity-0 transition-opacity duration-150 hover:text-danger group-hover:opacity-100"
                   aria-label="Remove reminder"
                 >

@@ -45,8 +45,8 @@ export async function toggleReminder(
     .update({ done })
     .eq("id", id);
   if (error) return { ok: false, message: error.message };
-
-  revalidatePath("/");
+  // No revalidate — the client updates optimistically; a full dashboard
+  // re-render on every tick is what made this feel dead.
   return { ok: true, message: "" };
 }
 
@@ -54,7 +54,5 @@ export async function deleteReminder(id: string): Promise<ActionResult> {
   const ctx = await getSessionContext();
   const { error } = await ctx.supabase.from("reminders").delete().eq("id", id);
   if (error) return { ok: false, message: error.message };
-
-  revalidatePath("/");
   return { ok: true, message: "" };
 }

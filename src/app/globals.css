@@ -132,7 +132,10 @@ body {
   background: oklch(0.86 0.14 160 / 25%);
 }
 
-:focus-visible {
+/* Keyboard focus ring on interactive elements. Opt out with data-no-ring on
+ * controls that already sit inside a focused-looking container (search box,
+ * inline note inputs) — the extra outline reads as a distracting glow there. */
+:focus-visible:not([data-no-ring]) {
   outline: 2px solid var(--primary-dim);
   outline-offset: 2px;
 }
