@@ -21,10 +21,12 @@ export default async function MarketingPage() {
       ctx.supabase
         .from("marketing_campaigns")
         .select("*")
+        .eq("is_demo", ctx.showcase)
         .order("created_at", { ascending: false }),
       ctx.supabase
         .from("marketing_posts")
         .select("*")
+        .eq("is_demo", ctx.showcase)
         .order("publish_on", { ascending: true, nullsFirst: false }),
       ctx.supabase
         .from("marketing_items")

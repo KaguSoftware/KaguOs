@@ -24,6 +24,7 @@ export type Profile = {
   full_name: string | null;
   is_admin: boolean;
   color: string | null;
+  showcase_mode: boolean;
   created_at: string;
 };
 

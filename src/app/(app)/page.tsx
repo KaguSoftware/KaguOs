@@ -8,6 +8,7 @@ import { Reminders } from "@/components/shell/reminders";
 import { ActivityFeed } from "@/components/shell/activity-feed";
 import { AnnouncementHero } from "@/components/shell/announcement-hero";
 import { PrefetchHeavy } from "@/components/shell/prefetch-heavy";
+import { ShowcaseToggle } from "@/components/shell/showcase";
 import { formatTRY, isActiveRecurring, monthlyAmount, toTRY, type FxRates } from "@/lib/finance";
 import { SECTION_LABELS, type Announcement, type Reminder, type Section } from "@/lib/types";
 
@@ -26,10 +27,12 @@ export default async function DashboardPage() {
       ctx.supabase
         .from("debug_tasks")
         .select("id", { count: "exact", head: true })
+        .eq("is_demo", ctx.showcase)
         .eq("state", "open"),
       ctx.supabase
         .from("debug_tasks")
         .select("id", { count: "exact", head: true })
+        .eq("is_demo", ctx.showcase)
         .eq("assignee_id", ctx.userId)
         .neq("state", "done"),
     ]);
@@ -47,10 +50,12 @@ export default async function DashboardPage() {
       ctx.supabase
         .from("projects")
         .select("id", { count: "exact", head: true })
+        .eq("is_demo", ctx.showcase)
         .eq("status", "active"),
       ctx.supabase
         .from("ideas")
         .select("id", { count: "exact", head: true })
+        .eq("is_demo", ctx.showcase)
         .eq("status", "open"),
     ]);
     cards.push({
@@ -78,7 +83,11 @@ export default async function DashboardPage() {
 
   if (canAccess(ctx, "management")) {
     const [{ data: recurring }, { data: fx }] = await Promise.all([
-      ctx.supabase.from("recurring_items").select("*").is("canceled_on", null),
+      ctx.supabase
+        .from("recurring_items")
+        .select("*")
+        .eq("is_demo", ctx.showcase)
+        .is("canceled_on", null),
       ctx.supabase.from("fx_rates").select("currency, rate_to_try"),
     ]);
     const rates: FxRates = {};
@@ -100,6 +109,7 @@ export default async function DashboardPage() {
     const { count: running } = await ctx.supabase
       .from("marketing_campaigns")
       .select("id", { count: "exact", head: true })
+      .eq("is_demo", ctx.showcase)
       .eq("status", "running");
     cards.push({
       section: "marketing",
@@ -114,10 +124,12 @@ export default async function DashboardPage() {
       ctx.supabase
         .from("contacts")
         .select("id", { count: "exact", head: true })
+        .eq("is_demo", ctx.showcase)
         .eq("kind", "lead"),
       ctx.supabase
         .from("contacts")
         .select("id", { count: "exact", head: true })
+        .eq("is_demo", ctx.showcase)
         .eq("kind", "client"),
     ]);
     cards.push({
@@ -183,20 +195,19 @@ export default async function DashboardPage() {
       />
       <AnnouncementHero announcement={announcement} isAdmin={ctx.isAdmin} />
       <PrefetchHeavy routes={heavyRoutes} />
-      {actions.length > 0 && (
-        <div className="mb-6 flex flex-wrap gap-2">
-          {actions.map((action) => (
-            <Link
-              key={action.href}
-              href={action.href}
-              className="inline-flex items-center gap-1.5 rounded-md border border-line bg-surface px-3 py-1.5 text-[13px] text-muted transition-colors duration-150 hover:border-primary/40 hover:bg-raised hover:text-ink"
-            >
-              <Plus className="size-3.5 text-faint" aria-hidden />
-              {action.label}
-            </Link>
-          ))}
-        </div>
-      )}
+      <div className="mb-6 flex flex-wrap items-center gap-2">
+        {actions.map((action) => (
+          <Link
+            key={action.href}
+            href={action.href}
+            className="inline-flex items-center gap-1.5 rounded-md border border-line bg-surface px-3 py-1.5 text-[13px] text-muted transition-colors duration-150 hover:border-primary/40 hover:bg-raised hover:text-ink"
+          >
+            <Plus className="size-3.5 text-faint" aria-hidden />
+            {action.label}
+          </Link>
+        ))}
+        {!ctx.showcase && <ShowcaseToggle />}
+      </div>
       <div className="grid gap-6 lg:grid-cols-[1fr_20rem]">
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:content-start">
           {cards.map((card) => (

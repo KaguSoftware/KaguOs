@@ -17,7 +17,11 @@ export default async function CommsPage() {
   const ctx = await requireSection("comms");
 
   const [{ data: contacts }, members] = await Promise.all([
-    ctx.supabase.from("contacts").select("*").order("updated_at", { ascending: false }),
+    ctx.supabase
+      .from("contacts")
+      .select("*")
+      .eq("is_demo", ctx.showcase)
+      .order("updated_at", { ascending: false }),
     getMembersMap(ctx.supabase),
   ]);
 

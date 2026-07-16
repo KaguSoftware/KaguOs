@@ -21,14 +21,20 @@ export default async function ManagementPage() {
     ctx.supabase
       .from("transactions")
       .select("*")
+      .eq("is_demo", ctx.showcase)
       .order("occurred_on", { ascending: false })
       .limit(500),
     ctx.supabase
       .from("recurring_items")
       .select("*")
+      .eq("is_demo", ctx.showcase)
       .order("created_at", { ascending: false }),
     ctx.supabase.from("fx_rates").select("*"),
-    ctx.supabase.from("contracts").select("*").order("updated_at", { ascending: false }),
+    ctx.supabase
+      .from("contracts")
+      .select("*")
+      .eq("is_demo", ctx.showcase)
+      .order("updated_at", { ascending: false }),
   ]);
 
   return (

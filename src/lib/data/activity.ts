@@ -37,6 +37,7 @@ export async function getActivity(
         const { data } = await sb
           .from("debug_tasks")
           .select("id, title, created_at, created_by")
+          .eq("is_demo", ctx.showcase)
           .order("created_at", { ascending: false })
           .limit(PER_SOURCE);
         return (data ?? []).map((r) => ({
@@ -57,6 +58,7 @@ export async function getActivity(
         const { data } = await sb
           .from("ideas")
           .select("id, title, created_at, created_by")
+          .eq("is_demo", ctx.showcase)
           .order("created_at", { ascending: false })
           .limit(PER_SOURCE);
         return (data ?? []).map((r) => ({
@@ -74,6 +76,7 @@ export async function getActivity(
         const { data } = await sb
           .from("projects")
           .select("id, name, created_at, created_by")
+          .eq("is_demo", ctx.showcase)
           .order("created_at", { ascending: false })
           .limit(PER_SOURCE);
         return (data ?? []).map((r) => ({
@@ -94,6 +97,7 @@ export async function getActivity(
         const { data } = await sb
           .from("transactions")
           .select("id, type, amount, currency, created_at, created_by")
+          .eq("is_demo", ctx.showcase)
           .order("created_at", { ascending: false })
           .limit(PER_SOURCE);
         return (data ?? []).map((r) => ({
@@ -114,6 +118,7 @@ export async function getActivity(
         const { data } = await sb
           .from("marketing_posts")
           .select("id, title, created_at, created_by")
+          .eq("is_demo", ctx.showcase)
           .order("created_at", { ascending: false })
           .limit(PER_SOURCE);
         return (data ?? []).map((r) => ({

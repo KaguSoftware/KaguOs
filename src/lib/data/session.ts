@@ -9,6 +9,8 @@ export type SessionContext = {
   profile: Profile;
   sections: Set<Section>;
   isAdmin: boolean;
+  /** When true, the app shows obviously-fake demo data (client showcase). */
+  showcase: boolean;
 };
 
 /**
@@ -39,11 +41,23 @@ export const getSessionContext = cache(async function getSessionContext(): Promi
     profile: profile as Profile,
     sections,
     isAdmin: (profile as Profile).is_admin,
+    showcase: Boolean((profile as Profile).showcase_mode),
   };
 });
 
 export function canAccess(ctx: SessionContext, section: Section) {
   return ctx.isAdmin || ctx.sections.has(section);
+}
+
+/**
+ * The `is_demo` value every list query should filter by. In showcase mode the
+ * app shows ONLY demo rows; normally it shows ONLY real rows. Apply this in the
+ * data layer so real data never reaches a client that's demoing.
+ *
+ *   ctx.supabase.from("projects").select("*").eq("is_demo", demoFlag(ctx))
+ */
+export function demoFlag(ctx: SessionContext): boolean {
+  return ctx.showcase;
 }
 
 /** Page guard: members (or admins) only — everyone else lands back on the dashboard. */

@@ -16,8 +16,13 @@ export default async function DebugPage() {
     ctx.supabase
       .from("debug_tasks")
       .select("*")
+      .eq("is_demo", ctx.showcase)
       .order("created_at", { ascending: false }),
-    ctx.supabase.from("projects").select("id, name").order("name"),
+    ctx.supabase
+      .from("projects")
+      .select("id, name")
+      .eq("is_demo", ctx.showcase)
+      .order("name"),
     getMembersMap(ctx.supabase),
   ]);
 

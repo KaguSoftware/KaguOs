@@ -14,12 +14,17 @@ export default async function WorkPage() {
   const ctx = await requireSection("work");
 
   const [{ data: projects }, { data: ideas }, members] = await Promise.all([
-    ctx.supabase.from("projects").select("*").order("updated_at", { ascending: false }),
+    ctx.supabase
+      .from("projects")
+      .select("*")
+      .eq("is_demo", ctx.showcase)
+      .order("updated_at", { ascending: false }),
     ctx.supabase
       .from("ideas")
       .select(
         "id, title, status, created_by, created_at, idea_votes(user_id), idea_comments(count)"
       )
+      .eq("is_demo", ctx.showcase)
       .order("created_at", { ascending: false }),
     getMembersMap(ctx.supabase),
   ]);
