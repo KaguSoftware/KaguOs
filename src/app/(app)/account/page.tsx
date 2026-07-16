@@ -3,7 +3,9 @@ import { getSessionContext } from "@/lib/data/session";
 import { PageHeader } from "@/components/shell/page-header";
 import { Panel, PanelHeader } from "@/components/ui/panel";
 import { NameForm, PasswordForm } from "@/components/account/account-forms";
+import { MyColorForm } from "@/components/account/color-form";
 import { Badge } from "@/components/ui/badge";
+import { defaultColorKey } from "@/lib/colors";
 import { SECTION_LABELS, type Section } from "@/lib/types";
 
 export const metadata: Metadata = { title: "Account" };
@@ -18,6 +20,12 @@ export default async function AccountPage() {
         <Panel>
           <PanelHeader title="Profile" />
           <NameForm currentName={ctx.profile.full_name} />
+        </Panel>
+        <Panel>
+          <PanelHeader title="Your color" />
+          <MyColorForm
+            current={ctx.profile.color ?? defaultColorKey(ctx.profile.id)}
+          />
         </Panel>
         <Panel>
           <PanelHeader title="Password" />

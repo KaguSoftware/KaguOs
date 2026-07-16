@@ -11,7 +11,7 @@ import {
 import { Badge, type BadgeTone } from "@/components/ui/badge";
 import { Button, ConfirmButton } from "@/components/ui/button";
 import { cn, formatDate } from "@/lib/utils";
-import type { DebugPriority, DebugState, DebugTask } from "@/lib/types";
+import type { DebugPriority, DebugState, DebugTask, MembersMap } from "@/lib/types";
 
 const PRIORITY_TONE: Record<DebugPriority, BadgeTone> = {
   low: "faint",
@@ -28,14 +28,22 @@ const STATE_LABEL: Record<DebugState, string> = {
 
 export function TaskRow({
   task,
-  names,
+  members,
   meId,
   isAdmin,
+  projectName,
+  onPatch,
+  onRemove,
+  onRestore,
 }: {
   task: DebugTask;
-  names: Record<string, string>;
+  members: MembersMap;
   meId: string;
   isAdmin: boolean;
+  projectName?: string | null;
+  onPatch: (id: string, patch: Partial<DebugTask>) => void;
+  onRemove: (id: string) => void;
+  onRestore: (task: DebugTask) => void;
 }) {
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -44,11 +52,20 @@ export function TaskRow({
   const mine = task.assignee_id === meId;
   const canDelete = isAdmin || task.created_by === meId;
 
-  function run(fn: () => Promise<{ ok: boolean; message: string } | null>) {
+  /** Optimistic: apply the patch immediately, revert if the server says no. */
+  function run(
+    fn: () => Promise<{ ok: boolean; message: string } | null>,
+    patch?: Partial<DebugTask>
+  ) {
     setError(null);
+    const before = { ...task };
+    if (patch) onPatch(task.id, patch);
     startTransition(async () => {
       const result = await fn();
-      if (result && !result.ok) setError(result.message);
+      if (result && !result.ok) {
+        if (patch) onRestore(before);
+        setError(result.message);
+      }
     });
   }
 
@@ -76,12 +93,18 @@ export function TaskRow({
           </span>
           <span className="mt-0.5 block text-xs text-faint">
             {formatDate(task.created_at)}
-            {task.created_by && names[task.created_by]
-              ? ` · by ${names[task.created_by]}`
-              : ""}
+            {task.created_by && members[task.created_by] && (
+              <>
+                {" · by "}
+                <span style={{ color: members[task.created_by].color }}>
+                  {members[task.created_by].name}
+                </span>
+              </>
+            )}
           </span>
         </button>
 
+        {projectName && <Badge tone="info">{projectName}</Badge>}
         <Badge tone={PRIORITY_TONE[task.priority]}>{task.priority}</Badge>
 
         {/* One-click state switch */}
@@ -94,8 +117,8 @@ export function TaskRow({
             <button
               key={state}
               type="button"
-              disabled={pending || task.state === state}
-              onClick={() => run(() => setTaskState(task.id, state))}
+              disabled={task.state === state}
+              onClick={() => run(() => setTaskState(task.id, state), { state })}
               className={cn(
                 "px-2 py-1 text-xs transition-colors duration-150",
                 task.state === state
@@ -120,20 +143,19 @@ export function TaskRow({
           {task.assignee_id ? (
             <>
               <span
-                className={cn(
-                  "truncate text-[13px]",
-                  mine ? "text-primary-dim" : "text-muted"
-                )}
+                style={{ color: members[task.assignee_id]?.color }}
+                className="truncate text-[13px] font-medium"
               >
-                {mine ? "You" : (names[task.assignee_id] ?? "Someone")}
+                {mine ? "You" : (members[task.assignee_id]?.name ?? "Someone")}
               </span>
               {(mine || isAdmin) && (
                 <Button
                   variant="ghost"
                   size="sm"
                   title="Unclaim"
-                  disabled={pending}
-                  onClick={() => run(() => unclaimTask(task.id))}
+                  onClick={() =>
+                    run(() => unclaimTask(task.id), { assignee_id: null })
+                  }
                 >
                   <Undo2 className="size-3.5" aria-hidden />
                 </Button>
@@ -143,8 +165,9 @@ export function TaskRow({
             <Button
               variant="outline"
               size="sm"
-              disabled={pending}
-              onClick={() => run(() => claimTask(task.id))}
+              onClick={() =>
+                run(() => claimTask(task.id), { assignee_id: meId })
+              }
             >
               <Hand className="size-3.5" aria-hidden />
               Claim
@@ -163,7 +186,16 @@ export function TaskRow({
               size="sm"
               confirmLabel="Really delete?"
               disabled={pending}
-              onConfirm={() => run(() => deleteTask(task.id))}
+              onConfirm={() => {
+                const before = { ...task };
+                onRemove(task.id);
+                setError(null);
+                run(async () => {
+                  const result = await deleteTask(task.id);
+                  if (result && !result.ok) onRestore(before);
+                  return result;
+                });
+              }}
             >
               <Trash2 className="size-3.5" aria-hidden />
               Delete

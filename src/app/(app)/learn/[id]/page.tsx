@@ -7,6 +7,7 @@ import { PageHeader } from "@/components/shell/page-header";
 import { Panel, PanelHeader } from "@/components/ui/panel";
 import { Badge, type BadgeTone } from "@/components/ui/badge";
 import { ProgressGrid } from "@/components/learn/progress-grid";
+import { MyGoals } from "@/components/learn/my-goals";
 import {
   DeleteSprintButton,
   EditSprintForm,
@@ -14,6 +15,7 @@ import {
   ParticipantsEditor,
   ResourcesEditor,
 } from "@/components/learn/sprint-forms";
+import { memberColorCss } from "@/lib/colors";
 import { formatDate } from "@/lib/utils";
 import type { Sprint, SprintGoal, SprintResource } from "@/lib/types";
 
@@ -56,7 +58,7 @@ export default async function SprintPage({
       .order("created_at"),
     ctx.supabase
       .from("section_memberships")
-      .select("user_id, profiles(id, full_name, email)")
+      .select("user_id, profiles(id, full_name, email, color)")
       .eq("section", "learn"),
   ]);
   if (!sprint) notFound();
@@ -75,15 +77,24 @@ export default async function SprintPage({
         id: string;
         full_name: string | null;
         email: string;
+        color: string | null;
       } | null;
       return profile
-        ? { id: profile.id, name: profile.full_name || profile.email }
+        ? {
+            id: profile.id,
+            name: profile.full_name || profile.email,
+            color: memberColorCss(profile.id, profile.color),
+          }
         : null;
     })
-    .filter((p): p is { id: string; name: string } => p !== null);
+    .filter((p): p is { id: string; name: string; color: string } => p !== null);
 
   const participantIds = (participants ?? []).map((p) => p.user_id);
   const gridPeople = people.filter((p) => participantIds.includes(p.id));
+  const iParticipate = participantIds.includes(ctx.userId);
+  const myDoneGoalIds = (progress ?? [])
+    .filter((p) => p.user_id === ctx.userId)
+    .map((p) => p.goal_id);
 
   // Signed URLs for uploaded files (private bucket, 1 hour).
   const resourceList = (resources ?? []) as SprintResource[];
@@ -163,9 +174,27 @@ export default async function SprintPage({
           </Panel>
         )}
 
+        {iParticipate && goals && goals.length > 0 && (
+          <Panel>
+            <PanelHeader
+              title="Your goals"
+              action={
+                <span className="font-mono text-xs text-muted">
+                  {myDoneGoalIds.length}/{goals.length} done
+                </span>
+              }
+            />
+            <MyGoals
+              sprintId={sprint.id}
+              goals={(goals ?? []) as SprintGoal[]}
+              doneGoalIds={myDoneGoalIds}
+            />
+          </Panel>
+        )}
+
         <Panel>
           <PanelHeader
-            title={`Progress (${gridPeople.length} ${gridPeople.length === 1 ? "person" : "people"})`}
+            title={`Team progress (${gridPeople.length} ${gridPeople.length === 1 ? "person" : "people"})`}
           />
           {goals && goals.length > 0 && gridPeople.length > 0 ? (
             <ProgressGrid

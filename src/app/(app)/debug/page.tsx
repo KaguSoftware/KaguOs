@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Plus } from "lucide-react";
 import { requireSection } from "@/lib/data/session";
+import { getMembersMap } from "@/lib/data/members";
 import { PageHeader } from "@/components/shell/page-header";
 import { DebugBoard } from "@/components/debug/board";
 import { LinkButton } from "@/components/ui/link-button";
@@ -11,16 +12,14 @@ export const metadata: Metadata = { title: "Debug" };
 export default async function DebugPage() {
   const ctx = await requireSection("debug");
 
-  const [{ data: tasks }, { data: profiles }] = await Promise.all([
+  const [{ data: tasks }, { data: projects }, members] = await Promise.all([
     ctx.supabase
       .from("debug_tasks")
       .select("*")
       .order("created_at", { ascending: false }),
-    ctx.supabase.from("profiles").select("id, full_name, email"),
+    ctx.supabase.from("projects").select("id, name").order("name"),
+    getMembersMap(ctx.supabase),
   ]);
-
-  const names: Record<string, string> = {};
-  for (const p of profiles ?? []) names[p.id] = p.full_name || p.email;
 
   return (
     <>
@@ -36,7 +35,8 @@ export default async function DebugPage() {
       />
       <DebugBoard
         initialTasks={(tasks ?? []) as DebugTask[]}
-        names={names}
+        projects={projects ?? []}
+        members={members}
         meId={ctx.userId}
         isAdmin={ctx.isAdmin}
       />

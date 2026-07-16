@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { requireSection } from "@/lib/data/session";
+import { getMembersMap } from "@/lib/data/members";
 import { PageHeader } from "@/components/shell/page-header";
 import { Panel, PanelHeader } from "@/components/ui/panel";
 import { Badge, type BadgeTone } from "@/components/ui/badge";
@@ -31,7 +32,7 @@ export default async function IdeaPage({
   const { id } = await params;
   const ctx = await requireSection("work");
 
-  const [{ data: idea }, { data: comments }, { data: votes }, { data: profiles }] =
+  const [{ data: idea }, { data: comments }, { data: votes }, members] =
     await Promise.all([
       ctx.supabase.from("ideas").select("*").eq("id", id).maybeSingle(),
       ctx.supabase
@@ -40,12 +41,9 @@ export default async function IdeaPage({
         .eq("idea_id", id)
         .order("created_at"),
       ctx.supabase.from("idea_votes").select("user_id").eq("idea_id", id),
-      ctx.supabase.from("profiles").select("id, full_name, email"),
+      getMembersMap(ctx.supabase),
     ]);
   if (!idea) notFound();
-
-  const names: Record<string, string> = {};
-  for (const p of profiles ?? []) names[p.id] = p.full_name || p.email;
 
   const voteList = votes ?? [];
   const commentList = (comments ?? []) as IdeaComment[];
@@ -61,9 +59,7 @@ export default async function IdeaPage({
       </Link>
       <PageHeader
         title={idea.title}
-        description={`${formatDate(idea.created_at)}${
-          idea.created_by && names[idea.created_by] ? ` · by ${names[idea.created_by]}` : ""
-        }`}
+        description={formatDate(idea.created_at)}
         action={
           <VoteButton
             ideaId={idea.id}
@@ -76,6 +72,14 @@ export default async function IdeaPage({
       <div className="grid max-w-3xl gap-6">
         <div className="flex items-center gap-3">
           <Badge tone={STATUS_TONE[idea.status as IdeaStatus]}>{idea.status}</Badge>
+          {idea.created_by && members[idea.created_by] && (
+            <span className="text-[13px] text-faint">
+              by{" "}
+              <span style={{ color: members[idea.created_by].color }}>
+                {members[idea.created_by].name}
+              </span>
+            </span>
+          )}
           {idea.status === "promoted" && idea.promoted_project_id && (
             <Link
               href={`/work/projects/${idea.promoted_project_id}`}
@@ -108,9 +112,18 @@ export default async function IdeaPage({
               <div key={comment.id} className="flex items-start gap-3">
                 <div className="min-w-0 flex-1">
                   <p className="text-xs text-faint">
-                    {comment.created_by && names[comment.created_by]
-                      ? names[comment.created_by]
-                      : "Someone"}{" "}
+                    <span
+                      style={{
+                        color: comment.created_by
+                          ? members[comment.created_by]?.color
+                          : undefined,
+                      }}
+                      className="font-medium"
+                    >
+                      {comment.created_by && members[comment.created_by]
+                        ? members[comment.created_by].name
+                        : "Someone"}
+                    </span>{" "}
                     · {formatDate(comment.created_at)}
                   </p>
                   <p className="mt-1 max-w-[70ch] whitespace-pre-wrap text-sm text-ink">

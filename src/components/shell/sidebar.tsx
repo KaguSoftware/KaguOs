@@ -30,7 +30,7 @@ const NAV: NavItem[] = [
   { href: "/work", label: "Work", icon: FolderKanban, section: "work" },
   { href: "/learn", label: "Learn", icon: GraduationCap, section: "learn" },
   {
-    href: "/management/transactions",
+    href: "/management/finance",
     label: "Management",
     icon: Landmark,
     section: "management",

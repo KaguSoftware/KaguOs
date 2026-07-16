@@ -21,8 +21,12 @@ export type Profile = {
   email: string;
   full_name: string | null;
   is_admin: boolean;
+  color: string | null;
   created_at: string;
 };
+
+/** id → display name + identity color (css), used wherever names render. */
+export type MembersMap = Record<string, { name: string; color: string }>;
 
 export type SectionMembership = {
   user_id: string;
@@ -37,6 +41,8 @@ export type Project = {
   name: string;
   client: string | null;
   status: ProjectStatus;
+  sector: string | null;
+  type: string | null;
   repo_url: string | null;
   prod_url: string | null;
   notes: string | null;
@@ -52,6 +58,8 @@ export type Idea = {
   title: string;
   body: string | null;
   status: IdeaStatus;
+  sector: string | null;
+  type: string | null;
   promoted_project_id: string | null;
   created_by: string | null;
   created_at: string;
@@ -109,6 +117,30 @@ export type Transaction = {
   created_at: string;
 };
 
+export type RecurringCadence = "monthly" | "yearly";
+
+export type RecurringItem = {
+  id: string;
+  type: TransactionType;
+  name: string;
+  counterparty: string | null;
+  amount: number;
+  currency: Currency;
+  cadence: RecurringCadence;
+  started_on: string;
+  canceled_on: string | null;
+  notes: string | null;
+  created_by: string | null;
+  created_at: string;
+};
+
+export type FxRate = {
+  currency: "USD" | "EUR";
+  rate_to_try: number;
+  updated_by: string | null;
+  updated_at: string;
+};
+
 export type ContractStatus = "draft" | "active" | "expired" | "terminated";
 
 export type Contract = {
@@ -134,7 +166,42 @@ export type DebugTask = {
   description: string | null;
   state: DebugState;
   priority: DebugPriority;
+  project_id: string | null;
   assignee_id: string | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type CampaignStatus = "idea" | "planned" | "running" | "done";
+export type PostStatus = "draft" | "scheduled" | "published";
+
+export type MarketingCampaign = {
+  id: string;
+  name: string;
+  channel: string;
+  status: CampaignStatus;
+  starts_on: string | null;
+  ends_on: string | null;
+  budget: number | null;
+  currency: Currency;
+  url: string | null;
+  notes: string | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type MarketingPost = {
+  id: string;
+  title: string;
+  channel: string;
+  status: PostStatus;
+  publish_on: string | null;
+  url: string | null;
+  campaign_id: string | null;
+  owner_id: string | null;
+  notes: string | null;
   created_by: string | null;
   created_at: string;
   updated_at: string;

@@ -9,6 +9,7 @@ import { Badge, type BadgeTone } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import { LinkButton } from "@/components/ui/link-button";
 import { formatDate } from "@/lib/utils";
+import { optionLabel, PROJECT_TYPE_OPTIONS, SECTOR_OPTIONS } from "@/lib/options";
 import type { Project, ProjectStatus } from "@/lib/types";
 
 export const metadata: Metadata = { title: "Work" };
@@ -81,6 +82,16 @@ export default async function WorkPage() {
                       >
                         {project.name}
                       </Link>
+                      {(project.sector || project.type) && (
+                        <p className="mt-0.5 text-xs text-faint">
+                          {[
+                            optionLabel(SECTOR_OPTIONS, project.sector),
+                            optionLabel(PROJECT_TYPE_OPTIONS, project.type),
+                          ]
+                            .filter(Boolean)
+                            .join(" · ")}
+                        </p>
+                      )}
                     </td>
                     <td className="px-4 py-3 text-muted">{project.client || "—"}</td>
                     <td className="px-4 py-3">

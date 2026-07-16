@@ -31,6 +31,7 @@ export default async function AdminPage() {
     email: p.email,
     full_name: p.full_name,
     is_admin: p.is_admin,
+    color: p.color,
     sections: sectionsByUser.get(p.id) ?? [],
   }));
 

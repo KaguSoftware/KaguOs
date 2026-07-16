@@ -23,6 +23,8 @@ function projectFields(formData: FormData) {
     name,
     client: String(formData.get("client") ?? "").trim() || null,
     status: PROJECT_STATUSES.includes(status) ? status : "planning",
+    sector: String(formData.get("sector") ?? "").trim() || null,
+    type: String(formData.get("type") ?? "").trim() || null,
     repo_url: cleanUrl(formData.get("repo_url")),
     prod_url: cleanUrl(formData.get("prod_url")),
     notes: String(formData.get("notes") ?? "").trim() || null,
@@ -80,10 +82,12 @@ export async function createIdea(
   const title =
     String(formData.get("title") ?? "").trim().slice(0, 200) || "Untitled idea";
   const body = String(formData.get("body") ?? "").trim();
+  const sector = String(formData.get("sector") ?? "").trim() || null;
+  const type = String(formData.get("type") ?? "").trim() || null;
 
   const { error } = await ctx.supabase
     .from("ideas")
-    .insert({ title, body: body || null, created_by: ctx.userId });
+    .insert({ title, body: body || null, sector, type, created_by: ctx.userId });
   if (error) return { ok: false, message: error.message };
 
   revalidatePath("/work/ideas");
@@ -164,6 +168,8 @@ export async function promoteIdea(ideaId: string): Promise<ActionResult> {
       name: idea.title,
       notes: idea.body,
       status: "planning",
+      sector: idea.sector,
+      type: idea.type,
       created_by: ctx.userId,
     })
     .select("id")

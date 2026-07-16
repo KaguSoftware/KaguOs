@@ -24,31 +24,39 @@ export function VoteButton({
   votes: number;
   voted: boolean;
 }) {
-  const [pending, startTransition] = useTransition();
+  const [, startTransition] = useTransition();
+  // Optimistic: the vote lands instantly, the server reconciles after.
+  const [local, setLocal] = useState({ votes, voted });
+
+  useEffect(() => setLocal({ votes, voted }), [votes, voted]);
 
   return (
     <button
       type="button"
-      disabled={pending}
       onClick={(event) => {
         event.preventDefault();
         event.stopPropagation();
+        const was = local;
+        setLocal({
+          votes: was.votes + (was.voted ? -1 : 1),
+          voted: !was.voted,
+        });
         startTransition(async () => {
-          await toggleVote(ideaId, voted);
+          const result = await toggleVote(ideaId, was.voted);
+          if (result && !result.ok) setLocal(was);
         });
       }}
-      aria-pressed={voted}
-      aria-label={voted ? "Remove your vote" : "Vote for this idea"}
+      aria-pressed={local.voted}
+      aria-label={local.voted ? "Remove your vote" : "Vote for this idea"}
       className={cn(
         "flex min-w-12 flex-col items-center rounded-md border px-2 py-1 transition-colors duration-150",
-        voted
+        local.voted
           ? "border-primary/40 bg-primary/10 text-primary-dim"
-          : "border-line text-muted hover:border-line-strong hover:text-ink",
-        pending && "opacity-60"
+          : "border-line text-muted hover:border-line-strong hover:text-ink"
       )}
     >
       <ArrowBigUp className="size-4" aria-hidden />
-      <span className="font-mono text-xs">{votes}</span>
+      <span className="font-mono text-xs">{local.votes}</span>
     </button>
   );
 }

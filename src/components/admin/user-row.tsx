@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { KeyRound, Loader2 } from "lucide-react";
+import { KeyRound, Loader2, Palette } from "lucide-react";
 import {
   deleteUser,
   setUserPassword,
@@ -10,6 +10,8 @@ import {
 import { Button, ConfirmButton } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { AdminColorPicker } from "@/components/account/color-form";
+import { memberColorCss } from "@/lib/colors";
 import { SECTIONS, SECTION_LABELS, type Section } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -18,6 +20,7 @@ export type AdminUser = {
   email: string;
   full_name: string | null;
   is_admin: boolean;
+  color: string | null;
   sections: Section[];
 };
 
@@ -25,6 +28,7 @@ export function UserRow({ user, isSelf }: { user: AdminUser; isSelf: boolean }) 
   const [pending, startTransition] = useTransition();
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
   const [showPassword, setShowPassword] = useState(false);
+  const [showColor, setShowColor] = useState(false);
   const [newPassword, setNewPassword] = useState("");
 
   function apply(sections: Section[], isAdmin: boolean) {
@@ -52,8 +56,11 @@ export function UserRow({ user, isSelf }: { user: AdminUser; isSelf: boolean }) 
     <div className="border-b border-line px-4 py-3 last:border-b-0">
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
         <div className="min-w-44 flex-1">
-          <p className="truncate text-sm font-medium text-ink">
-            {user.full_name || "—"}
+          <p
+            style={{ color: memberColorCss(user.id, user.color) }}
+            className="truncate text-sm font-medium"
+          >
+            {user.full_name || user.email}
             {isSelf && <span className="ml-1.5 text-xs text-faint">(you)</span>}
           </p>
           <p className="truncate text-[13px] text-faint">{user.email}</p>
@@ -93,6 +100,15 @@ export function UserRow({ user, isSelf }: { user: AdminUser; isSelf: boolean }) 
           <Button
             variant="ghost"
             size="sm"
+            onClick={() => setShowColor((v) => !v)}
+            title="Override color"
+          >
+            <Palette className="size-3.5" aria-hidden />
+            Color
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
             onClick={() => setShowPassword((v) => !v)}
             title="Set a new password"
           >
@@ -117,6 +133,12 @@ export function UserRow({ user, isSelf }: { user: AdminUser; isSelf: boolean }) 
           )}
         </div>
       </div>
+
+      {showColor && (
+        <div className="mt-3">
+          <AdminColorPicker userId={user.id} current={user.color} />
+        </div>
+      )}
 
       {showPassword && (
         <form

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { Check, Loader2 } from "lucide-react";
 import { toggleGoalProgress } from "@/lib/actions/learn";
 import { cn } from "@/lib/utils";
@@ -15,14 +15,44 @@ export function ProgressGrid({
 }: {
   sprintId: string;
   goals: SprintGoal[];
-  participants: { id: string; name: string }[];
+  participants: { id: string; name: string; color: string }[];
   progress: { goal_id: string; user_id: string }[];
   meId: string;
 }) {
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
-  const done = new Set(progress.map((p) => `${p.goal_id}:${p.user_id}`));
+  const [done, setDone] = useState(
+    () => new Set(progress.map((p) => `${p.goal_id}:${p.user_id}`))
+  );
   const iParticipate = participants.some((p) => p.id === meId);
+
+  useEffect(
+    () => setDone(new Set(progress.map((p) => `${p.goal_id}:${p.user_id}`))),
+    [progress]
+  );
+
+  function toggleCell(goalId: string, next: boolean) {
+    const key = `${goalId}:${meId}`;
+    setError(null);
+    setDone((prev) => {
+      const copy = new Set(prev);
+      if (next) copy.add(key);
+      else copy.delete(key);
+      return copy;
+    });
+    startTransition(async () => {
+      const result = await toggleGoalProgress(goalId, sprintId, next);
+      if (result && !result.ok) {
+        setDone((prev) => {
+          const copy = new Set(prev);
+          if (next) copy.delete(key);
+          else copy.add(key);
+          return copy;
+        });
+        setError(result.message);
+      }
+    });
+  }
 
   function firstName(name: string) {
     return name.split(" ")[0];
@@ -37,10 +67,8 @@ export function ProgressGrid({
             {participants.map((person) => (
               <th
                 key={person.id}
-                className={cn(
-                  "px-3 py-2.5 text-center text-xs font-medium",
-                  person.id === meId ? "text-primary-dim" : "text-faint"
-                )}
+                style={{ color: person.color }}
+                className="px-3 py-2.5 text-center text-xs font-medium"
               >
                 {person.id === meId ? "You" : firstName(person.name)}
               </th>
@@ -59,20 +87,9 @@ export function ProgressGrid({
                     {isMe ? (
                       <button
                         type="button"
-                        disabled={pending}
                         aria-pressed={isDone}
                         aria-label={`${goal.title}: mark ${isDone ? "not done" : "done"}`}
-                        onClick={() => {
-                          setError(null);
-                          startTransition(async () => {
-                            const result = await toggleGoalProgress(
-                              goal.id,
-                              sprintId,
-                              !isDone
-                            );
-                            if (result && !result.ok) setError(result.message);
-                          });
-                        }}
+                        onClick={() => toggleCell(goal.id, !isDone)}
                         className={cn(
                           "inline-flex size-6 items-center justify-center rounded-md border transition-colors duration-150",
                           isDone

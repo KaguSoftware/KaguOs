@@ -6,14 +6,18 @@ import { NewTaskForm } from "@/components/debug/new-task-form";
 export const metadata: Metadata = { title: "New task" };
 
 export default async function NewTaskPage() {
-  await requireSection("debug");
+  const ctx = await requireSection("debug");
+  const { data: projects } = await ctx.supabase
+    .from("projects")
+    .select("id, name")
+    .order("name");
 
   return (
     <CreatePage
       title="New debug task"
       hint="Posted unassigned — whoever wants it claims it from the board."
     >
-      <NewTaskForm />
+      <NewTaskForm projects={projects ?? []} />
     </CreatePage>
   );
 }

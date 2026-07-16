@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import type { Profile, Section } from "@/lib/types";
@@ -10,8 +11,12 @@ export type SessionContext = {
   isAdmin: boolean;
 };
 
-/** Loads the signed-in user's profile + memberships; redirects to /login if signed out. */
-export async function getSessionContext(): Promise<SessionContext> {
+/**
+ * Loads the signed-in user's profile + memberships; redirects to /login if
+ * signed out. Wrapped in React cache() so layout + page share one lookup per
+ * request instead of hitting the database twice.
+ */
+export const getSessionContext = cache(async function getSessionContext(): Promise<SessionContext> {
   const supabase = await createClient();
   const {
     data: { user },
@@ -35,7 +40,7 @@ export async function getSessionContext(): Promise<SessionContext> {
     sections,
     isAdmin: (profile as Profile).is_admin,
   };
-}
+});
 
 export function canAccess(ctx: SessionContext, section: Section) {
   return ctx.isAdmin || ctx.sections.has(section);

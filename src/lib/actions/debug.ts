@@ -20,11 +20,13 @@ export async function createTask(
   const description = String(formData.get("description") ?? "").trim();
   const rawPriority = String(formData.get("priority") ?? "medium") as DebugPriority;
   const priority = PRIORITIES.includes(rawPriority) ? rawPriority : "medium";
+  const projectId = String(formData.get("project_id") ?? "").trim() || null;
 
   const { error } = await ctx.supabase.from("debug_tasks").insert({
     title,
     description: description || null,
     priority,
+    project_id: projectId,
     created_by: ctx.userId,
   });
   if (error) return { ok: false, message: error.message };

@@ -7,6 +7,7 @@ import { Input, Textarea } from "@/components/ui/input";
 import { Field } from "@/components/ui/field";
 import { Dropdown } from "@/components/ui/dropdown";
 import { UrlInput } from "@/components/ui/typed-inputs";
+import { PROJECT_TYPE_OPTIONS, SECTOR_OPTIONS } from "@/lib/options";
 
 export const PROJECT_STATUS_OPTIONS = [
   { value: "planning", label: "Planning", hint: "Not started yet" },
@@ -24,6 +25,8 @@ export function NewProjectForm() {
       fieldLabels={{
         name: "Name",
         client: "Client",
+        sector: "Sector",
+        type: "Type",
         repo_url: "Repo URL",
         prod_url: "Production URL",
         notes: "Notes",
@@ -45,6 +48,24 @@ export function NewProjectForm() {
             name="status"
             defaultValue="planning"
             options={PROJECT_STATUS_OPTIONS}
+          />
+        </Field>
+      </div>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Field label="Sector" htmlFor="project-sector" hint="The client's working sector.">
+          <Dropdown
+            id="project-sector"
+            name="sector"
+            options={SECTOR_OPTIONS}
+            placeholder="Pick a sector…"
+          />
+        </Field>
+        <Field label="Type" htmlFor="project-type" hint="What kind of software this is.">
+          <Dropdown
+            id="project-type"
+            name="type"
+            options={PROJECT_TYPE_OPTIONS}
+            placeholder="Pick a type…"
           />
         </Field>
       </div>

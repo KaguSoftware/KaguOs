@@ -9,6 +9,7 @@ import { Field } from "@/components/ui/field";
 import { Dropdown } from "@/components/ui/dropdown";
 import { UrlInput } from "@/components/ui/typed-inputs";
 import { PROJECT_STATUS_OPTIONS } from "@/components/work/new-project-form";
+import { PROJECT_TYPE_OPTIONS, SECTOR_OPTIONS } from "@/lib/options";
 import { cn } from "@/lib/utils";
 import type { Project } from "@/lib/types";
 
@@ -46,6 +47,26 @@ export function EditProjectForm({ project }: { project: Project }) {
             maxLength={120}
             defaultValue={project.client ?? ""}
             placeholder="Internal if empty"
+          />
+        </Field>
+      </div>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Field label="Sector" htmlFor="project-sector">
+          <Dropdown
+            id="project-sector"
+            name="sector"
+            defaultValue={project.sector ?? undefined}
+            options={SECTOR_OPTIONS}
+            placeholder="Pick a sector…"
+          />
+        </Field>
+        <Field label="Type" htmlFor="project-type">
+          <Dropdown
+            id="project-type"
+            name="type"
+            defaultValue={project.type ?? undefined}
+            options={PROJECT_TYPE_OPTIONS}
+            placeholder="Pick a type…"
           />
         </Field>
       </div>

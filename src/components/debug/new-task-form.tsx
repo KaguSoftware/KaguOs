@@ -14,7 +14,11 @@ const PRIORITY_OPTIONS = [
   { value: "urgent", label: "Urgent", hint: "Drop other things" },
 ];
 
-export function NewTaskForm() {
+export function NewTaskForm({
+  projects,
+}: {
+  projects: { id: string; name: string }[];
+}) {
   const router = useRouter();
 
   return (
@@ -34,14 +38,27 @@ export function NewTaskForm() {
           placeholder="What needs doing?"
         />
       </Field>
-      <Field label="Priority" htmlFor="task-priority">
-        <Dropdown
-          id="task-priority"
-          name="priority"
-          defaultValue="medium"
-          options={PRIORITY_OPTIONS}
-        />
-      </Field>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Field label="Board" htmlFor="task-project" hint="Which project's board it belongs to.">
+          <Dropdown
+            id="task-project"
+            name="project_id"
+            defaultValue=""
+            options={[
+              { value: "", label: "General", hint: "Not tied to a project" },
+              ...projects.map((p) => ({ value: p.id, label: p.name })),
+            ]}
+          />
+        </Field>
+        <Field label="Priority" htmlFor="task-priority">
+          <Dropdown
+            id="task-priority"
+            name="priority"
+            defaultValue="medium"
+            options={PRIORITY_OPTIONS}
+          />
+        </Field>
+      </div>
       <Field
         label="Details"
         htmlFor="task-description"

@@ -1,12 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Bug } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { TaskRow } from "@/components/debug/task-row";
 import { EmptyState } from "@/components/ui/empty-state";
 import { cn } from "@/lib/utils";
-import type { DebugState, DebugTask } from "@/lib/types";
+import type { DebugState, DebugTask, MembersMap } from "@/lib/types";
 
 type Filter = "active" | "done" | "mine" | "all";
 
@@ -36,21 +36,46 @@ function sortTasks(tasks: DebugTask[]) {
 
 export function DebugBoard({
   initialTasks,
-  names,
+  projects,
+  members,
   meId,
   isAdmin,
 }: {
   initialTasks: DebugTask[];
-  names: Record<string, string>;
+  projects: { id: string; name: string }[];
+  members: MembersMap;
   meId: string;
   isAdmin: boolean;
 }) {
   const [tasks, setTasks] = useState<DebugTask[]>(initialTasks);
   const [filter, setFilter] = useState<Filter>("active");
+  // "all" | "general" | a project id — pure client-side switching, zero delay.
+  const [board, setBoard] = useState<string>("all");
   const [live, setLive] = useState(false);
+
+  const projectNames = useMemo(() => {
+    const map: Record<string, string> = {};
+    for (const p of projects) map[p.id] = p.name;
+    return map;
+  }, [projects]);
 
   // Server refreshes (revalidatePath after actions) re-send props — adopt them.
   useEffect(() => setTasks(initialTasks), [initialTasks]);
+
+  // Optimistic layer: rows update instantly, server + realtime reconcile after.
+  const patchTask = useCallback((id: string, patch: Partial<DebugTask>) => {
+    setTasks((prev) => prev.map((t) => (t.id === id ? { ...t, ...patch } : t)));
+  }, []);
+  const removeTask = useCallback((id: string) => {
+    setTasks((prev) => prev.filter((t) => t.id !== id));
+  }, []);
+  const restoreTask = useCallback((task: DebugTask) => {
+    setTasks((prev) =>
+      prev.some((t) => t.id === task.id)
+        ? prev.map((t) => (t.id === task.id ? task : t))
+        : [...prev, task]
+    );
+  }, []);
 
   // Realtime: reflect everyone else's changes without reloading.
   useEffect(() => {
@@ -91,23 +116,69 @@ export function DebugBoard({
   }, []);
 
   const visible = useMemo(() => {
-    const sorted = sortTasks(tasks);
+    let list = sortTasks(tasks);
+    if (board === "general") list = list.filter((t) => !t.project_id);
+    else if (board !== "all") list = list.filter((t) => t.project_id === board);
     switch (filter) {
       case "active":
-        return sorted.filter((t) => t.state !== "done");
+        return list.filter((t) => t.state !== "done");
       case "done":
-        return sorted.filter((t) => t.state === "done");
+        return list.filter((t) => t.state === "done");
       case "mine":
-        return sorted.filter((t) => t.assignee_id === meId);
+        return list.filter((t) => t.assignee_id === meId);
       default:
-        return sorted;
+        return list;
     }
-  }, [tasks, filter, meId]);
+  }, [tasks, filter, board, meId]);
 
   const openCount = tasks.filter((t) => t.state === "open").length;
 
+  const countFor = (key: string) =>
+    tasks.filter(
+      (t) =>
+        t.state !== "done" &&
+        (key === "general" ? !t.project_id : t.project_id === key)
+    ).length;
+
   return (
     <div className="space-y-3">
+      {/* Project boards — one table per project, switched locally */}
+      <div
+        className="flex gap-1 overflow-x-auto border-b border-line pb-px"
+        role="tablist"
+        aria-label="Project boards"
+      >
+        {[
+          { key: "all", name: "All boards" },
+          { key: "general", name: "General" },
+          ...projects.map((p) => ({ key: p.id, name: p.name })),
+        ].map((tab) => {
+          const active = board === tab.key;
+          const count = tab.key === "all" ? null : countFor(tab.key);
+          return (
+            <button
+              key={tab.key}
+              role="tab"
+              aria-selected={active}
+              onClick={() => setBoard(tab.key)}
+              className={cn(
+                "-mb-px flex shrink-0 items-center gap-1.5 border-b-2 px-3 py-2 text-sm transition-colors duration-150",
+                active
+                  ? "border-primary-dim font-medium text-ink"
+                  : "border-transparent text-muted hover:border-line-strong hover:text-ink"
+              )}
+            >
+              {tab.name}
+              {count !== null && count > 0 && (
+                <span className="rounded-full bg-raised px-1.5 font-mono text-[11px] text-muted">
+                  {count}
+                </span>
+              )}
+            </button>
+          );
+        })}
+      </div>
+
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex gap-1" role="tablist" aria-label="Filter tasks">
           {FILTERS.map((f) => (
@@ -158,9 +229,17 @@ export function DebugBoard({
               <TaskRow
                 key={task.id}
                 task={task}
-                names={names}
+                members={members}
                 meId={meId}
                 isAdmin={isAdmin}
+                projectName={
+                  board === "all" && task.project_id
+                    ? (projectNames[task.project_id] ?? null)
+                    : null
+                }
+                onPatch={patchTask}
+                onRemove={removeTask}
+                onRestore={restoreTask}
               />
             ))}
           </ul>

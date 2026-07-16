@@ -109,6 +109,34 @@ h3 {
 
 /* Semantic z-scale: dropdown(10) < sticky(20) < backdrop(30) < modal(40) < toast(50) */
 
+/* Custom scrollbars (Parsa rule) — thin, themed, quiet */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--line-strong) transparent;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--line-strong);
+  border-radius: 5px;
+  border: 3px solid transparent;
+  background-clip: padding-box;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--faint);
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { Lightbulb, MessageSquare, Plus } from "lucide-react";
 import { requireSection } from "@/lib/data/session";
+import { getMembersMap } from "@/lib/data/members";
 import { PageHeader } from "@/components/shell/page-header";
 import { SectionTabs } from "@/components/shell/section-tabs";
 import { Badge, type BadgeTone } from "@/components/ui/badge";
@@ -32,16 +33,13 @@ type IdeaRow = {
 export default async function IdeasPage() {
   const ctx = await requireSection("work");
 
-  const [{ data: ideas }, { data: profiles }] = await Promise.all([
+  const [{ data: ideas }, members] = await Promise.all([
     ctx.supabase
       .from("ideas")
       .select("id, title, status, created_by, created_at, idea_votes(user_id), idea_comments(count)")
       .order("created_at", { ascending: false }),
-    ctx.supabase.from("profiles").select("id, full_name, email"),
+    getMembersMap(ctx.supabase),
   ]);
-
-  const names: Record<string, string> = {};
-  for (const p of profiles ?? []) names[p.id] = p.full_name || p.email;
 
   const rows = ((ideas ?? []) as IdeaRow[]).sort((a, b) => {
     const openFirst = Number(a.status !== "open") - Number(b.status !== "open");
@@ -93,9 +91,14 @@ export default async function IdeasPage() {
                   </Link>
                   <p className="mt-0.5 text-xs text-faint">
                     {formatDate(idea.created_at)}
-                    {idea.created_by && names[idea.created_by]
-                      ? ` · by ${names[idea.created_by]}`
-                      : ""}
+                    {idea.created_by && members[idea.created_by] && (
+                      <>
+                        {" · by "}
+                        <span style={{ color: members[idea.created_by].color }}>
+                          {members[idea.created_by].name}
+                        </span>
+                      </>
+                    )}
                   </p>
                 </div>
                 <span className="flex items-center gap-1 text-xs text-faint">
