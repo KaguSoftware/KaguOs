@@ -13,8 +13,9 @@
   or fullscreen overlay) — never an inline expander. No required fields; empty-field confirm
   ("Title and Details are empty — sure?"). `src/components/ui/create.tsx`.
 - **Typed custom fields (Parsa rule)**: every control is custom + typed — Dropdown, DatePicker,
-  NumberInput, EmailInput, UrlInput, FileInput, ColorPicker in `src/components/ui/`. No native
-  select/date UI, no bare strings for typed content. Custom scrollbars too (globals.css).
+  NumberInput, EmailInput, UrlInput, FileInput, ColorPicker, **Checkbox** in `src/components/ui/`.
+  No native select/date/checkbox UI, no bare strings for typed content. Custom scrollbars too
+  (globals.css).
 - **macOS-feel motion (Parsa rule)**: `--ease-mac` curve, pop-in popovers, page/overlay fade-rises,
   button micro-press, frosted translucency on transient surfaces only. Spec: DESIGN.md → Motion.
 - **Fast (Parsa rule)**: optimistic updates on claims/states/goal-ticks/votes, client-side board
@@ -60,7 +61,8 @@ Contracts w/ PDFs), **Debug** (everyone: per-project boards, self-claim-only, re
 - DONE (code written, `npm run build` clean, 29 routes; pushed): all five sections at full agreed
   scope, admin panel (users/memberships/colors/passwords), dashboard w/ live counts, CSV import,
   design system + field kit + create surfaces + optimistic layer. DB seeded: Parsa is admin with
-  all memberships.
+  all memberships. UI polish (2026-07-16): custom `Checkbox` primitive replaced native checkboxes
+  app-wide; marketing tabs now switch instantly as client state (single page, no per-tab fetch).
 - NOT DONE / NOT VERIFIED: end-to-end testing in a browser with real users (nothing beyond build
   has been exercised!), Vercel deploy, disabling public signups in the Supabase dashboard,
   auth URL config after deploy.
@@ -72,8 +74,13 @@ Contracts w/ PDFs), **Debug** (everyone: per-project boards, self-claim-only, re
 - `src/lib/{types,options,colors,finance,utils}.ts` — domain types, dropdown vocabularies,
   member colors, TL/FX math, cn+formatters.
 - `src/components/ui/*` — the design system (button, create surfaces, dropdown, date-picker,
-  number-input, typed-inputs, color-picker, badge, panel, empty-state, skeleton…).
-- `src/components/<section>/*` + `src/app/(app)/<section>/…` — per-section UI/pages.
+  number-input, typed-inputs, color-picker, **checkbox**, badge, panel, empty-state, skeleton…).
+  `checkbox.tsx` is the one styled checkbox (peer input under a brand box, controlled or
+  uncontrolled) — use it everywhere, never a native `type="checkbox"`.
+- `src/components/<section>/*` + `src/app/(app)/<section>/…` — per-section UI/pages. Marketing is
+  now a SINGLE page (`marketing/page.tsx`) that fetches all three datasets and hands them to
+  `components/marketing/workspace.tsx`; Campaigns/Content/Links switch as client state (instant, no
+  navigation). `/marketing/content` + `/marketing/links` are redirect stubs → `/marketing?tab=…`.
 - `supabase/migrations/0001–0007` — full schema history (source of truth).
 - `scripts/seed-admin.ts` — idempotent first-admin seed.
 
