@@ -1,0 +1,3 @@
+# Vendored tooling — exclude from GitHub language stats and diffs by default
+.claude/** linguist-vendored
+package-lock.json linguist-generated
