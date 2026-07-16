@@ -129,11 +129,11 @@ Contracts w/ PDFs), **Debug** (everyone: per-project boards, self-claim-only, re
 DONE this session: notifications, announcements hero, ⌘K palette, task/idea editing, admin-row
 redesign, empty-state CTAs (a–c, f from the old list). REMAINING:
 1. Disable "Allow new users to sign up" in Supabase dashboard (Auth → Sign In / Up).
+0. ⚠️ **push migration 0011** (`npx supabase db push`) — project_secrets table for the credentials
+   feature (already coded + committed; panel is empty until pushed).
 2. **Communications / CRM section** — leads + clients, status, links to everything tied to them.
-   (New section: table + RLS + CRUD + nav entry. Not started.)
-3. **Project credentials store** — per-project accounts (Supabase email/password etc).
-   DECISION (Parsa): plaintext, RLS-gated to management/admins, masked with reveal-on-click.
-   ⚠️ A DB leak exposes these — a real secrets manager is the safer long-term move; revisit.
+   (New section: table + RLS + CRUD + nav entry. NOT started — the one remaining buildable feature.)
+3. ~~Project credentials store~~ — DONE (project detail page, Management-gated, migration 0011).
 4. **Showcase mode** — DEFERRED, needs a design decision before building. "Click → all data becomes
    fake demo data; leaving needs the account password." Touches EVERY section's data path + is
    security-sensitive (must be enforced server-side, not a client flag). Recommended shape: a
