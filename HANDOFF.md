@@ -58,15 +58,24 @@ Contracts w/ PDFs), **Debug** (everyone: per-project boards, self-claim-only, re
   `oklch(0.55 0.16 25)` — L band 0.48–0.67 on dark; re-validate any new chart palette.
 
 ## Current status (2026-07-16)
-- DONE (code written, `npm run build` clean, 29 routes; pushed): all five sections at full agreed
-  scope, admin panel (users/memberships/colors/passwords), dashboard w/ live counts, CSV import,
-  design system + field kit + create surfaces + optimistic layer. DB seeded: Parsa is admin with
-  all memberships. UI polish (2026-07-16): custom `Checkbox` primitive replaced native checkboxes
-  app-wide; all tabbed sections (Marketing, Work, Management) now switch instantly as client state —
-  each is one page that fetches every tab's data up front, no per-tab navigation/fetch.
-- NOT DONE / NOT VERIFIED: end-to-end testing in a browser with real users (nothing beyond build
-  has been exercised!), Vercel deploy, disabling public signups in the Supabase dashboard,
-  auth URL config after deploy.
+- DONE (code written, `npm run build` clean, pushed): all five sections at full agreed scope, admin
+  panel, dashboard, CSV import, design system + field kit + create surfaces + optimistic layer. DB
+  seeded: Parsa is admin with all memberships. Now DEPLOYED on Vercel + 2-browser tested.
+- UI/UX pass (2026-07-16): custom `Checkbox` primitive app-wide; instant client-side tabs across
+  Marketing/Work/Management; dashboard grew quick-actions, personal focus line, **recent-activity
+  feed**, and **reminders**; warmed dark theme; **small-text contrast lifted to WCAG AA** (verified,
+  don't lower the text ramp); brand **logo** in sidebar + favicons.
+- HCI foundation (2026-07-16): app-wide **toast system** (`ui/toast.tsx`, mounted in the (app)
+  layout) + **`useAction` hook** (`lib/use-action.ts`) standardizing optimistic run→rollback→
+  toast-on-failure. High-traffic flows refactored onto it; create forms toast success/error. Every
+  action now tells the user what happened. Lower-traffic admin flows (fx-editor, sprint-forms,
+  user-row, contract-bits, progress-grid, color-form, import-debug) still use inline errors — fine.
+- ⚠️ PENDING MANUAL STEP: **migration 0008 (reminders table) is written + committed but NOT pushed
+  to cloud.** The reminders widget will error until you run `supabase db push` (see Running it). It's
+  additive (new table + RLS), safe. The auto-confirm push was blocked by the sandbox — push it
+  interactively so you review the diff.
+- NOT DONE: disabling public signups in the Supabase dashboard; formal E2E with RLS negative checks
+  (deferred — you've 2-browser tested); the feature queue below.
 
 ## File map (key files)
 - `src/lib/data/session.ts` — cached session context + `requireSection`/`requireAdmin` guards.
@@ -91,27 +100,47 @@ Contracts w/ PDFs), **Debug** (everyone: per-project boards, self-claim-only, re
     `/marketing/content|links` → `/marketing?tab=…`.
   Old sub-routes are redirect stubs; list-level `revalidatePath`, form `onDone`, and detail back-links
   all point at the `?tab=` URLs. `SectionTabs` + per-section `tabs.ts` were retired.
-- `supabase/migrations/0001–0007` — full schema history (source of truth).
+- `src/components/ui/toast.tsx` — toast provider + `useToast()` (success/error/loading/info,
+  promise wrapper). Mounted once in `(app)/layout.tsx`. `src/lib/use-action.ts` — `useAction()`
+  wraps optimistic mutate→run→rollback+toast; the one way client components fire actions now.
+- `src/lib/data/activity.ts` — membership-gated recent-activity fan-out (debug/ideas/projects/
+  transactions/posts), merged newest-first. `src/components/shell/activity-feed.tsx` renders it.
+- `src/components/shell/reminders.tsx` + `src/lib/actions/reminders.ts` — DB-backed personal + team
+  reminders (Share button posts a team one; RLS in migration 0008). `Reminder` type in types.ts.
+- `src/components/shell/logo.tsx` — the brand mark (`/kagu-mark.png`, 0.4KB, downscaled from
+  `/brand/kagu-logo-source.png`). App icons: `src/app/icon.png` + `apple-icon.png`.
+- `supabase/migrations/0001–0008` — full schema history (0008 = reminders, **cloud-push pending**).
 - `scripts/seed-admin.ts` — idempotent first-admin seed.
 
 ## Roadmap / next steps
-1. ➡️ **ACTIVE: E2E verify** — `npm run dev`, sign in as Parsa, create 2 test users w/ different
-   memberships in /admin, walk every section; RLS negative checks (learn-only user must get
-   nothing from /work, /management, contract files); two-browser realtime claim test; CSV import.
-2. Disable "Allow new users to sign up" in Supabase dashboard (Auth → Sign In / Up).
-3. Deploy: import repo in Vercel, set the 3 env vars (NOT the access token), deploy; then
-   Supabase Auth → URL config: Site URL = Vercel domain. Smoke test prod.
-4. Onboard the team (create the other 7 accounts), import the old sheet, retire it.
+0. ➡️ **ACTIVE — DO FIRST: push migration 0008** (`supabase db push`) so reminders have a table.
+1. Disable "Allow new users to sign up" in Supabase dashboard (Auth → Sign In / Up).
+2. Big feature batch Parsa green-lit (2026-07-16), in-progress order:
+   a. In-app notification center (bell + unread feed, driven by activity data). *(next up)*
+   b. Search / command palette (⌘K).
+   c. Editing flows for tasks / ideas / projects (title/desc are currently fixed after post).
+   d. **Communications / CRM section** — leads + clients, status, links to everything tied to them.
+   e. **Project credentials store** — per-project accounts (Supabase email/password etc).
+      DECISION: plaintext, RLS-gated to management/admins, masked with reveal-on-click. ⚠️ A DB leak
+      exposes these — a real secrets manager is the safer long-term move; revisit.
+   f. Empty / first-run states across sections. g. Finance exports + budgets + per-client P&L.
+3. Onboard the team (create the other 7 accounts), import the old sheet, retire it.
+
+Cross-cutting: keep weaving the perf pass and the `useAction`/toast HCI pattern into every new
+surface; run `/impeccable audit` after the batch (design hook was silenced after 6 edits/file).
 
 ## Deliberately partial — grows later (scope ledger)
 | Area | What shipped now | Intended full shape | Grows in |
 |---|---|---|---|
-| Notifications | none (realtime board only) | Telegram bot on task create/claim | fast follow |
+| Notifications | none yet | in-app center now (Telegram later) | in progress (2a) |
+| Reminders | personal + team, DB-backed | (done) — migration 0008 needs cloud push | — |
+| Comms/CRM | none | leads/clients + linked resources | in progress (2d) |
+| Project creds | none | plaintext RLS-gated accounts store | in progress (2e) |
 | Invites | admin sets temp password | email invites via SMTP | when SMTP exists |
 | Roles | membership + global admin | per-section roles (Learn owner) | when needed |
-| Finance reports | 12-mo chart + tiles + recurring breakdown | exports, budgets, per-client P&L | when needed |
+| Finance reports | 12-mo chart + tiles + recurring breakdown | exports, budgets, per-client P&L | in progress (2g) |
 | Marketing | campaigns/content/links CRUD | analytics pulls, approval flows | next phase |
-| Task editing | title/desc fixed after post (state/claim/delete only) | edit page | if asked |
+| Task editing | title/desc fixed after post (state/claim/delete only) | edit page | in progress (2c) |
 | i18n | English only | next-intl (TR) | if requested |
 
 ## Gotchas / open issues
@@ -126,5 +155,6 @@ Contracts w/ PDFs), **Debug** (everyone: per-project boards, self-claim-only, re
 ## Running it
 - `npm run dev` · `npm run build` · `npm run lint`
 - `$env:SUPABASE_ACCESS_TOKEN='<token>'; "Y" | npx supabase db push` — apply new migrations
+  (⚠️ 0008 reminders is pending this). `npx supabase migration list` shows local-vs-remote drift.
 - `npx tsx scripts/seed-admin.ts` — re-seed admin (idempotent)
 - `node .claude/skills/impeccable/scripts/detect.mjs src` — design lint (clean as of today)
