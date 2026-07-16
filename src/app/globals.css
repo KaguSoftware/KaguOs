@@ -113,6 +113,13 @@
   }
 }
 
+html {
+  /* Always reserve the scrollbar gutter, so a page growing past the viewport
+   * (e.g. an open dropdown) never pops the scrollbar in and shifts the whole
+   * UI left. The space is allocated whether or not the bar is visible. */
+  scrollbar-gutter: stable;
+}
+
 body {
   background: var(--bg);
   /* Faint brand-hued light pooling from the top — depth, not decoration. */

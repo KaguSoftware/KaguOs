@@ -76,13 +76,28 @@ Contracts w/ PDFs), **Debug** (everyone: per-project boards, self-claim-only, re
   button); **editing flows** for debug tasks (inline in expanded row) and ideas (inline on detail
   page) — projects already had it; **admin Team rows redesigned** (calm summary + expandable Manage
   panel instead of ~10 inline controls); empty-state CTAs on work panels.
-- Migrations 0008 (reminders) / 0009 (notifications) / 0010 (announcements) all **pushed to cloud
-  & live**. Note: `supabase db push` prints a harmless Docker-cache warning on this Windows box —
-  the remote apply still succeeds ("Finished supabase db push").
-- ⚠️ SANDBOX NOTE: the agent's auto-confirm of `db push` is blocked (guardrail on prod schema
-  changes); Parsa runs `npx supabase db push` interactively. Future migrations need the same.
+- Features shipped (2026-07-16, batch 2): **Comms/CRM** = sixth section (leads/clients + linked
+  resources, 0013); **finance CSV exports** (client-side, transactions + recurring); **project
+  credentials** now Work-gated (0011+0012); **loading strategy** complete (SSR shell + client
+  routing + `prefetch-heavy.tsx` warms Finance/Debug from dashboard + finance-specific skeleton);
+  **SHOWCASE MODE** (0014, see its own note below).
+- Perf/UX fixes (2026-07-16): laggy interactions were full-page revalidate on every tick — made
+  **reminders check/delete, sprint participants, sprint goal removal OPTIMISTIC** (no router.refresh);
+  **sprint goals now batch-add** (textarea, one per line, ⌘+Enter) via `addGoals`. Removed the green
+  focus glow on search/reminder inputs (global `:focus-visible` scoped to `:not([data-no-ring])`).
+- ⚠️ SHOWCASE MODE (`lib/actions/showcase.ts`, `shell/showcase.tsx`, `data/session.ts` →
+  `ctx.showcase`/`demoFlag`): per-user `profiles.showcase_mode` swaps the app to OBVIOUSLY-FAKE demo
+  data (Acme Corp / 123456789) for client demos. **Enforcement is server-side**: every list/count
+  query filters `.eq("is_demo", ctx.showcase)`. Enter = one click; **exit is password-gated**
+  (verified via an isolated Supabase client so the session isn't disturbed). Amber banner while
+  active. **When adding a NEW query on a demo-able table, you MUST add the `is_demo` filter** or real
+  data leaks in demo mode. Known limitation: records CREATED in demo mode are real rows (not flagged
+  is_demo) — demos are view-first; thread is_demo through create actions if that becomes a problem.
+- Migrations 0008–0014 all **pushed to cloud & live** (harmless Docker-cache warning on Windows;
+  remote apply still succeeds). ⚠️ SANDBOX: the agent can't auto-confirm `db push` — Parsa runs
+  `npx supabase db push` interactively for every new migration.
 - NOT DONE: disabling public signups in the Supabase dashboard; formal E2E with RLS negative checks
-  (deferred — you've 2-browser tested); the remaining queue below.
+  (deferred — 2-browser tested). **The agreed feature plan is now fully built.**
 
 ## File map (key files)
 - `src/lib/data/session.ts` — cached session context + `requireSection`/`requireAdmin` guards.
