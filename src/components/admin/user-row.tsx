@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useTransition } from "react";
-import { KeyRound, Loader2, Palette } from "lucide-react";
+import { useState } from "react";
+import { ChevronDown, KeyRound, Loader2, Palette, Trash2 } from "lucide-react";
 import {
   deleteUser,
   setUserPassword,
@@ -12,6 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { AdminColorPicker } from "@/components/account/color-form";
+import { useAction } from "@/lib/use-action";
 import { memberColorCss } from "@/lib/colors";
 import { SECTIONS, SECTION_LABELS, type Section } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -25,19 +26,19 @@ export type AdminUser = {
   sections: Section[];
 };
 
+function shortLabel(section: Section) {
+  return SECTION_LABELS[section].replace("Kagu ", "");
+}
+
 export function UserRow({ user, isSelf }: { user: AdminUser; isSelf: boolean }) {
-  const [pending, startTransition] = useTransition();
-  const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
+  const { pending: busy, run, toast } = useAction();
+  const [open, setOpen] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showColor, setShowColor] = useState(false);
   const [newPassword, setNewPassword] = useState("");
 
   function apply(sections: Section[], isAdmin: boolean) {
-    setMessage(null);
-    startTransition(async () => {
-      const result = await updateAccess(user.id, sections, isAdmin);
-      if (result && !result.ok) setMessage({ ok: false, text: result.message });
-    });
+    run(() => updateAccess(user.id, sections, isAdmin));
   }
 
   function toggleSection(section: Section) {
@@ -46,7 +47,7 @@ export function UserRow({ user, isSelf }: { user: AdminUser; isSelf: boolean }) 
       ? user.sections.filter((s) => s !== section)
       : [...user.sections, section];
     if (section === "learn" && has && next.includes("work")) {
-      setMessage({ ok: false, text: "Work members must stay in Learn — remove Work first." });
+      toast.error("Work members must stay in Learn — remove Work first.");
       return;
     }
     if (section === "work" && !has && !next.includes("learn")) next = [...next, "learn"];
@@ -54,128 +55,141 @@ export function UserRow({ user, isSelf }: { user: AdminUser; isSelf: boolean }) 
   }
 
   return (
-    <div className="border-b border-line px-4 py-3 last:border-b-0">
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-        <div className="min-w-44 flex-1">
-          <p
-            style={{ color: memberColorCss(user.id, user.color) }}
-            className="truncate text-sm font-medium"
-          >
+    <div className="border-b border-line last:border-b-0">
+      {/* Collapsed summary — identity, access at a glance, one way in */}
+      <div className="flex items-center gap-3 px-4 py-2.5">
+        <span
+          aria-hidden
+          className="size-2 shrink-0 rounded-full"
+          style={{ backgroundColor: memberColorCss(user.id, user.color) }}
+        />
+        <div className="min-w-0 flex-1">
+          <p className="flex items-center gap-1.5 truncate text-sm font-medium text-ink">
             {user.full_name || user.email}
-            {isSelf && <span className="ml-1.5 text-xs text-faint">(you)</span>}
+            {isSelf && <span className="text-xs font-normal text-faint">(you)</span>}
+            {user.is_admin && <Badge tone="green">admin</Badge>}
           </p>
           <p className="truncate text-[13px] text-faint">{user.email}</p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
-          {SECTIONS.map((section) => (
-            <Checkbox
-              key={section}
-              size="sm"
-              className="text-[13px]"
-              label={SECTION_LABELS[section].replace("Kagu ", "")}
-              checked={user.sections.includes(section)}
-              onChange={() => toggleSection(section)}
-              disabled={pending}
-            />
-          ))}
-          <Checkbox
-            size="sm"
-            className="ml-1 text-[13px]"
-            label="admin"
-            checked={user.is_admin}
-            onChange={() => apply(user.sections, !user.is_admin)}
-            disabled={pending || isSelf}
-          />
-        </div>
+        {/* Access summary: which sections, compact */}
+        <p className="hidden max-w-[45%] truncate text-[13px] text-muted sm:block">
+          {user.sections.length > 0
+            ? user.sections.map(shortLabel).join(" · ")
+            : "No sections"}
+        </p>
 
-        <div className="flex items-center gap-1.5">
-          {pending && <Loader2 className="size-3.5 animate-spin text-faint" aria-hidden />}
-          {user.is_admin && <Badge tone="green">admin</Badge>}
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setShowColor((v) => !v)}
-            title="Override color"
-          >
-            <Palette className="size-3.5" aria-hidden />
-            Color
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setShowPassword((v) => !v)}
-            title="Set a new password"
-          >
-            <KeyRound className="size-3.5" aria-hidden />
-            Password
-          </Button>
-          {!isSelf && (
-            <ConfirmButton
+        {busy && <Loader2 className="size-3.5 shrink-0 animate-spin text-faint" aria-hidden />}
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          aria-expanded={open}
+          className="inline-flex shrink-0 items-center gap-1 rounded-md px-2 py-1 text-[13px] text-muted transition-colors duration-150 hover:bg-raised hover:text-ink"
+        >
+          Manage
+          <ChevronDown
+            className={cn("size-3.5 transition-transform duration-150", open && "rotate-180")}
+            aria-hidden
+          />
+        </button>
+      </div>
+
+      {/* Expanded: everything editable lives here, out of the default view */}
+      {open && (
+        <div className="space-y-4 border-t border-line bg-surface/60 px-4 py-3.5">
+          <div>
+            <p className="mb-2 text-xs font-medium text-faint">Access</p>
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+              {SECTIONS.map((section) => (
+                <Checkbox
+                  key={section}
+                  size="sm"
+                  className="text-[13px]"
+                  label={shortLabel(section)}
+                  checked={user.sections.includes(section)}
+                  onChange={() => toggleSection(section)}
+                  disabled={busy}
+                />
+              ))}
+              <Checkbox
+                size="sm"
+                className="ml-2 text-[13px]"
+                label="Admin"
+                checked={user.is_admin}
+                onChange={() => apply(user.sections, !user.is_admin)}
+                disabled={busy || isSelf}
+              />
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              variant="ghost"
               size="sm"
-              confirmLabel="Really delete?"
-              onConfirm={() => {
-                setMessage(null);
-                startTransition(async () => {
-                  const result = await deleteUser(user.id);
-                  if (result && !result.ok)
-                    setMessage({ ok: false, text: result.message });
+              onClick={() => {
+                setShowColor((v) => !v);
+                setShowPassword(false);
+              }}
+            >
+              <Palette className="size-3.5" aria-hidden />
+              Color
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                setShowPassword((v) => !v);
+                setShowColor(false);
+              }}
+            >
+              <KeyRound className="size-3.5" aria-hidden />
+              Password
+            </Button>
+            {!isSelf && (
+              <ConfirmButton
+                size="sm"
+                confirmLabel="Really delete?"
+                onConfirm={() =>
+                  run(() => deleteUser(user.id), { success: "User deleted." })
+                }
+              >
+                <Trash2 className="size-3.5" aria-hidden />
+                Delete
+              </ConfirmButton>
+            )}
+          </div>
+
+          {showColor && <AdminColorPicker userId={user.id} current={user.color} />}
+
+          {showPassword && (
+            <form
+              className="flex max-w-md items-center gap-2"
+              onSubmit={(event) => {
+                event.preventDefault();
+                run(() => setUserPassword(user.id, newPassword), {
+                  success: "Password set.",
+                  onSuccess: () => {
+                    setNewPassword("");
+                    setShowPassword(false);
+                  },
                 });
               }}
             >
-              Delete
-            </ConfirmButton>
+              <Input
+                type="text"
+                value={newPassword}
+                onChange={(event) => setNewPassword(event.target.value)}
+                minLength={8}
+                required
+                placeholder="New temp password (min 8 chars)"
+                className="h-8 text-[13px]"
+              />
+              <Button type="submit" variant="primary" size="sm" disabled={busy}>
+                Set
+              </Button>
+            </form>
           )}
         </div>
-      </div>
-
-      {showColor && (
-        <div className="mt-3">
-          <AdminColorPicker userId={user.id} current={user.color} />
-        </div>
-      )}
-
-      {showPassword && (
-        <form
-          className="mt-3 flex max-w-md items-center gap-2"
-          onSubmit={(event) => {
-            event.preventDefault();
-            setMessage(null);
-            startTransition(async () => {
-              const result = await setUserPassword(user.id, newPassword);
-              if (result) setMessage({ ok: result.ok, text: result.message });
-              if (result?.ok) {
-                setNewPassword("");
-                setShowPassword(false);
-              }
-            });
-          }}
-        >
-          <Input
-            type="text"
-            value={newPassword}
-            onChange={(event) => setNewPassword(event.target.value)}
-            minLength={8}
-            required
-            placeholder="New temp password (min 8 chars)"
-            className="h-8 text-[13px]"
-          />
-          <Button type="submit" variant="primary" size="sm" disabled={pending}>
-            Set
-          </Button>
-        </form>
-      )}
-
-      {message && (
-        <p
-          role="status"
-          className={cn(
-            "mt-2 text-[13px]",
-            message.ok ? "text-primary-dim" : "text-danger"
-          )}
-        >
-          {message.text}
-        </p>
       )}
     </div>
   );
