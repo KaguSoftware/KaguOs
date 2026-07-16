@@ -16,6 +16,7 @@ import { createClient } from "@/lib/supabase/client";
 import { Button, ConfirmButton, SubmitButton } from "@/components/ui/button";
 import { Input, Textarea } from "@/components/ui/input";
 import { Field } from "@/components/ui/field";
+import { Checkbox } from "@/components/ui/checkbox";
 import { DatePicker } from "@/components/ui/date-picker";
 import { FileInput, UrlInput } from "@/components/ui/typed-inputs";
 import { CreateForm, CreateOverlay } from "@/components/ui/create";
@@ -94,16 +95,13 @@ export function ParticipantsEditor({
     <div className="space-y-2 p-4">
       <div className="flex flex-wrap gap-x-4 gap-y-2">
         {people.map((person) => (
-          <label key={person.id} className="flex items-center gap-1.5 text-sm text-muted">
-            <input
-              type="checkbox"
-              checked={current.includes(person.id)}
-              onChange={() => toggle(person.id)}
-              disabled={pending}
-              className="size-4 accent-(--primary)"
-            />
-            {person.name}
-          </label>
+          <Checkbox
+            key={person.id}
+            label={person.name}
+            checked={current.includes(person.id)}
+            onChange={() => toggle(person.id)}
+            disabled={pending}
+          />
         ))}
       </div>
       <div className="flex items-center gap-2">

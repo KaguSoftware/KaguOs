@@ -370,7 +370,7 @@ export function NewPostForm({
       }}
       submitLabel="Add to calendar"
       onCancel={() => router.back()}
-      onDone={() => router.push("/marketing/content")}
+      onDone={() => router.push("/marketing?tab=content")}
     >
       <Field label="Title" htmlFor="post-title">
         <Input id="post-title" name="title" maxLength={200} autoFocus />
@@ -430,7 +430,7 @@ export function NewLinkForm() {
       fieldLabels={{ title: "Title", url: "Link", note: "Note" }}
       submitLabel="Save link"
       onCancel={() => router.back()}
-      onDone={() => router.push("/marketing/links")}
+      onDone={() => router.push("/marketing?tab=links")}
     >
       <Field label="Title" htmlFor="link-title">
         <Input id="link-title" name="title" maxLength={200} autoFocus />

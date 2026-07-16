@@ -108,7 +108,7 @@ export async function createPost(
   });
   if (error) return { ok: false, message: error.message };
 
-  revalidatePath("/marketing/content");
+  revalidatePath("/marketing");
   return { ok: true, message: "Post added to the calendar." };
 }
 
@@ -125,7 +125,7 @@ export async function setPostStatus(
     .eq("id", postId);
   if (error) return { ok: false, message: error.message };
 
-  revalidatePath("/marketing/content");
+  revalidatePath("/marketing");
   return { ok: true, message: "Status updated." };
 }
 
@@ -138,7 +138,7 @@ export async function deletePost(postId: string): Promise<ActionResult> {
     .eq("id", postId);
   if (error) return { ok: false, message: error.message };
 
-  revalidatePath("/marketing/content");
+  revalidatePath("/marketing");
   return { ok: true, message: "Post deleted." };
 }
 
@@ -156,7 +156,7 @@ export async function createLink(
   });
   if (error) return { ok: false, message: error.message };
 
-  revalidatePath("/marketing/links");
+  revalidatePath("/marketing");
   return { ok: true, message: "Link saved." };
 }
 
@@ -169,6 +169,6 @@ export async function deleteLink(itemId: string): Promise<ActionResult> {
     .eq("id", itemId);
   if (error) return { ok: false, message: error.message };
 
-  revalidatePath("/marketing/links");
+  revalidatePath("/marketing");
   return { ok: true, message: "Link deleted." };
 }

@@ -6,6 +6,7 @@ import type { ActionResult } from "@/lib/actions/account";
 import { SubmitButton } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Field } from "@/components/ui/field";
+import { Checkbox } from "@/components/ui/checkbox";
 import { EmailInput } from "@/components/ui/typed-inputs";
 import { SECTIONS, SECTION_LABELS } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -48,26 +49,20 @@ export function CreateUserForm() {
         </legend>
         <div className="flex flex-wrap gap-x-4 gap-y-2">
           {SECTIONS.map((section) => (
-            <label key={section} className="flex items-center gap-1.5 text-sm">
-              <input
-                type="checkbox"
-                name="sections"
-                value={section}
-                defaultChecked={section === "debug" || section === "learn"}
-                className="size-4 accent-(--primary)"
-              />
-              {SECTION_LABELS[section]}
-            </label>
+            <Checkbox
+              key={section}
+              label={SECTION_LABELS[section]}
+              name="sections"
+              value={section}
+              defaultChecked={section === "debug" || section === "learn"}
+            />
           ))}
         </div>
         <p className="mt-1.5 text-[13px] text-faint">
           Everyone in Work is automatically also in Learn.
         </p>
       </fieldset>
-      <label className="flex items-center gap-1.5 text-sm">
-        <input type="checkbox" name="is_admin" className="size-4 accent-(--primary)" />
-        Admin (manages users and sprints)
-      </label>
+      <Checkbox name="is_admin" label="Admin (manages users and sprints)" />
       <div className="flex items-center gap-3">
         <SubmitButton>Create user</SubmitButton>
         <ResultNote result={result} />

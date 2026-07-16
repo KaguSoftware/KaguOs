@@ -10,6 +10,7 @@ import {
 import { Button, ConfirmButton } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { Checkbox } from "@/components/ui/checkbox";
 import { AdminColorPicker } from "@/components/account/color-form";
 import { memberColorCss } from "@/lib/colors";
 import { SECTIONS, SECTION_LABELS, type Section } from "@/lib/types";
@@ -68,30 +69,24 @@ export function UserRow({ user, isSelf }: { user: AdminUser; isSelf: boolean }) 
 
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
           {SECTIONS.map((section) => (
-            <label
+            <Checkbox
               key={section}
-              className="flex items-center gap-1.5 text-[13px] text-muted"
-            >
-              <input
-                type="checkbox"
-                checked={user.sections.includes(section)}
-                onChange={() => toggleSection(section)}
-                disabled={pending}
-                className="size-3.5 accent-(--primary)"
-              />
-              {SECTION_LABELS[section].replace("Kagu ", "")}
-            </label>
-          ))}
-          <label className="ml-1 flex items-center gap-1.5 text-[13px] text-muted">
-            <input
-              type="checkbox"
-              checked={user.is_admin}
-              onChange={() => apply(user.sections, !user.is_admin)}
-              disabled={pending || isSelf}
-              className="size-3.5 accent-(--primary)"
+              size="sm"
+              className="text-[13px]"
+              label={SECTION_LABELS[section].replace("Kagu ", "")}
+              checked={user.sections.includes(section)}
+              onChange={() => toggleSection(section)}
+              disabled={pending}
             />
-            admin
-          </label>
+          ))}
+          <Checkbox
+            size="sm"
+            className="ml-1 text-[13px]"
+            label="admin"
+            checked={user.is_admin}
+            onChange={() => apply(user.sections, !user.is_admin)}
+            disabled={pending || isSelf}
+          />
         </div>
 
         <div className="flex items-center gap-1.5">
