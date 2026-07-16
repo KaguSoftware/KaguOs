@@ -90,7 +90,7 @@ export async function createIdea(
     .insert({ title, body: body || null, sector, type, created_by: ctx.userId });
   if (error) return { ok: false, message: error.message };
 
-  revalidatePath("/work/ideas");
+  revalidatePath("/work");
   return { ok: true, message: "Idea posted." };
 }
 
@@ -108,7 +108,7 @@ export async function toggleVote(ideaId: string, hasVoted: boolean): Promise<Act
         .upsert({ idea_id: ideaId, user_id: ctx.userId });
   if (error) return { ok: false, message: error.message };
 
-  revalidatePath("/work/ideas");
+  revalidatePath("/work");
   revalidatePath(`/work/ideas/${ideaId}`);
   return { ok: true, message: hasVoted ? "Vote removed." : "Voted." };
 }
@@ -189,7 +189,6 @@ export async function promoteIdea(ideaId: string): Promise<ActionResult> {
   }
 
   revalidatePath("/work");
-  revalidatePath("/work/ideas");
   redirect(`/work/projects/${project.id}`);
 }
 
@@ -205,7 +204,7 @@ export async function setIdeaStatus(
     .eq("id", ideaId);
   if (error) return { ok: false, message: error.message };
 
-  revalidatePath("/work/ideas");
+  revalidatePath("/work");
   revalidatePath(`/work/ideas/${ideaId}`);
   return { ok: true, message: status === "archived" ? "Idea archived." : "Idea reopened." };
 }
@@ -216,6 +215,6 @@ export async function deleteIdea(ideaId: string): Promise<ActionResult> {
   const { error } = await ctx.supabase.from("ideas").delete().eq("id", ideaId);
   if (error) return { ok: false, message: error.message };
 
-  revalidatePath("/work/ideas");
-  redirect("/work/ideas");
+  revalidatePath("/work");
+  redirect("/work?tab=ideas");
 }

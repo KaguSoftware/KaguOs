@@ -17,7 +17,7 @@ export function NewIdeaForm() {
       fieldLabels={{ title: "Idea", body: "Details", sector: "Sector", type: "Type" }}
       submitLabel="Post idea"
       onCancel={() => router.back()}
-      onDone={() => router.push("/work/ideas")}
+      onDone={() => router.push("/work?tab=ideas")}
     >
       <Field label="Idea" htmlFor="idea-title">
         <Input

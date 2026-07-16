@@ -51,7 +51,7 @@ export default async function IdeaPage({
   return (
     <>
       <Link
-        href="/work/ideas"
+        href="/work?tab=ideas"
         className="mb-4 inline-flex items-center gap-1.5 text-[13px] text-muted hover:text-ink"
       >
         <ArrowLeft className="size-3.5" aria-hidden />

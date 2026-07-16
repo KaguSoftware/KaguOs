@@ -243,7 +243,7 @@ export async function createContract(
     .single();
   if (error || !contract) return { ok: false, message: error?.message ?? "Failed." };
 
-  revalidatePath("/management/contracts");
+  revalidatePath("/management/finance");
   redirect(`/management/contracts/${contract.id}`);
 }
 
@@ -261,7 +261,7 @@ export async function updateContract(
     .eq("id", id);
   if (error) return { ok: false, message: error.message };
 
-  revalidatePath("/management/contracts");
+  revalidatePath("/management/finance");
   revalidatePath(`/management/contracts/${id}`);
   return { ok: true, message: "Contract saved." };
 }
@@ -334,6 +334,6 @@ export async function deleteContract(contractId: string): Promise<ActionResult> 
     await ctx.supabase.storage.from("contracts").remove([contract.file_path]);
   }
 
-  revalidatePath("/management/contracts");
-  redirect("/management/contracts");
+  revalidatePath("/management/finance");
+  redirect("/management/finance?tab=contracts");
 }
