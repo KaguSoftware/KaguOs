@@ -6,8 +6,9 @@ import { getActivity } from "@/lib/data/activity";
 import { PageHeader } from "@/components/shell/page-header";
 import { Reminders } from "@/components/shell/reminders";
 import { ActivityFeed } from "@/components/shell/activity-feed";
+import { AnnouncementHero } from "@/components/shell/announcement-hero";
 import { formatTRY, isActiveRecurring, monthlyAmount, toTRY, type FxRates } from "@/lib/finance";
-import { SECTION_LABELS, type Reminder, type Section } from "@/lib/types";
+import { SECTION_LABELS, type Announcement, type Reminder, type Section } from "@/lib/types";
 
 type Card = { section: Section; href: string; blurb: string; stat?: string };
 type QuickAction = { label: string; href: string };
@@ -124,16 +125,24 @@ export default async function DashboardPage() {
   if (ctx.isAdmin)
     actions.push({ label: "New sprint", href: "/learn/new" });
 
-  const [activity, members, { data: reminderRows }] = await Promise.all([
-    getActivity(ctx),
-    getMembersMap(ctx.supabase),
-    ctx.supabase
-      .from("reminders")
-      .select("*")
-      .order("done", { ascending: true })
-      .order("created_at", { ascending: false }),
-  ]);
+  const [activity, members, { data: reminderRows }, { data: annRows }] =
+    await Promise.all([
+      getActivity(ctx),
+      getMembersMap(ctx.supabase),
+      ctx.supabase
+        .from("reminders")
+        .select("*")
+        .order("done", { ascending: true })
+        .order("created_at", { ascending: false }),
+      ctx.supabase
+        .from("announcements")
+        .select("*")
+        .eq("active", true)
+        .order("created_at", { ascending: false })
+        .limit(1),
+    ]);
   const reminders = (reminderRows ?? []) as Reminder[];
+  const announcement = ((annRows ?? []) as Announcement[])[0] ?? null;
 
   return (
     <>
@@ -145,6 +154,7 @@ export default async function DashboardPage() {
             : "Everything Kagu runs on, in one quiet place."
         }
       />
+      <AnnouncementHero announcement={announcement} isAdmin={ctx.isAdmin} />
       {actions.length > 0 && (
         <div className="mb-6 flex flex-wrap gap-2">
           {actions.map((action) => (

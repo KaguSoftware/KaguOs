@@ -241,3 +241,13 @@ export type Notification = {
   read_at: string | null;
   created_at: string;
 };
+
+export type Announcement = {
+  id: string;
+  body: string;
+  tone: "info" | "primary" | "warning";
+  active: boolean;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+};
