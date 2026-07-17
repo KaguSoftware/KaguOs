@@ -97,14 +97,29 @@ export default async function SprintPage({
     .map((p) => p.goal_id);
 
   // Signed URLs for uploaded files (private bucket, 1 hour).
+  //
+  // ONE call for every file, not one call per file. Signing in a loop cost a
+  // full round-trip each time (~305ms), serially — a sprint with six attachments
+  // spent ~1.8s doing nothing but waiting, and it got worse every time someone
+  // uploaded another file. createSignedUrls (plural) signs the whole batch in a
+  // single trip, so the cost is flat no matter how many resources a sprint has.
   const resourceList = (resources ?? []) as SprintResource[];
+  const withFiles = resourceList.filter((r) => r.file_path);
   const fileUrls = new Map<string, string>();
-  for (const resource of resourceList) {
-    if (!resource.file_path) continue;
+  if (withFiles.length > 0) {
     const { data: signed } = await ctx.supabase.storage
       .from("learn")
-      .createSignedUrl(resource.file_path, 3600);
-    if (signed?.signedUrl) fileUrls.set(resource.id, signed.signedUrl);
+      .createSignedUrls(
+        withFiles.map((r) => r.file_path as string),
+        3600
+      );
+    // Match on path rather than index — the response order isn't guaranteed,
+    // and a single unsignable file returns a row with its own error, not a throw.
+    const byPath = new Map((signed ?? []).map((s) => [s.path, s.signedUrl]));
+    for (const resource of withFiles) {
+      const url = byPath.get(resource.file_path as string);
+      if (url) fileUrls.set(resource.id, url);
+    }
   }
 
   const phase = phaseOf(sprint as Sprint);

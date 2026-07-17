@@ -20,27 +20,34 @@ export default async function ProjectPage({
   const { id } = await params;
   const ctx = await requireSection("work");
 
-  const [{ data: project }, { data: sourceIdea }] = await Promise.all([
+  // Credentials are visible to Work members (builders own their projects).
+  const canSeeSecrets = canAccess(ctx, "work");
+
+  // All three ride ONE wave. The secrets query looks like it belongs after the
+  // project lookup, but it filters on `id` from the URL and its gate is a plain
+  // synchronous check on ctx — so it never needed the project row, and awaiting
+  // it separately cost a full round-trip on every project page. Firing it up
+  // front is free even when the project turns out not to exist: an extra query
+  // inside a wave that's already in flight costs ~3ms, while a second wave
+  // costs ~305ms.
+  const [{ data: project }, { data: sourceIdea }, secretRows] = await Promise.all([
     ctx.supabase.from("projects").select("*").eq("id", id).maybeSingle(),
     ctx.supabase
       .from("ideas")
       .select("id, title")
       .eq("promoted_project_id", id)
       .maybeSingle(),
-  ]);
-  if (!project) notFound();
-
-  // Credentials are visible to Work members (builders own their projects).
-  const canSeeSecrets = canAccess(ctx, "work");
-  const secrets = canSeeSecrets
-    ? (((
-        await ctx.supabase
+    canSeeSecrets
+      ? ctx.supabase
           .from("project_secrets")
           .select("*")
           .eq("project_id", id)
           .order("created_at", { ascending: true })
-      ).data ?? []) as ProjectSecret[])
-    : [];
+      : null,
+  ]);
+  if (!project) notFound();
+
+  const secrets = (secretRows?.data ?? []) as ProjectSecret[];
 
   return (
     <>
