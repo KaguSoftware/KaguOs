@@ -24,12 +24,19 @@ export async function createTask(
   const rawPriority = String(formData.get("priority") ?? "medium") as DebugPriority;
   const priority = PRIORITIES.includes(rawPriority) ? rawPriority : "medium";
   const projectId = String(formData.get("project_id") ?? "").trim() || null;
+  const dueOn = String(formData.get("due_on") ?? "").trim() || null;
+  // The soft suggestion is admin-only — gate it server-side, never trust the form.
+  const suggestedFor = ctx.isAdmin
+    ? String(formData.get("suggested_for") ?? "").trim() || null
+    : null;
 
   const { error } = await ctx.supabase.from("debug_tasks").insert({
     title,
     description: description || null,
     priority,
     project_id: projectId,
+    due_on: dueOn,
+    suggested_for: suggestedFor,
     created_by: ctx.userId,
   });
   if (error) return { ok: false, message: error.message };
@@ -66,7 +73,12 @@ export async function setTaskState(
 /** Edit a task's title / description / priority (RLS restricts who can). */
 export async function updateTask(
   taskId: string,
-  fields: { title: string; description: string; priority: DebugPriority }
+  fields: {
+    title: string;
+    description: string;
+    priority: DebugPriority;
+    due_on?: string | null;
+  }
 ): Promise<ActionResult> {
   const showcaseStop = await blockIfShowcase();
   if (showcaseStop) return showcaseStop;
@@ -81,6 +93,8 @@ export async function updateTask(
       title,
       description: fields.description.trim() || null,
       priority,
+      // Only touch due_on when the caller included it — undefined leaves it as is.
+      ...(fields.due_on !== undefined ? { due_on: fields.due_on || null } : {}),
     })
     .eq("id", taskId);
   if (error) return { ok: false, message: error.message };

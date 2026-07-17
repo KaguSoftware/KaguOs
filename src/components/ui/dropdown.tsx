@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useId, useRef, useState } from "react";
-import { Check, ChevronDown } from "lucide-react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { Check, ChevronDown, Search } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export type DropdownOption = {
@@ -24,6 +24,8 @@ export function Dropdown({
   placeholder = "Choose…",
   className,
   disabled,
+  searchThreshold = 6,
+  searchPlaceholder = "Filter…",
 }: {
   name?: string;
   id?: string;
@@ -34,6 +36,9 @@ export function Dropdown({
   placeholder?: string;
   className?: string;
   disabled?: boolean;
+  /** Show a local filter box once the list is at least this long. 0 disables it. */
+  searchThreshold?: number;
+  searchPlaceholder?: string;
 }) {
   const [open, setOpen] = useState(false);
   const [internal, setInternal] = useState(defaultValue ?? "");
@@ -41,9 +46,25 @@ export function Dropdown({
   const [active, setActive] = useState(() =>
     Math.max(0, options.findIndex((o) => o.value === value))
   );
+  const [query, setQuery] = useState("");
   const rootRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLUListElement>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
   const listboxId = useId();
+
+  const searchable = searchThreshold > 0 && options.length >= searchThreshold;
+
+  // Filter locally on label + hint. Instant, no network — the whole option set
+  // is already in memory.
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return options;
+    return options.filter(
+      (o) =>
+        o.label.toLowerCase().includes(q) ||
+        o.hint?.toLowerCase().includes(q)
+    );
+  }, [options, query]);
 
   const selected = options.find((o) => o.value === value);
 
@@ -69,6 +90,34 @@ export function Dropdown({
     }
   }, [open, active]);
 
+  // Focusing the search box is a DOM side-effect, so it stays in an effect —
+  // but the state resets (query/active) happen in setOpenState below, NOT here,
+  // to avoid a setState-in-effect cascade (react-hooks/set-state-in-effect).
+  useEffect(() => {
+    if (open && searchable) {
+      requestAnimationFrame(() => searchRef.current?.focus());
+    }
+  }, [open, searchable]);
+
+  // Keep the highlighted row valid as the filtered list shrinks/grows. Done
+  // DURING RENDER (tracking the previous length), not in an effect — the same
+  // pattern the rest of the app uses to avoid a stale paint. See HANDOFF perf note.
+  const [seenLen, setSeenLen] = useState(filtered.length);
+  if (seenLen !== filtered.length) {
+    setSeenLen(filtered.length);
+    if (active > filtered.length - 1) setActive(Math.max(0, filtered.length - 1));
+  }
+
+  // Single entry point for open/close so the on-open resets live here, not in an
+  // effect. Opening clears the filter and points the highlight at the selection.
+  function setOpenState(next: boolean) {
+    if (next) {
+      setQuery("");
+      setActive(Math.max(0, options.findIndex((o) => o.value === value)));
+    }
+    setOpen(next);
+  }
+
   function select(option: DropdownOption) {
     setInternal(option.value);
     onChange?.(option.value);
@@ -79,34 +128,41 @@ export function Dropdown({
     if (disabled) return;
     switch (event.key) {
       case "Enter":
-      case " ":
         event.preventDefault();
         if (open) {
-          const option = options[active];
+          const option = filtered[active];
           if (option) select(option);
         } else {
-          setOpen(true);
+          setOpenState(true);
+        }
+        break;
+      case " ":
+        // Space types into the search box when it's focused; only toggles the
+        // menu when we're not searching (otherwise you can't type a space).
+        if (!searchable || !open) {
+          event.preventDefault();
+          setOpenState(!open);
         }
         break;
       case "ArrowDown":
         event.preventDefault();
-        if (!open) setOpen(true);
-        else setActive((i) => Math.min(options.length - 1, i + 1));
+        if (!open) setOpenState(true);
+        else setActive((i) => Math.min(filtered.length - 1, i + 1));
         break;
       case "ArrowUp":
         event.preventDefault();
         if (open) setActive((i) => Math.max(0, i - 1));
         break;
       case "Home":
-        if (open) {
+        if (open && !searchable) {
           event.preventDefault();
           setActive(0);
         }
         break;
       case "End":
-        if (open) {
+        if (open && !searchable) {
           event.preventDefault();
-          setActive(options.length - 1);
+          setActive(filtered.length - 1);
         }
         break;
       case "Escape":
@@ -122,14 +178,13 @@ export function Dropdown({
   }
 
   return (
-    <div ref={rootRef} className={cn("relative", className)}>
+    <div ref={rootRef} className={cn("relative", className)} onKeyDown={onKeyDown}>
       {name && <input type="hidden" name={name} value={value} />}
       <button
         type="button"
         id={id}
         disabled={disabled}
-        onClick={() => setOpen((v) => !v)}
-        onKeyDown={onKeyDown}
+        onClick={() => setOpenState(!open)}
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-controls={open ? listboxId : undefined}
@@ -150,42 +205,67 @@ export function Dropdown({
       </button>
 
       {open && (
-        <ul
-          ref={listRef}
-          id={listboxId}
-          role="listbox"
-          aria-activedescendant={`${listboxId}-${active}`}
-          className="absolute z-10 mt-1 max-h-64 w-full origin-top animate-pop-in overflow-y-auto rounded-md border border-line bg-raised/90 py-1 shadow-lg shadow-black/40 backdrop-blur-md"
-        >
-          {options.map((option, index) => {
-            const isSelected = option.value === value;
-            return (
-              <li
-                key={option.value}
-                id={`${listboxId}-${index}`}
-                role="option"
-                aria-selected={isSelected}
-                onMouseEnter={() => setActive(index)}
-                onMouseDown={(event) => event.preventDefault()}
-                onClick={() => select(option)}
-                className={cn(
-                  "flex cursor-pointer items-center justify-between gap-2 px-3 py-1.5 text-sm",
-                  index === active ? "bg-surface text-ink" : "text-muted"
-                )}
-              >
-                <span className="min-w-0">
-                  <span className="block truncate">{option.label}</span>
-                  {option.hint && (
-                    <span className="block truncate text-xs text-faint">{option.hint}</span>
-                  )}
-                </span>
-                {isSelected && (
-                  <Check className="size-3.5 shrink-0 text-primary-dim" aria-hidden />
-                )}
+        <div className="absolute z-10 mt-1 w-full origin-top animate-pop-in overflow-hidden rounded-md border border-line bg-raised/90 shadow-lg shadow-black/40 backdrop-blur-md">
+          {searchable && (
+            <div className="flex items-center gap-2 border-b border-line px-2.5">
+              <Search className="size-3.5 shrink-0 text-faint" aria-hidden />
+              <input
+                ref={searchRef}
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder={searchPlaceholder}
+                aria-label="Filter options"
+                aria-controls={listboxId}
+                className="h-8 w-full bg-transparent text-sm text-ink placeholder:text-faint focus:outline-none"
+              />
+            </div>
+          )}
+          <ul
+            ref={listRef}
+            id={listboxId}
+            role="listbox"
+            aria-activedescendant={
+              filtered[active] ? `${listboxId}-${active}` : undefined
+            }
+            className="max-h-56 overflow-y-auto py-1"
+          >
+            {filtered.length === 0 && (
+              <li className="px-3 py-2 text-sm text-faint" role="presentation">
+                No matches.
               </li>
-            );
-          })}
-        </ul>
+            )}
+            {filtered.map((option, index) => {
+              const isSelected = option.value === value;
+              return (
+                <li
+                  key={option.value}
+                  id={`${listboxId}-${index}`}
+                  role="option"
+                  aria-selected={isSelected}
+                  onMouseEnter={() => setActive(index)}
+                  onMouseDown={(event) => event.preventDefault()}
+                  onClick={() => select(option)}
+                  className={cn(
+                    "flex cursor-pointer items-center justify-between gap-2 px-3 py-1.5 text-sm",
+                    index === active ? "bg-surface text-ink" : "text-muted"
+                  )}
+                >
+                  <span className="min-w-0">
+                    <span className="block truncate">{option.label}</span>
+                    {option.hint && (
+                      <span className="block truncate text-xs text-faint">
+                        {option.hint}
+                      </span>
+                    )}
+                  </span>
+                  {isSelected && (
+                    <Check className="size-3.5 shrink-0 text-primary-dim" aria-hidden />
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        </div>
       )}
     </div>
   );

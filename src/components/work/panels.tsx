@@ -8,7 +8,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { LinkButton } from "@/components/ui/link-button";
 import { PromoteProgress, VoteControl } from "@/components/work/idea-bits";
 import { FilterBar, useWorkFilters } from "@/components/work/work-filters";
-import { formatDate } from "@/lib/utils";
+import { cn, formatDate } from "@/lib/utils";
 import { optionLabel, PROJECT_TYPE_OPTIONS, SECTOR_OPTIONS } from "@/lib/options";
 import type { IdeaStatus, MembersMap, Project, ProjectStatus } from "@/lib/types";
 
@@ -47,6 +47,40 @@ function statusCounts<T extends { status: string }>(rows: T[]) {
   const map: Record<string, number> = {};
   for (const r of rows) map[r.status] = (map[r.status] ?? 0) + 1;
   return map;
+}
+
+/**
+ * A project's deadline cell. Overdue (past + not done) reads danger; an active
+ * project's live deadline is emphasized over a merely-planned one — a slipping
+ * in-progress project is what the team most needs to see.
+ */
+function ProjectDeadline({
+  dueOn,
+  status,
+}: {
+  dueOn: string | null;
+  status: ProjectStatus;
+}) {
+  if (!dueOn) return <span className="text-faint">—</span>;
+  const today = new Date().toISOString().slice(0, 10);
+  const done = status === "done";
+  const overdue = !done && dueOn < today;
+  const emphasize = status === "active" && !overdue;
+  return (
+    <span
+      className={cn(
+        "font-mono text-xs",
+        overdue
+          ? "text-danger"
+          : emphasize
+            ? "text-ink"
+            : "text-faint"
+      )}
+      title={overdue ? "Overdue" : undefined}
+    >
+      {formatDate(dueOn)}
+    </span>
+  );
 }
 
 // ========================================================================
@@ -153,6 +187,7 @@ export function ProjectsPanel({
                   <th className="px-4 py-2.5 text-xs font-medium text-faint">Project</th>
                   <th className="px-4 py-2.5 text-xs font-medium text-faint">Client</th>
                   <th className="px-4 py-2.5 text-xs font-medium text-faint">Status</th>
+                  <th className="px-4 py-2.5 text-xs font-medium text-faint">Deadline</th>
                   <th className="px-4 py-2.5 text-xs font-medium text-faint">Links</th>
                   <th className="px-4 py-2.5 text-right text-xs font-medium text-faint">
                     Updated
@@ -186,6 +221,12 @@ export function ProjectsPanel({
                     <td className="px-4 py-3 text-muted">{project.client || "—"}</td>
                     <td className="px-4 py-3">
                       <Badge tone={PROJECT_TONE[project.status]}>{project.status}</Badge>
+                    </td>
+                    <td className="px-4 py-3">
+                      <ProjectDeadline
+                        dueOn={project.due_on}
+                        status={project.status}
+                      />
                     </td>
                     <td className="px-4 py-3">
                       <span className="flex gap-2">

@@ -51,6 +51,7 @@ function projectFields(formData: FormData) {
     repo_url: cleanUrl(formData.get("repo_url")),
     prod_url: cleanUrl(formData.get("prod_url")),
     notes: String(formData.get("notes") ?? "").trim() || null,
+    due_on: String(formData.get("due_on") ?? "").trim() || null,
   };
 }
 

@@ -8,6 +8,7 @@ import { PageHeader } from "@/components/shell/page-header";
 import { Panel, PanelHeader } from "@/components/ui/panel";
 import { Badge } from "@/components/ui/badge";
 import {
+  ContactInteractions,
   ContactLinks,
   ContactStatusPicker,
   CONTACT_STATUS_LABEL,
@@ -15,7 +16,7 @@ import {
   DeleteContactButton,
   EditContactPanel,
 } from "@/components/comms/bits";
-import type { Contact, ContactLink } from "@/lib/types";
+import type { Contact, ContactInteraction, ContactLink } from "@/lib/types";
 
 export const metadata: Metadata = { title: "Contact" };
 
@@ -27,19 +28,27 @@ export default async function ContactPage({
   const { id } = await params;
   const ctx = await requireSection("comms");
 
-  const [{ data: contact }, { data: links }, members] = await Promise.all([
-    ctx.supabase.from("contacts").select("*").eq("id", id).maybeSingle(),
-    ctx.supabase
-      .from("contact_links")
-      .select("*")
-      .eq("contact_id", id)
-      .order("created_at", { ascending: true }),
-    getMembersMap(ctx.supabase),
-  ]);
+  const [{ data: contact }, { data: links }, { data: interactions }, members] =
+    await Promise.all([
+      ctx.supabase.from("contacts").select("*").eq("id", id).maybeSingle(),
+      ctx.supabase
+        .from("contact_links")
+        .select("*")
+        .eq("contact_id", id)
+        .order("created_at", { ascending: true }),
+      ctx.supabase
+        .from("contact_interactions")
+        .select("*")
+        .eq("contact_id", id)
+        .order("happened_on", { ascending: false })
+        .order("created_at", { ascending: false }),
+      getMembersMap(ctx.supabase),
+    ]);
   if (!contact) notFound();
 
   const c = contact as Contact;
   const owner = c.owner_id ? members[c.owner_id] : null;
+  const interactionList = (interactions ?? []) as ContactInteraction[];
 
   return (
     <>
@@ -79,6 +88,17 @@ export default async function ContactPage({
           <div className="p-4">
             <EditContactPanel contact={c} />
           </div>
+        </Panel>
+
+        <Panel>
+          <PanelHeader title={`Interactions (${interactionList.length})`} />
+          <ContactInteractions
+            contactId={c.id}
+            interactions={interactionList}
+            members={members}
+            meId={ctx.userId}
+            isAdmin={ctx.isAdmin}
+          />
         </Panel>
 
         <Panel>

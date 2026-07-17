@@ -6,6 +6,7 @@ import { CreateForm } from "@/components/ui/create";
 import { Input, Textarea } from "@/components/ui/input";
 import { Field } from "@/components/ui/field";
 import { Dropdown } from "@/components/ui/dropdown";
+import { DatePicker } from "@/components/ui/date-picker";
 import { UrlInput } from "@/components/ui/typed-inputs";
 import { PROJECT_TYPE_OPTIONS, SECTOR_OPTIONS } from "@/lib/options";
 
@@ -75,6 +76,11 @@ export function NewProjectForm() {
         </Field>
         <Field label="Production URL" htmlFor="project-prod">
           <UrlInput id="project-prod" name="prod_url" placeholder="example.com" />
+        </Field>
+      </div>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Field label="Deadline" htmlFor="project-due" hint="Optional target date.">
+          <DatePicker id="project-due" name="due_on" placeholder="No deadline" />
         </Field>
       </div>
       <Field label="Notes" htmlFor="project-notes">

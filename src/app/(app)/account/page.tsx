@@ -5,13 +5,25 @@ import { Panel, PanelHeader } from "@/components/ui/panel";
 import { NameForm, PasswordForm } from "@/components/account/account-forms";
 import { MyColorForm } from "@/components/account/color-form";
 import { Badge } from "@/components/ui/badge";
-import { defaultColorKey } from "@/lib/colors";
+import { defaultColorKey, memberColorCss } from "@/lib/colors";
 import { SECTION_LABELS, type Section } from "@/lib/types";
 
 export const metadata: Metadata = { title: "Account" };
 
 export default async function AccountPage() {
   const ctx = await getSessionContext();
+
+  // Everyone else's colors, so you can pick something that stands apart.
+  const { data: others } = await ctx.supabase
+    .from("profiles")
+    .select("id, full_name, email, color")
+    .neq("id", ctx.profile.id);
+
+  const teamColors = (others ?? []).map((p) => ({
+    id: p.id,
+    name: p.full_name || p.email,
+    css: memberColorCss(p.id, p.color),
+  }));
 
   return (
     <>
@@ -25,6 +37,7 @@ export default async function AccountPage() {
           <PanelHeader title="Your color" />
           <MyColorForm
             current={ctx.profile.color ?? defaultColorKey(ctx.profile.id)}
+            teamColors={teamColors}
           />
         </Panel>
         <Panel>

@@ -7,6 +7,7 @@ import { SubmitButton } from "@/components/ui/button";
 import { Input, Textarea } from "@/components/ui/input";
 import { Field } from "@/components/ui/field";
 import { Dropdown } from "@/components/ui/dropdown";
+import { DatePicker } from "@/components/ui/date-picker";
 import { UrlInput } from "@/components/ui/typed-inputs";
 import { PROJECT_STATUS_OPTIONS } from "@/components/work/new-project-form";
 import { PROJECT_TYPE_OPTIONS, SECTOR_OPTIONS } from "@/lib/options";
@@ -70,7 +71,7 @@ export function EditProjectForm({ project }: { project: Project }) {
           />
         </Field>
       </div>
-      <div className="grid gap-4 sm:grid-cols-3">
+      <div className="grid gap-4 sm:grid-cols-2">
         <Field label="Status" htmlFor="project-status">
           <Dropdown
             id="project-status"
@@ -79,6 +80,20 @@ export function EditProjectForm({ project }: { project: Project }) {
             options={PROJECT_STATUS_OPTIONS}
           />
         </Field>
+        <Field
+          label="Deadline"
+          htmlFor="project-due"
+          hint="Optional — target date for this project."
+        >
+          <DatePicker
+            id="project-due"
+            name="due_on"
+            defaultValue={project.due_on ?? ""}
+            placeholder="No deadline"
+          />
+        </Field>
+      </div>
+      <div className="grid gap-4 sm:grid-cols-2">
         <Field label="Repo URL" htmlFor="project-repo">
           <UrlInput
             id="project-repo"

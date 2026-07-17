@@ -6,6 +6,7 @@ import { CreateForm } from "@/components/ui/create";
 import { Input, Textarea } from "@/components/ui/input";
 import { Field } from "@/components/ui/field";
 import { Dropdown } from "@/components/ui/dropdown";
+import { DatePicker } from "@/components/ui/date-picker";
 
 const PRIORITY_OPTIONS = [
   { value: "low", label: "Low", hint: "Whenever someone gets to it" },
@@ -16,8 +17,11 @@ const PRIORITY_OPTIONS = [
 
 export function NewTaskForm({
   projects,
+  memberOptions,
 }: {
   projects: { id: string; name: string }[];
+  /** People an admin can suggest for the task. Empty for non-admins. */
+  memberOptions: { value: string; label: string }[];
 }) {
   const router = useRouter();
 
@@ -58,6 +62,33 @@ export function NewTaskForm({
             options={PRIORITY_OPTIONS}
           />
         </Field>
+      </div>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Field
+          label="Deadline"
+          htmlFor="task-due"
+          hint="Optional — when this should be done by."
+        >
+          <DatePicker id="task-due" name="due_on" placeholder="No deadline" />
+        </Field>
+        {memberOptions.length > 0 && (
+          <Field
+            label="Suggest for"
+            htmlFor="task-suggested"
+            hint="A nudge, not a claim — anyone can still pick it up."
+          >
+            <Dropdown
+              id="task-suggested"
+              name="suggested_for"
+              defaultValue=""
+              placeholder="No suggestion"
+              options={[
+                { value: "", label: "No suggestion" },
+                ...memberOptions,
+              ]}
+            />
+          </Field>
+        )}
       </div>
       <Field
         label="Details"

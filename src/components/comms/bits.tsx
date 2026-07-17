@@ -2,12 +2,22 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { ExternalLink, Trash2 } from "lucide-react";
+import {
+  ExternalLink,
+  Mail,
+  MessageSquare,
+  Phone,
+  StickyNote,
+  Trash2,
+  Users,
+} from "lucide-react";
 import {
   addContactLink,
   createContact,
   deleteContact,
   deleteContactLink,
+  deleteInteraction,
+  logInteraction,
   setContactStatus,
   updateContact,
 } from "@/lib/actions/comms";
@@ -15,16 +25,36 @@ import { CreateForm } from "@/components/ui/create";
 import { Field } from "@/components/ui/field";
 import { Input, Textarea } from "@/components/ui/input";
 import { Dropdown } from "@/components/ui/dropdown";
+import { DatePicker } from "@/components/ui/date-picker";
 import { Badge, type BadgeTone } from "@/components/ui/badge";
 import { Button, ConfirmButton } from "@/components/ui/button";
 import { EmailInput, UrlInput } from "@/components/ui/typed-inputs";
 import { useAction } from "@/lib/use-action";
+import { formatDate } from "@/lib/utils";
 import type {
   Contact,
+  ContactInteraction,
   ContactKind,
   ContactLink,
   ContactStatus,
+  InteractionKind,
+  MembersMap,
 } from "@/lib/types";
+
+const INTERACTION_META: Record<
+  InteractionKind,
+  { label: string; icon: typeof Phone }
+> = {
+  call: { label: "Call", icon: Phone },
+  email: { label: "Email", icon: Mail },
+  meeting: { label: "Meeting", icon: Users },
+  message: { label: "Message", icon: MessageSquare },
+  note: { label: "Note", icon: StickyNote },
+};
+
+const INTERACTION_OPTIONS = (
+  Object.keys(INTERACTION_META) as InteractionKind[]
+).map((k) => ({ value: k, label: INTERACTION_META[k].label }));
 
 export const CONTACT_STATUS_LABEL: Record<ContactStatus, string> = {
   new: "New",
@@ -328,6 +358,138 @@ export function ContactLinks({
       ) : (
         <Button variant="ghost" size="sm" className="mt-2" onClick={() => setAdding(true)}>
           Add link
+        </Button>
+      )}
+    </div>
+  );
+}
+
+export function ContactInteractions({
+  contactId,
+  interactions,
+  members,
+  meId,
+  isAdmin,
+}: {
+  contactId: string;
+  interactions: ContactInteraction[];
+  members: MembersMap;
+  meId: string;
+  isAdmin: boolean;
+}) {
+  const router = useRouter();
+  const { pending, run } = useAction();
+  const [adding, setAdding] = useState(false);
+
+  return (
+    <div className="p-4">
+      {interactions.length === 0 && !adding ? (
+        <p className="py-2 text-[13px] text-faint">
+          No interactions logged yet — record the first call, email, or meeting.
+        </p>
+      ) : (
+        <ol className="space-y-3">
+          {interactions.map((it) => {
+            const meta = INTERACTION_META[it.kind];
+            const Icon = meta.icon;
+            const who = it.created_by ? members[it.created_by] : null;
+            const canDelete = isAdmin || it.created_by === meId;
+            return (
+              <li key={it.id} className="flex gap-3">
+                <span
+                  className="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-full border border-line text-faint"
+                  aria-hidden
+                >
+                  <Icon className="size-3.5" />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-xs text-faint">
+                      <span className="font-medium text-muted">{meta.label}</span>
+                      {" · "}
+                      {formatDate(it.happened_on)}
+                      {who && (
+                        <>
+                          {" · "}
+                          <span style={{ color: who.color }}>{who.name}</span>
+                        </>
+                      )}
+                    </p>
+                    {canDelete && (
+                      <button
+                        type="button"
+                        disabled={pending}
+                        onClick={() =>
+                          run(() => deleteInteraction(it.id, contactId), {
+                            success: "Interaction removed.",
+                            onSuccess: () => router.refresh(),
+                          })
+                        }
+                        title="Delete"
+                        aria-label="Delete interaction"
+                        className="text-faint transition-colors duration-150 hover:text-danger disabled:opacity-50"
+                      >
+                        <Trash2 className="size-3.5" aria-hidden />
+                      </button>
+                    )}
+                  </div>
+                  <p className="mt-0.5 max-w-[70ch] whitespace-pre-wrap text-sm text-ink">
+                    {it.summary}
+                  </p>
+                </div>
+              </li>
+            );
+          })}
+        </ol>
+      )}
+
+      {adding ? (
+        <form
+          className="mt-3 space-y-2 rounded-md border border-line bg-surface p-3"
+          onSubmit={(e) => {
+            e.preventDefault();
+            const fd = new FormData(e.currentTarget);
+            run(() => logInteraction(contactId, fd), {
+              success: "Interaction logged.",
+              onSuccess: () => {
+                setAdding(false);
+                router.refresh();
+              },
+            });
+          }}
+        >
+          <div className="flex flex-wrap gap-2">
+            <Dropdown
+              name="kind"
+              defaultValue="call"
+              options={INTERACTION_OPTIONS}
+              className="w-36"
+            />
+            <DatePicker name="happened_on" placeholder="Today" className="w-40" />
+          </div>
+          <Textarea
+            name="summary"
+            rows={3}
+            placeholder="What happened? (agreed scope, sent quote, left voicemail…)"
+            autoFocus
+          />
+          <div className="flex justify-end gap-2">
+            <Button type="button" variant="ghost" size="sm" onClick={() => setAdding(false)}>
+              Cancel
+            </Button>
+            <Button type="submit" variant="primary" size="sm" disabled={pending}>
+              Log it
+            </Button>
+          </div>
+        </form>
+      ) : (
+        <Button
+          variant="ghost"
+          size="sm"
+          className="mt-2"
+          onClick={() => setAdding(true)}
+        >
+          Log an interaction
         </Button>
       )}
     </div>

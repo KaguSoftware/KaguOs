@@ -7,12 +7,18 @@ import { setUserColor } from "@/lib/actions/admin";
 import { ColorPicker } from "@/components/ui/color-picker";
 import { cn } from "@/lib/utils";
 
-export function MyColorForm({ current }: { current: string | null }) {
+export function MyColorForm({
+  current,
+  teamColors = [],
+}: {
+  current: string | null;
+  teamColors?: { id: string; name: string; css: string }[];
+}) {
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
 
   return (
-    <div className="space-y-2 p-4">
+    <div className="space-y-3 p-4">
       <ColorPicker
         value={current}
         disabled={pending}
@@ -30,6 +36,28 @@ export function MyColorForm({ current }: { current: string | null }) {
           {error ?? "Your name shows in this color everywhere — tasks you claim, comments, progress."}
         </p>
       </div>
+
+      {teamColors.length > 0 && (
+        <div className="border-t border-line pt-3">
+          <p className="mb-2 text-xs text-faint">
+            Taken by the team — pick something that stands apart:
+          </p>
+          <ul className="flex flex-wrap gap-x-4 gap-y-1.5">
+            {teamColors.map((m) => (
+              <li key={m.id} className="flex items-center gap-1.5">
+                <span
+                  className="size-2.5 shrink-0 rounded-full"
+                  style={{ backgroundColor: m.css }}
+                  aria-hidden
+                />
+                <span className="text-[13px]" style={{ color: m.css }}>
+                  {m.name}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
     </div>
   );
 }

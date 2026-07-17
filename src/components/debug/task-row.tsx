@@ -13,6 +13,7 @@ import { Badge, type BadgeTone } from "@/components/ui/badge";
 import { Button, ConfirmButton } from "@/components/ui/button";
 import { Input, Textarea } from "@/components/ui/input";
 import { Dropdown } from "@/components/ui/dropdown";
+import { DatePicker } from "@/components/ui/date-picker";
 import { useAction } from "@/lib/use-action";
 import { cn, formatDate } from "@/lib/utils";
 import type { DebugPriority, DebugState, DebugTask, MembersMap } from "@/lib/types";
@@ -63,16 +64,31 @@ export function TaskRow({
     title: task.title,
     description: task.description ?? "",
     priority: task.priority as DebugPriority,
+    due_on: task.due_on ?? "",
   });
 
   const mine = task.assignee_id === meId;
   const canDelete = isAdmin || task.created_by === meId;
+
+  // A deadline is "overdue" only while the task is still open. Compare on the
+  // date string (YYYY-MM-DD) so it's timezone-agnostic — matches how due_on is
+  // stored (a plain date, no time).
+  const today = new Date().toISOString().slice(0, 10);
+  const overdue =
+    task.due_on != null && task.state !== "done" && task.due_on < today;
+  // Show the suggestion only while nobody has claimed it — once claimed, the
+  // assignee is the truth and the nudge is noise.
+  const suggested =
+    task.suggested_for && !task.assignee_id
+      ? members[task.suggested_for]
+      : null;
 
   function saveEdit() {
     const patch = {
       title: draft.title.trim() || task.title,
       description: draft.description.trim() || null,
       priority: draft.priority,
+      due_on: draft.due_on || null,
     };
     const before = { ...task };
     run(() => updateTask(task.id, draft), {
@@ -129,10 +145,22 @@ export function TaskRow({
                 </span>
               </>
             )}
+            {suggested && (
+              <>
+                {" · suggested for "}
+                <span style={{ color: suggested.color }}>{suggested.name}</span>
+              </>
+            )}
           </span>
         </button>
 
         {projectName && <Badge tone="info">{projectName}</Badge>}
+        {task.due_on && (
+          <Badge tone={overdue ? "danger" : "faint"}>
+            {overdue ? "Overdue " : "Due "}
+            {formatDate(task.due_on)}
+          </Badge>
+        )}
         <Badge tone={PRIORITY_TONE[task.priority]}>{task.priority}</Badge>
 
         {/* One-click state switch */}
@@ -218,6 +246,7 @@ export function TaskRow({
                   title: task.title,
                   description: task.description ?? "",
                   priority: task.priority,
+                  due_on: task.due_on ?? "",
                 });
                 setEditing(true);
               }}
@@ -268,6 +297,14 @@ export function TaskRow({
               value={draft.priority}
               options={PRIORITY_OPTIONS}
               onChange={(v) => setDraft((d) => ({ ...d, priority: v as DebugPriority }))}
+            />
+            <DatePicker
+              key={task.id}
+              name="due_on"
+              className="w-40"
+              defaultValue={task.due_on ?? ""}
+              placeholder="No deadline"
+              onChange={(iso) => setDraft((d) => ({ ...d, due_on: iso }))}
             />
             <div className="ml-auto flex gap-2">
               <Button variant="ghost" size="sm" onClick={() => setEditing(false)}>

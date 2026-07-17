@@ -4,9 +4,12 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { blockIfShowcase, requireSection } from "@/lib/data/session";
 import type { ActionResult } from "@/lib/actions/account";
-import type { ContactKind, ContactStatus } from "@/lib/types";
+import type { ContactKind, ContactStatus, InteractionKind } from "@/lib/types";
 
 const KINDS: ContactKind[] = ["lead", "client"];
+const INTERACTION_KINDS: InteractionKind[] = [
+  "call", "email", "meeting", "message", "note",
+];
 const STATUSES: ContactStatus[] = [
   "new", "contacted", "negotiating", "won", "lost", "active", "dormant",
 ];
@@ -156,4 +159,51 @@ export async function deleteContactLink(
 
   revalidatePath(`/comms/${contactId}`);
   return { ok: true, message: "Link deleted." };
+}
+
+export async function logInteraction(
+  contactId: string,
+  formData: FormData
+): Promise<ActionResult> {
+  const showcaseStop = await blockIfShowcase();
+  if (showcaseStop) return showcaseStop;
+  const ctx = await requireSection("comms");
+
+  const summary = str(formData.get("summary"), 2000);
+  if (!summary) return { ok: false, message: "Say what happened." };
+
+  const rawKind = String(formData.get("kind") ?? "note") as InteractionKind;
+  const kind = INTERACTION_KINDS.includes(rawKind) ? rawKind : "note";
+  // Blank date → today (the column default). A future date is allowed (logging a
+  // scheduled touch is a valid use), so we don't clamp it.
+  const happenedOn = str(formData.get("happened_on")) || null;
+
+  const { error } = await ctx.supabase.from("contact_interactions").insert({
+    contact_id: contactId,
+    kind,
+    summary,
+    ...(happenedOn ? { happened_on: happenedOn } : {}),
+    created_by: ctx.userId,
+  });
+  if (error) return { ok: false, message: error.message };
+
+  revalidatePath(`/comms/${contactId}`);
+  return { ok: true, message: "Interaction logged." };
+}
+
+export async function deleteInteraction(
+  interactionId: string,
+  contactId: string
+): Promise<ActionResult> {
+  const showcaseStop = await blockIfShowcase();
+  if (showcaseStop) return showcaseStop;
+  const ctx = await requireSection("comms");
+  const { error } = await ctx.supabase
+    .from("contact_interactions")
+    .delete()
+    .eq("id", interactionId);
+  if (error) return { ok: false, message: error.message };
+
+  revalidatePath(`/comms/${contactId}`);
+  return { ok: true, message: "Interaction removed." };
 }

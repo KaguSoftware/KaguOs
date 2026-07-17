@@ -61,6 +61,57 @@ Contracts w/ PDFs), **Debug** (everyone: per-project boards, self-claim-only, re
 
 ## Current status (2026-07-17)
 
+### 🧭 WORK/IDEAS PIPELINE + CROSS-SECTION POLISH (2026-07-17) — BUILT + STATICALLY VERIFIED, live-drive by Parsa pending
+One session, ~905 lines across 20 files + **3 migrations (0020, 0021, 0022 — all APPLIED to prod via the
+Management API helper + schema-verified)**. Green: `tsc`, lint (no NEW issues — the same 2 pre-existing
+errors in create.tsx + command-palette.tsx remain), `check:demo` (72 reads, all filtered), `npm run build`
+(all routes). **NOT driven at runtime by Claude** — Parsa verifies live because the dev server points at
+prod and several flows write real rows / fan out to real teammates (see ⚠️ below). What shipped:
+
+- **Ideas → real decision pipeline.** Votes gained a **value** (`idea_votes.value` ±1) — up/down, not
+  upvote-only; `VoteControl` in idea-bits.tsx is a compact ▲·net·▼ segment, optimistic (adopts server
+  truth during render, same anti-flash pattern as the rest of the app). **Unanimous auto-promote**: an
+  idea snapshots `required_count` (everyone with Work access = admins ∪ `work` members) at post time —
+  **frozen so later joiners can't un-pass it** — and when upvotes reach it with **zero downvotes** (a
+  downvote is a veto) and `required_count ≥ 2`, `setVote` calls the shared `promoteIdeaCore` and returns
+  `promotedProjectId` so the client routes to the new project. `PromoteProgress` shows "6 / 8 to promote"
+  or "Blocked — N vetoes". Denominator via `public.work_access_count()` (thin wrapper over
+  `private.work_access_count()`, SECURITY DEFINER — PostgREST only exposes `public`). Ideas also gained a
+  `stage` column (open→discussing→accepted→promoted/rejected) and `status` widened to include `rejected` —
+  **stage funnel UI is Phase 2, columns exist now**.
+- **Work filters + sort** (`work/work-filters.tsx`): URL-backed (`?p_status=…`, `?i_sort=…` — each tab
+  namespaces its params so both coexist), client-side (panels already hold every row), on BOTH Projects &
+  Ideas. Search, status chips w/ counts, sector/type, mine/anyone, sort. **panels.tsx is now `"use client"`**
+  (was server) — it owns the filter state; page.tsx passes rows + `currentUserId`.
+- **Dropdown gained a local search box** past `searchThreshold` (default 6) — filters label+hint, keyboard
+  nav preserved, resets on open. App-wide primitive, so every long dropdown benefits. ⚠️ The two on-open
+  state resets live in `setOpenState` (NOT an effect) and the clamp is during-render — done deliberately to
+  avoid `react-hooks/set-state-in-effect` (my first pass tripped it; fixed).
+- **Debug**: admin **soft "suggest for"** at create (`debug_tasks.suggested_for`, admin-gated SERVER-SIDE
+  in createTask — does NOT claim, shows "suggested for X" only while unclaimed; RLS already allowed it).
+  **Deadlines** (`debug_tasks.due_on`) — create + inline edit + overdue styling (past + not done → danger).
+  Richer board **filter/sort**: assignee (only people holding a task + unassigned), priority, task search,
+  sort (smart/priority/deadline/newest). **Board-tab search** when ≥8 project boards.
+- **Projects**: `projects.due_on` — picker on create/edit + a Deadline column (emphasized for `active`,
+  danger when overdue).
+- **Comms interactions log** (new table `contact_interactions`, migration 0022): call/email/meeting/message/
+  note timeline per contact (`ContactInteractions` in comms/bits.tsx), + **"last interaction" (date + summary)**
+  on the contact list — one extra query in the existing wave, reduced to newest-per-contact in JS. Mirrors
+  contact_links RLS + showcase-aware select + is_demo; added to check:demo's DEMOABLE list.
+- **Account**: team-color legend — shows every OTHER member's name in their color so you pick a unique one
+  (color-form.tsx `MyColorForm` gained `teamColors`, account page fetches profiles ≠ me).
+- **Announcement hero**: admin **Edit** (Pencil — pre-fills body+tone into the composer; posting replaces
+  the active one since postAnnouncement retires-then-inserts) alongside New (+) and Retire (X).
+
+⚠️ **WHY CLAUDE DIDN'T LIVE-DRIVE IT (read before "just verify it").** Dev server → prod Supabase. Writes
+that would hit real data / real people if driven: auto-promote **creates a project + `notifySection('work')`
+fans out to real teammate accounts** (the exact lesson from the Learn overhaul — notify fan-out reaches real
+accounts from a dev drive); logging interactions / posting-editing announcements / creating debug tasks all
+write real rows; announcements fan out to everyone. Safe ways to verify: (a) Parsa clicks through live
+(chosen), (b) showcase mode for DISPLAY paths only — it's read-only and `blockIfShowcase` stops every write,
+so voting/logging/auto-promote can't be exercised there. If a future session must drive writes, plant rows
+with the service client and DON'T trigger notify fan-out.
+
 ### 🎓 LEARN OVERHAUL (2026-07-17) — authoring flow + visuals rebuilt, VERIFIED end-to-end
 Parsa: "insanely hard to build new things as an admin, visuals bad." Agreed in plan mode, built,
 then verified against prod with two throwaway users (created + deleted the same session; all
@@ -333,7 +384,12 @@ volume. They're insurance, not a speedup.
   Work + Management; Marketing predates it and uses its own `marketing/workspace.tsx` (same pattern).
 - `src/components/<section>/*` + `src/app/(app)/<section>/…` — per-section UI/pages. **Tabbed
   sections are single pages that fetch every tab's data up front and switch client-side:**
-  - Work → `work/page.tsx` + `work/panels.tsx` (Projects/Ideas). `/work/ideas` → `/work?tab=ideas`.
+  - Work → `work/page.tsx` + `work/panels.tsx` (Projects/Ideas — **now `"use client"`, owns filter state**)
+    + `work/work-filters.tsx` (URL-backed filter bar + `useWorkFilters` hook, shared by both tabs)
+    + `work/idea-bits.tsx` (`VoteControl` up/down, `PromoteProgress` bar, IdeaActions). `/work/ideas` →
+    `/work?tab=ideas`. Auto-promote lives in `lib/actions/work.ts` (`setVote` → `maybeAutoPromote` →
+    `promoteIdeaCore`, shared with the manual `promoteIdea`). `work_access_count()` = the unanimous
+    denominator (public wrapper over private, both in 0020).
   - Management → `management/finance/page.tsx` + `management/panels.tsx` (Finance/Contracts).
     `/management` → `/management/finance`; `/management/contracts` → `…finance?tab=contracts`.
   - Marketing → `marketing/page.tsx` + `marketing/workspace.tsx` (Campaigns/Content/Links).
@@ -384,8 +440,13 @@ redesign, empty-state CTAs (a–c, f from the old list); **DB/save latency pass 
 1. Disable "Allow new users to sign up" in Supabase dashboard (Auth → Sign In / Up).
 0. ⚠️ **push migration 0012** (`npx supabase db push`) — widens project_secrets RLS to Work members
    (0011 shipped it Management-gated; Parsa moved it to Work). 0011 already applied.
-2. **Communications / CRM section** — leads + clients, status, links to everything tied to them.
-   (New section: table + RLS + CRUD + nav entry. NOT started — the one remaining buildable feature.)
+2. ~~Communications / CRM section~~ — DONE (leads/clients + linked resources, 0013). **2026-07-17: added
+   an interactions log (0022) + "last interaction" on the list.**
+2b. **Ideas pipeline Phase 2/3 (agreed w/ Parsa 2026-07-17, "far more than the minimum")** — the up/down +
+   unanimous auto-promote + filters shipped; NEXT: stage funnel UI (the `stage` col + `rejected` status
+   already exist), reactions (🤔 needs-discussion / 🔥 love-it), effort×impact tags + a quick-wins sort,
+   duplicate/merge, auto-archive stale ideas, a "needs your vote" nudge (critical — unanimous is
+   unreachable if people forget to vote), and a weekly digest via `notifySection`. See the scope ledger.
 3. ~~Project credentials store~~ — DONE (project detail page; now **Work-gated**, migrations 0011+0012).
    Everyone in Work sees/manages per-project credentials.
 4. **Loading/perf strategy — AGREED (2026-07-16), partly shipped.** The app is already the hybrid
@@ -413,8 +474,10 @@ surface; run `/impeccable audit` after the batch (design hook was silenced after
 | Notifications | in-app center (done) | Telegram bot later | later |
 | Reminders | personal + team, DB-backed (done) | — | — |
 | Editing | tasks/ideas/projects inline (done) | — | — |
-| Comms/CRM | none | leads/clients + linked resources | next (roadmap 2) |
-| Project creds | none | plaintext RLS-gated accounts store | next (roadmap 3) |
+| Ideas pipeline | up/down votes, unanimous auto-promote, "N to promote" bar, filters (done) | **stage funnel UI (open→discussing→accepted; cols exist), reactions (🤔/🔥), effort×impact + quick-wins sort, dedupe/merge, auto-archive stale, "needs your vote" nudge, weekly digest** | Phase 2/3 (Parsa's "far more" — agreed, not yet built) |
+| Comms interactions | log per contact + last-interaction on list (done) | analytics / follow-up reminders | later |
+| Comms/CRM | leads/clients + linked resources (done) | — | — |
+| Project creds | plaintext RLS-gated accounts store (done) | — | — |
 | Showcase mode | none | fake-data demo mode w/ re-auth exit | deferred, needs design (4) |
 | Invites | admin sets temp password | email invites via SMTP | when SMTP exists |
 | Roles | membership + global admin | per-section roles (Learn owner) | when needed |
@@ -430,6 +493,16 @@ surface; run `/impeccable audit` after the batch (design hook was silenced after
   company-wide outage that looked like "no data." **STILL UNFIXED (roadmap 0).** When touching any
   list page, check `error` and surface it. This is the single biggest reason a schema/migration slip
   is hard to diagnose here.
+- ⚠️ **Idea auto-promote fans out to real teammates.** `setVote`→`maybeAutoPromote` calls
+  `notifySection('work')` and creates a real project the instant an idea goes unanimous. It's gated behind
+  `!ctx.showcase` (demo ideas never auto-promote) and `required_count ≥ 2`, but on real data a single vote
+  that completes the set WILL notify everyone and mint a project. Don't trigger it from a dev test drive
+  against prod — that's a real fan-out. The `required_count` is a snapshot from post time (not live), so a
+  roster change doesn't move the bar retroactively.
+- ⚠️ **Migrations 0020/0021/0022 applied via the Management API helper** (`scripts/apply-migration.mjs` —
+  parses `SUPABASE_ACCESS_TOKEN` from `.env.local`, no dotenv dep; `scripts/verify-0020.sql` checks all
+  three landed). CLI `db push` history does NOT know about them unless repaired — same situation as 0017/0018.
+  If you `db push` later and it complains, `migration repair --status applied 0020 0021 0022`.
 - Secrets only in `.env.local` + Vercel env. Access token + service key were pasted in chat —
   rotate anytime in dashboard.
 - `db push` needs `$env:SUPABASE_ACCESS_TOKEN` set and pipes `"Y"`; Docker warning is harmless.

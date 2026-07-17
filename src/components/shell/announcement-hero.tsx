@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Megaphone, Plus, X } from "lucide-react";
+import { Megaphone, Pencil, Plus, X } from "lucide-react";
 import {
   dismissAnnouncement,
   postAnnouncement,
@@ -55,6 +55,20 @@ export function AnnouncementHero({
         router.refresh();
       },
     });
+  }
+
+  // Open the composer pre-filled with the current announcement (edit), or blank
+  // (new). Posting replaces the active one either way — postAnnouncement retires
+  // the old on insert — so "edit" is just compose-with-a-head-start.
+  function openComposer(prefill: boolean) {
+    if (prefill && announcement) {
+      setBody(announcement.body);
+      setTone(announcement.tone);
+    } else {
+      setBody("");
+      setTone("info");
+    }
+    setComposing(true);
   }
 
   // Nothing to show and no reason to offer composing → render nothing.
@@ -118,7 +132,7 @@ export function AnnouncementHero({
     return (
       <button
         type="button"
-        onClick={() => setComposing(true)}
+        onClick={() => openComposer(false)}
         className="mb-6 flex w-full items-center gap-2 rounded-lg border border-dashed border-line px-4 py-2.5 text-[13px] text-faint transition-colors duration-150 hover:border-line-strong hover:text-muted"
       >
         <Plus className="size-3.5" aria-hidden />
@@ -145,8 +159,18 @@ export function AnnouncementHero({
         <div className="flex shrink-0 items-center gap-1">
           <button
             type="button"
-            onClick={() => setComposing(true)}
-            title="Replace"
+            onClick={() => openComposer(true)}
+            title="Edit"
+            aria-label="Edit announcement"
+            className="rounded p-1 text-faint transition-colors hover:text-ink"
+          >
+            <Pencil className="size-3.5" aria-hidden />
+          </button>
+          <button
+            type="button"
+            onClick={() => openComposer(false)}
+            title="New announcement"
+            aria-label="New announcement"
             className="rounded p-1 text-faint transition-colors hover:text-ink"
           >
             <Plus className="size-3.5" aria-hidden />
@@ -161,6 +185,7 @@ export function AnnouncementHero({
               })
             }
             title="Retire"
+            aria-label="Retire announcement"
             className="rounded p-1 text-faint transition-colors hover:text-danger"
           >
             <X className="size-3.5" aria-hidden />

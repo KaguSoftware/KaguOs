@@ -21,14 +21,14 @@
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 
-/** Tables carrying an is_demo column (0014 + 0016). Keep in sync with those migrations. */
+/** Tables carrying an is_demo column (0014 + 0016 + 0022). Keep in sync with those migrations. */
 const DEMOABLE = [
   "projects", "ideas", "debug_tasks", "transactions", "recurring_items",
   "marketing_campaigns", "marketing_posts", "contacts", "contracts",
   "idea_comments", "idea_votes", "project_secrets", "contact_links",
   "marketing_items", "sprints", "sprint_resources", "sprint_participants",
   "sprint_goals", "sprint_goal_progress", "sprint_questions",
-  "sprint_question_replies",
+  "sprint_question_replies", "contact_interactions",
 ];
 
 /**

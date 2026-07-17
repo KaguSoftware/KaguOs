@@ -49,6 +49,8 @@ export type Project = {
   repo_url: string | null;
   prod_url: string | null;
   notes: string | null;
+  /** Optional deadline (date only) — surfaced on active projects. */
+  due_on: string | null;
   created_by: string | null;
   created_at: string;
   updated_at: string;
@@ -202,6 +204,10 @@ export type DebugTask = {
   priority: DebugPriority;
   project_id: string | null;
   assignee_id: string | null;
+  /** Admin's soft suggestion of who should take this — does NOT claim it. */
+  suggested_for: string | null;
+  /** Optional deadline (date only). */
+  due_on: string | null;
   created_by: string | null;
   created_at: string;
   updated_at: string;
@@ -330,6 +336,18 @@ export type ContactLink = {
   label: string;
   url: string | null;
   note: string | null;
+  created_by: string | null;
+  created_at: string;
+};
+
+export type InteractionKind = "call" | "email" | "meeting" | "message" | "note";
+
+export type ContactInteraction = {
+  id: string;
+  contact_id: string;
+  happened_on: string;
+  kind: InteractionKind;
+  summary: string;
   created_by: string | null;
   created_at: string;
 };

@@ -16,16 +16,36 @@ export const metadata: Metadata = { title: "Comms" };
 export default async function CommsPage() {
   const ctx = await requireSection("comms");
 
-  const [{ data: contacts }, members] = await Promise.all([
-    ctx.supabase
-      .from("contacts")
-      .select("*")
-      .eq("is_demo", ctx.showcase)
-      .order("updated_at", { ascending: false }),
-    getMembersMap(ctx.supabase),
-  ]);
+  const [{ data: contacts }, { data: interactions }, members] =
+    await Promise.all([
+      ctx.supabase
+        .from("contacts")
+        .select("*")
+        .eq("is_demo", ctx.showcase)
+        .order("updated_at", { ascending: false }),
+      // Every interaction, newest-first — reduced below to the latest per contact.
+      // One extra query in the existing wave (~3ms), not a per-row round-trip.
+      ctx.supabase
+        .from("contact_interactions")
+        .select("contact_id, happened_on, summary")
+        .eq("is_demo", ctx.showcase)
+        .order("happened_on", { ascending: false })
+        .order("created_at", { ascending: false }),
+      getMembersMap(ctx.supabase),
+    ]);
 
   const rows = (contacts ?? []) as Contact[];
+  // First seen wins because the query is already sorted newest-first.
+  const lastByContact = new Map<string, { happened_on: string; summary: string }>();
+  for (const it of interactions ?? []) {
+    if (!lastByContact.has(it.contact_id)) {
+      lastByContact.set(it.contact_id, {
+        happened_on: it.happened_on,
+        summary: it.summary,
+      });
+    }
+  }
+
   const leads = rows.filter((c) => c.kind === "lead");
   const clients = rows.filter((c) => c.kind === "client");
 
@@ -58,8 +78,18 @@ export default async function CommsPage() {
         </div>
       ) : (
         <div className="grid gap-6">
-          <ContactGroup title="Leads" contacts={leads} members={members} />
-          <ContactGroup title="Clients" contacts={clients} members={members} />
+          <ContactGroup
+            title="Leads"
+            contacts={leads}
+            members={members}
+            lastByContact={lastByContact}
+          />
+          <ContactGroup
+            title="Clients"
+            contacts={clients}
+            members={members}
+            lastByContact={lastByContact}
+          />
         </div>
       )}
     </>
@@ -70,10 +100,12 @@ function ContactGroup({
   title,
   contacts,
   members,
+  lastByContact,
 }: {
   title: string;
   contacts: Contact[];
   members: Record<string, { name: string; color: string }>;
+  lastByContact: Map<string, { happened_on: string; summary: string }>;
 }) {
   if (contacts.length === 0) return null;
   return (
@@ -85,6 +117,7 @@ function ContactGroup({
         <ul className="divide-y divide-line">
           {contacts.map((c) => {
             const owner = c.owner_id ? members[c.owner_id] : null;
+            const last = lastByContact.get(c.id);
             return (
               <li key={c.id}>
                 <Link
@@ -108,7 +141,20 @@ function ContactGroup({
                       )}
                     </p>
                   </div>
-                  <span className="text-xs text-faint">{formatDate(c.updated_at)}</span>
+                  <div className="flex min-w-0 max-w-[16rem] flex-col items-end text-right">
+                    {last ? (
+                      <>
+                        <span className="text-xs text-muted">
+                          {formatDate(last.happened_on)}
+                        </span>
+                        <span className="truncate text-xs text-faint">
+                          {last.summary}
+                        </span>
+                      </>
+                    ) : (
+                      <span className="text-xs text-faint">No contact yet</span>
+                    )}
+                  </div>
                   <Badge tone={CONTACT_STATUS_TONE[c.status]}>
                     {CONTACT_STATUS_LABEL[c.status]}
                   </Badge>
