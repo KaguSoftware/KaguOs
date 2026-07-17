@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect, useState, useTransition } from "react";
+import { useActionState, useState, useTransition } from "react";
 import { FileText, Link2, Loader2, Plus, Trash2 } from "lucide-react";
 import {
   addGoals,

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useState, useTransition } from "react";
 import { Check, Loader2 } from "lucide-react";
 import { toggleGoalProgress } from "@/lib/actions/learn";
 import { cn } from "@/lib/utils";
