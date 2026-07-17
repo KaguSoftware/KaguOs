@@ -33,6 +33,7 @@ export default async function AdminPage() {
     is_admin: p.is_admin,
     color: p.color,
     sections: sectionsByUser.get(p.id) ?? [],
+    last_seen_at: p.last_seen_at ?? null,
   }));
 
   return (

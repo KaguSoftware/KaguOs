@@ -15,7 +15,7 @@ import { AdminColorPicker } from "@/components/account/color-form";
 import { useAction } from "@/lib/use-action";
 import { memberColorCss } from "@/lib/colors";
 import { SECTIONS, SECTION_LABELS, type Section } from "@/lib/types";
-import { cn } from "@/lib/utils";
+import { cn, formatRelative } from "@/lib/utils";
 
 export type AdminUser = {
   id: string;
@@ -24,10 +24,29 @@ export type AdminUser = {
   is_admin: boolean;
   color: string | null;
   sections: Section[];
+  last_seen_at: string | null;
 };
 
 function shortLabel(section: Section) {
   return SECTION_LABELS[section].replace("Kagu ", "");
+}
+
+/** "Last seen" line. Within ~5 min counts as online (the bump throttle window). */
+function LastSeen({ at }: { at: string | null }) {
+  if (!at) return <p className="text-xs text-faint">Never signed in</p>;
+  const online = Date.now() - Date.parse(at) < 6 * 60 * 1000;
+  return (
+    <p className="flex items-center gap-1.5 text-xs text-faint">
+      <span
+        aria-hidden
+        className={cn(
+          "size-1.5 rounded-full",
+          online ? "bg-primary" : "bg-line-strong"
+        )}
+      />
+      {online ? "Online now" : `Seen ${formatRelative(at)}`}
+    </p>
+  );
 }
 
 export function UserRow({ user, isSelf }: { user: AdminUser; isSelf: boolean }) {
@@ -70,6 +89,7 @@ export function UserRow({ user, isSelf }: { user: AdminUser; isSelf: boolean }) 
             {user.is_admin && <Badge tone="green">admin</Badge>}
           </p>
           <p className="truncate text-[13px] text-faint">{user.email}</p>
+          <LastSeen at={user.last_seen_at} />
         </div>
 
         {/* Access summary: which sections, compact */}

@@ -1,7 +1,11 @@
 import { cache } from "react";
+import { after } from "next/server";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import type { Profile, Section } from "@/lib/types";
+
+/** How stale last_seen_at must be before we bother writing a fresh one. */
+const LAST_SEEN_THROTTLE_MS = 5 * 60 * 1000;
 
 export type SessionContext = {
   supabase: Awaited<ReturnType<typeof createClient>>;
@@ -42,6 +46,20 @@ export const getSessionContext = cache(async function getSessionContext(): Promi
 
   const profile = ctx.profile;
   const sections = new Set<Section>(ctx.sections ?? []);
+
+  // Stamp "last seen", throttled + off the critical path. Only write when the
+  // stored value is missing or older than the throttle window, so an active user
+  // costs at most one tiny update every 5 min, not one per page. after() runs it
+  // once the response has shipped — it never delays the page.
+  const lastSeen = profile.last_seen_at ? Date.parse(profile.last_seen_at) : 0;
+  if (Date.now() - lastSeen > LAST_SEEN_THROTTLE_MS) {
+    after(async () => {
+      await supabase
+        .from("profiles")
+        .update({ last_seen_at: new Date().toISOString() })
+        .eq("id", userId);
+    });
+  }
 
   return {
     supabase,

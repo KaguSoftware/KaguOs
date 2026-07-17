@@ -25,6 +25,8 @@ export type Profile = {
   is_admin: boolean;
   color: string | null;
   showcase_mode: boolean;
+  /** When this user was last active (throttled to ~5 min). Null = never seen. */
+  last_seen_at: string | null;
   created_at: string;
 };
 
