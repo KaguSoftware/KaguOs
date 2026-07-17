@@ -19,23 +19,129 @@ export default async function DashboardPage() {
   const ctx = await getSessionContext();
   const firstName = ctx.profile.full_name?.split(" ")[0] ?? ctx.profile.email;
 
+  // ONE parallel wave for the whole dashboard. Every stat below is independent,
+  // so each section's queries are built as a thunk and fired together with the
+  // activity/members/reminders batch. Fetching these in section-by-section
+  // waves costs one full network round-trip PER SECTION (~305ms each against
+  // the Tokyo db) — serial, that's ~2s of dead air before anything renders.
+  // Fired at once, the whole page costs about one round-trip. Keep it that way:
+  // any new stat belongs INSIDE this wave, never in an await above it.
+  const debugStats = canAccess(ctx, "debug")
+    ? Promise.all([
+        ctx.supabase
+          .from("debug_tasks")
+          .select("id", { count: "exact", head: true })
+          .eq("is_demo", ctx.showcase)
+          .eq("state", "open"),
+        ctx.supabase
+          .from("debug_tasks")
+          .select("id", { count: "exact", head: true })
+          .eq("is_demo", ctx.showcase)
+          .eq("assignee_id", ctx.userId)
+          .neq("state", "done"),
+      ])
+    : null;
+
+  const workStats = canAccess(ctx, "work")
+    ? Promise.all([
+        ctx.supabase
+          .from("projects")
+          .select("id", { count: "exact", head: true })
+          .eq("is_demo", ctx.showcase)
+          .eq("status", "active"),
+        ctx.supabase
+          .from("ideas")
+          .select("id", { count: "exact", head: true })
+          .eq("is_demo", ctx.showcase)
+          .eq("status", "open"),
+      ])
+    : null;
+
+  const learnStats = canAccess(ctx, "learn")
+    ? (() => {
+        const today = new Date().toISOString().slice(0, 10);
+        return ctx.supabase
+          .from("sprints")
+          .select("id", { count: "exact", head: true })
+          .eq("is_demo", ctx.showcase)
+          .lte("starts_on", today)
+          .gte("ends_on", today);
+      })()
+    : null;
+
+  const managementStats = canAccess(ctx, "management")
+    ? Promise.all([
+        ctx.supabase
+          .from("recurring_items")
+          .select("*")
+          .eq("is_demo", ctx.showcase)
+          .is("canceled_on", null),
+        ctx.supabase.from("fx_rates").select("currency, rate_to_try"),
+      ])
+    : null;
+
+  const marketingStats = canAccess(ctx, "marketing")
+    ? ctx.supabase
+        .from("marketing_campaigns")
+        .select("id", { count: "exact", head: true })
+        .eq("is_demo", ctx.showcase)
+        .eq("status", "running")
+    : null;
+
+  const commsStats = canAccess(ctx, "comms")
+    ? Promise.all([
+        ctx.supabase
+          .from("contacts")
+          .select("id", { count: "exact", head: true })
+          .eq("is_demo", ctx.showcase)
+          .eq("kind", "lead"),
+        ctx.supabase
+          .from("contacts")
+          .select("id", { count: "exact", head: true })
+          .eq("is_demo", ctx.showcase)
+          .eq("kind", "client"),
+      ])
+    : null;
+
+  const [
+    debugRes,
+    workRes,
+    learnRes,
+    managementRes,
+    marketingRes,
+    commsRes,
+    activity,
+    members,
+    { data: reminderRows },
+    { data: annRows },
+  ] = await Promise.all([
+    debugStats,
+    workStats,
+    learnStats,
+    managementStats,
+    marketingStats,
+    commsStats,
+    getActivity(ctx),
+    getMembersMap(ctx.supabase),
+    ctx.supabase
+      .from("reminders")
+      .select("*")
+      .order("done", { ascending: true })
+      .order("created_at", { ascending: false }),
+    ctx.supabase
+      .from("announcements")
+      .select("*")
+      .eq("active", true)
+      .order("created_at", { ascending: false })
+      .limit(1),
+  ]);
+
+  // Assemble cards in a stable, deliberate order once the data has landed.
   const cards: Card[] = [];
   let myTasks = 0;
 
-  if (canAccess(ctx, "debug")) {
-    const [{ count: open }, { count: mine }] = await Promise.all([
-      ctx.supabase
-        .from("debug_tasks")
-        .select("id", { count: "exact", head: true })
-        .eq("is_demo", ctx.showcase)
-        .eq("state", "open"),
-      ctx.supabase
-        .from("debug_tasks")
-        .select("id", { count: "exact", head: true })
-        .eq("is_demo", ctx.showcase)
-        .eq("assignee_id", ctx.userId)
-        .neq("state", "done"),
-    ]);
+  if (debugRes) {
+    const [{ count: open }, { count: mine }] = debugRes;
     myTasks = mine ?? 0;
     cards.push({
       section: "debug",
@@ -45,19 +151,8 @@ export default async function DashboardPage() {
     });
   }
 
-  if (canAccess(ctx, "work")) {
-    const [{ count: active }, { count: ideas }] = await Promise.all([
-      ctx.supabase
-        .from("projects")
-        .select("id", { count: "exact", head: true })
-        .eq("is_demo", ctx.showcase)
-        .eq("status", "active"),
-      ctx.supabase
-        .from("ideas")
-        .select("id", { count: "exact", head: true })
-        .eq("is_demo", ctx.showcase)
-        .eq("status", "open"),
-    ]);
+  if (workRes) {
+    const [{ count: active }, { count: ideas }] = workRes;
     cards.push({
       section: "work",
       href: "/work",
@@ -66,14 +161,8 @@ export default async function DashboardPage() {
     });
   }
 
-  if (canAccess(ctx, "learn")) {
-    const today = new Date().toISOString().slice(0, 10);
-    const { count: active } = await ctx.supabase
-      .from("sprints")
-      .select("id", { count: "exact", head: true })
-      .eq("is_demo", ctx.showcase)
-      .lte("starts_on", today)
-      .gte("ends_on", today);
+  if (learnRes) {
+    const { count: active } = learnRes;
     cards.push({
       section: "learn",
       href: "/learn",
@@ -82,15 +171,8 @@ export default async function DashboardPage() {
     });
   }
 
-  if (canAccess(ctx, "management")) {
-    const [{ data: recurring }, { data: fx }] = await Promise.all([
-      ctx.supabase
-        .from("recurring_items")
-        .select("*")
-        .eq("is_demo", ctx.showcase)
-        .is("canceled_on", null),
-      ctx.supabase.from("fx_rates").select("currency, rate_to_try"),
-    ]);
+  if (managementRes) {
+    const [{ data: recurring }, { data: fx }] = managementRes;
     const rates: FxRates = {};
     for (const r of fx ?? []) rates[r.currency as "USD" | "EUR"] = Number(r.rate_to_try);
     let net = 0;
@@ -106,12 +188,8 @@ export default async function DashboardPage() {
     });
   }
 
-  if (canAccess(ctx, "marketing")) {
-    const { count: running } = await ctx.supabase
-      .from("marketing_campaigns")
-      .select("id", { count: "exact", head: true })
-      .eq("is_demo", ctx.showcase)
-      .eq("status", "running");
+  if (marketingRes) {
+    const { count: running } = marketingRes;
     cards.push({
       section: "marketing",
       href: "/marketing",
@@ -120,19 +198,8 @@ export default async function DashboardPage() {
     });
   }
 
-  if (canAccess(ctx, "comms")) {
-    const [{ count: leads }, { count: clients }] = await Promise.all([
-      ctx.supabase
-        .from("contacts")
-        .select("id", { count: "exact", head: true })
-        .eq("is_demo", ctx.showcase)
-        .eq("kind", "lead"),
-      ctx.supabase
-        .from("contacts")
-        .select("id", { count: "exact", head: true })
-        .eq("is_demo", ctx.showcase)
-        .eq("kind", "client"),
-    ]);
+  if (commsRes) {
+    const [{ count: leads }, { count: clients }] = commsRes;
     cards.push({
       section: "comms",
       href: "/comms",
@@ -165,22 +232,6 @@ export default async function DashboardPage() {
   if (canAccess(ctx, "management")) heavyRoutes.push("/management/finance");
   if (canAccess(ctx, "debug")) heavyRoutes.push("/debug");
 
-  const [activity, members, { data: reminderRows }, { data: annRows }] =
-    await Promise.all([
-      getActivity(ctx),
-      getMembersMap(ctx.supabase),
-      ctx.supabase
-        .from("reminders")
-        .select("*")
-        .order("done", { ascending: true })
-        .order("created_at", { ascending: false }),
-      ctx.supabase
-        .from("announcements")
-        .select("*")
-        .eq("active", true)
-        .order("created_at", { ascending: false })
-        .limit(1),
-    ]);
   const reminders = (reminderRows ?? []) as Reminder[];
   const announcement = ((annRows ?? []) as Announcement[])[0] ?? null;
 
