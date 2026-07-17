@@ -36,6 +36,18 @@ export default async function AppLayout({
 
   return (
     <ToastProvider>
+      {/*
+        Skip link — the first tab stop on every page. Without it a keyboard user
+        tabs through all six section links, search, the bell, and the account row
+        before reaching the content, on EVERY navigation. Invisible until
+        focused, so it costs sighted users nothing.
+      */}
+      <a
+        href="#main"
+        className="sr-only left-4 top-4 z-50 rounded-md border border-line-strong bg-raised px-3 py-2 text-[13px] text-ink focus-visible:not-sr-only focus-visible:fixed"
+      >
+        Skip to content
+      </a>
       <CommandPalette sections={[...ctx.sections]} isAdmin={ctx.isAdmin} />
       <div className="flex min-h-dvh flex-col md:flex-row">
         <Sidebar
@@ -47,7 +59,7 @@ export default async function AppLayout({
           notifications={(notifRows ?? []) as Notification[]}
           members={members}
         />
-        <main className="min-w-0 flex-1">
+        <main id="main" tabIndex={-1} className="min-w-0 flex-1 focus:outline-none">
           {ctx.showcase && <ShowcaseBanner />}
           <div className="mx-auto w-full max-w-6xl px-4 py-6 md:px-8 md:py-10">
             {children}
