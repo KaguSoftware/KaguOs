@@ -75,48 +75,80 @@ export function SprintProgress({
               </span>
             }
           />
-          <ul className="divide-y divide-line">
-            {goals.map((goal) => {
+          {/* Your track: the sprint as a journey line. Done stops fill and
+              light the rail behind you; the ringed stop is where you are. */}
+          <ol className="px-4 py-2">
+            {goals.map((goal, index) => {
               const isDone = done.has(`${goal.id}:${meId}`);
+              const isCurrent = upNext?.id === goal.id;
+              const prevDone =
+                index > 0 && done.has(`${goals[index - 1].id}:${meId}`);
               return (
-                <li key={goal.id}>
+                <li key={goal.id} className="relative">
+                  {index > 0 && (
+                    <span
+                      aria-hidden
+                      className={cn(
+                        "absolute left-[11px] top-0 h-[calc(50%-12px)] w-px transition-colors duration-200",
+                        prevDone ? "bg-primary/70" : "bg-line"
+                      )}
+                    />
+                  )}
+                  {index < goals.length - 1 && (
+                    <span
+                      aria-hidden
+                      className={cn(
+                        "absolute bottom-0 left-[11px] h-[calc(50%-12px)] w-px transition-colors duration-200",
+                        isDone ? "bg-primary/70" : "bg-line"
+                      )}
+                    />
+                  )}
                   <button
                     type="button"
                     aria-pressed={isDone}
+                    aria-label={`${goal.title}: ${isDone ? "done — click to untick" : "mark done"}`}
                     onClick={() => toggle(goal.id, !isDone)}
-                    className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors duration-150 hover:bg-raised/60"
+                    className="flex w-full items-center gap-3 rounded-md px-0.5 py-2 text-left transition-colors duration-150 hover:bg-raised/40"
                   >
                     <span
                       aria-hidden
                       className={cn(
-                        "flex size-5 shrink-0 items-center justify-center rounded-md border transition-colors duration-150",
+                        "relative z-10 flex size-5 shrink-0 items-center justify-center rounded-full transition-colors duration-150",
                         isDone
-                          ? "border-primary/40 bg-primary text-primary-ink"
-                          : "border-line-strong text-transparent"
+                          ? "bg-primary text-primary-ink"
+                          : isCurrent
+                            ? "border-2 border-primary/70 bg-surface"
+                            : "border border-line-strong bg-surface"
                       )}
                     >
-                      <Check className="size-3.5" />
+                      {isDone ? (
+                        <Check className="size-3" />
+                      ) : isCurrent ? (
+                        <span className="size-1.5 rounded-full bg-primary/70" />
+                      ) : null}
                     </span>
                     <span
                       className={cn(
-                        "min-w-0 flex-1 truncate text-sm",
+                        "min-w-0 flex-1 truncate text-sm transition-colors duration-150",
                         isDone
-                          ? "text-muted line-through decoration-faint"
-                          : "text-ink"
+                          ? "text-faint"
+                          : isCurrent
+                            ? "font-medium text-ink"
+                            : "text-muted"
                       )}
                     >
                       {goal.title}
                     </span>
-                    {upNext?.id === goal.id && (
-                      <span className="shrink-0 font-mono text-[11px] text-faint">
-                        up next
+                    {isCurrent && (
+                      <span className="shrink-0 font-mono text-[11px] text-primary-dim">
+                        now
                       </span>
                     )}
                   </button>
                 </li>
               );
             })}
-          </ul>
+          </ol>
         </Panel>
       )}
 
