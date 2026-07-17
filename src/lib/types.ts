@@ -54,15 +54,27 @@ export type Project = {
   updated_at: string;
 };
 
-export type IdeaStatus = "open" | "promoted" | "archived";
+export type IdeaStatus = "open" | "promoted" | "archived" | "rejected";
+
+/** Funnel position, independent of status. Set at create ('open'), advanced by
+ *  the team, and flipped to 'promoted' automatically on a unanimous upvote. */
+export type IdeaStage =
+  | "open"
+  | "discussing"
+  | "accepted"
+  | "promoted"
+  | "rejected";
 
 export type Idea = {
   id: string;
   title: string;
   body: string | null;
   status: IdeaStatus;
+  stage: IdeaStage;
   sector: string | null;
   type: string | null;
+  /** People who must unanimously upvote to auto-promote — snapshot at create. */
+  required_count: number | null;
   promoted_project_id: string | null;
   created_by: string | null;
   created_at: string;

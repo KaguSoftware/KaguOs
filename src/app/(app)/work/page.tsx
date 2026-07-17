@@ -22,17 +22,20 @@ export default async function WorkPage() {
     ctx.supabase
       .from("ideas")
       .select(
-        "id, title, status, created_by, created_at, idea_votes(user_id), idea_comments(count)"
+        "id, title, status, sector, type, required_count, created_by, created_at, idea_votes(user_id, value), idea_comments(count)"
       )
       .eq("is_demo", ctx.showcase)
       .order("created_at", { ascending: false }),
     getMembersMap(ctx.supabase),
   ]);
 
+  const netScore = (row: IdeaRow) =>
+    row.idea_votes.reduce((sum, v) => sum + v.value, 0);
+
   const projectRows = (projects ?? []) as Project[];
   const ideaRows = ((ideas ?? []) as IdeaRow[]).sort((a, b) => {
     const openFirst = Number(a.status !== "open") - Number(b.status !== "open");
-    return openFirst || b.idea_votes.length - a.idea_votes.length;
+    return openFirst || netScore(b) - netScore(a);
   });
 
   return (
@@ -51,7 +54,9 @@ export default async function WorkPage() {
                 New project
               </LinkButton>
             ),
-            content: <ProjectsPanel projects={projectRows} />,
+            content: (
+              <ProjectsPanel projects={projectRows} currentUserId={ctx.userId} />
+            ),
           },
           {
             key: "ideas",

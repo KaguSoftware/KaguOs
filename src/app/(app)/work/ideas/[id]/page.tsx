@@ -12,7 +12,8 @@ import {
   DeleteCommentButton,
   EditableIdeaBody,
   IdeaActions,
-  VoteButton,
+  PromoteProgress,
+  VoteControl,
 } from "@/components/work/idea-bits";
 import { formatDate } from "@/lib/utils";
 import type { IdeaComment, IdeaStatus } from "@/lib/types";
@@ -23,6 +24,7 @@ const STATUS_TONE: Record<IdeaStatus, BadgeTone> = {
   open: "neutral",
   promoted: "green",
   archived: "faint",
+  rejected: "danger",
 };
 
 export default async function IdeaPage({
@@ -41,12 +43,18 @@ export default async function IdeaPage({
         .select("*")
         .eq("idea_id", id)
         .order("created_at"),
-      ctx.supabase.from("idea_votes").select("user_id").eq("idea_id", id),
+      ctx.supabase.from("idea_votes").select("user_id, value").eq("idea_id", id),
       getMembersMap(ctx.supabase),
     ]);
   if (!idea) notFound();
 
   const voteList = votes ?? [];
+  const up = voteList.filter((v) => v.value === 1).length;
+  const down = voteList.filter((v) => v.value === -1).length;
+  const mine = (voteList.find((v) => v.user_id === ctx.userId)?.value ?? 0) as
+    | -1
+    | 0
+    | 1;
   const commentList = (comments ?? []) as IdeaComment[];
 
   return (
@@ -62,11 +70,7 @@ export default async function IdeaPage({
         title={idea.title}
         description={formatDate(idea.created_at)}
         action={
-          <VoteButton
-            ideaId={idea.id}
-            votes={voteList.length}
-            voted={voteList.some((v) => v.user_id === ctx.userId)}
-          />
+          <VoteControl ideaId={idea.id} state={{ mine, up, down }} />
         }
       />
 
@@ -90,6 +94,12 @@ export default async function IdeaPage({
             </Link>
           )}
         </div>
+
+        {idea.status === "open" && (
+          <div className="max-w-xs">
+            <PromoteProgress up={up} down={down} required={idea.required_count} />
+          </div>
+        )}
 
         <EditableIdeaBody
           ideaId={idea.id}

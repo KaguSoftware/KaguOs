@@ -1,76 +1,204 @@
 "use client";
 
 import { useActionState, useEffect, useRef, useState, useTransition } from "react";
-import { ArrowBigUp, Loader2, Pencil, Trash2 } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { ArrowBigDown, ArrowBigUp, Loader2, Pencil, Trash2 } from "lucide-react";
 import {
   addComment,
   deleteComment,
   deleteIdea,
   promoteIdea,
   setIdeaStatus,
-  toggleVote,
+  setVote,
   updateIdea,
 } from "@/lib/actions/work";
 import { Button, ConfirmButton, SubmitButton } from "@/components/ui/button";
 import { Input, Textarea } from "@/components/ui/input";
 import { useAction } from "@/lib/use-action";
 import { useToast } from "@/components/ui/toast";
-import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 
-export function VoteButton({
+export type VoteState = {
+  /** This user's current vote: 1 up, -1 down, 0 none. */
+  mine: -1 | 0 | 1;
+  up: number;
+  down: number;
+};
+
+/**
+ * Up/down vote control. A compact three-cell segment (▲ · net · ▼): clicking a
+ * cell casts that vote, clicking it again clears it. Net score in mono. The
+ * whole thing is optimistic — the vote lands instantly and the server reconciles
+ * on the next render. When a fresh upvote makes the idea unanimous the server
+ * returns the new project id and we route straight to it.
+ */
+export function VoteControl({
   ideaId,
-  votes,
-  voted,
+  state,
+  size = "md",
 }: {
   ideaId: string;
-  votes: number;
-  voted: boolean;
+  state: VoteState;
+  size?: "sm" | "md";
 }) {
   const [, startTransition] = useTransition();
+  const router = useRouter();
   const toast = useToast();
-  // Optimistic: the vote lands instantly, the server reconciles after.
-  const [local, setLocal] = useState({ votes, voted });
+  const [local, setLocal] = useState(state);
 
-  // Adopt the server's count during render, not in an effect — an effect would
-  // paint the old count for a frame first, so a just-cast vote visibly bounces.
-  const [seen, setSeen] = useState({ votes, voted });
-  if (seen.votes !== votes || seen.voted !== voted) {
-    setSeen({ votes, voted });
-    setLocal({ votes, voted });
+  // Adopt server truth during render (not in an effect) so a just-cast vote
+  // never bounces to the stale count for a frame. See the perf note in HANDOFF.
+  const [seen, setSeen] = useState(state);
+  if (seen.mine !== state.mine || seen.up !== state.up || seen.down !== state.down) {
+    setSeen(state);
+    setLocal(state);
   }
 
+  const net = local.up - local.down;
+
+  function cast(next: -1 | 1) {
+    const was = local;
+    // Toggle off if you click your current vote; otherwise switch/set.
+    const value: -1 | 0 | 1 = was.mine === next ? 0 : next;
+
+    // Recompute the two tallies from the transition (was.mine → value).
+    const up = local.up - (was.mine === 1 ? 1 : 0) + (value === 1 ? 1 : 0);
+    const down = local.down - (was.mine === -1 ? 1 : 0) + (value === -1 ? 1 : 0);
+    setLocal({ mine: value, up, down });
+
+    startTransition(async () => {
+      const result = await setVote(ideaId, value);
+      if (result && !result.ok) {
+        setLocal(was);
+        toast.error(result.message);
+        return;
+      }
+      if (result?.promotedProjectId) {
+        toast.success("Voted in — opening the new project.");
+        router.push(`/work/projects/${result.promotedProjectId}`);
+      }
+    });
+  }
+
+  const cell =
+    size === "sm" ? "size-7" : "size-8";
+  const icon = size === "sm" ? "size-4" : "size-[18px]";
+
   return (
-    <button
-      type="button"
-      onClick={(event) => {
-        event.preventDefault();
-        event.stopPropagation();
-        const was = local;
-        setLocal({
-          votes: was.votes + (was.voted ? -1 : 1),
-          voted: !was.voted,
-        });
-        startTransition(async () => {
-          const result = await toggleVote(ideaId, was.voted);
-          if (result && !result.ok) {
-            setLocal(was);
-            toast.error(result.message);
-          }
-        });
-      }}
-      aria-pressed={local.voted}
-      aria-label={local.voted ? "Remove your vote" : "Vote for this idea"}
-      className={cn(
-        "flex min-w-12 flex-col items-center rounded-md border px-2 py-1 transition-colors duration-150",
-        local.voted
-          ? "border-primary/40 bg-primary/10 text-primary-dim"
-          : "border-line text-muted hover:border-line-strong hover:text-ink"
-      )}
+    <div
+      className="inline-flex flex-col items-center overflow-hidden rounded-md border border-line"
+      role="group"
+      aria-label="Vote on this idea"
     >
-      <ArrowBigUp className="size-4" aria-hidden />
-      <span className="font-mono text-xs">{local.votes}</span>
-    </button>
+      <button
+        type="button"
+        onClick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          cast(1);
+        }}
+        aria-pressed={local.mine === 1}
+        aria-label={local.mine === 1 ? "Remove your upvote" : "Upvote"}
+        className={cn(
+          "flex items-center justify-center transition-colors duration-150",
+          cell,
+          local.mine === 1
+            ? "bg-primary/12 text-primary-dim"
+            : "text-faint hover:bg-raised hover:text-ink"
+        )}
+      >
+        <ArrowBigUp className={icon} aria-hidden />
+      </button>
+      <span
+        className={cn(
+          "flex w-full items-center justify-center border-y border-line font-mono tabular-nums",
+          size === "sm" ? "py-0.5 text-[11px]" : "py-1 text-xs",
+          net > 0 ? "text-primary-dim" : net < 0 ? "text-danger" : "text-muted"
+        )}
+        aria-label={`Net score ${net}`}
+      >
+        {net > 0 ? `+${net}` : net}
+      </span>
+      <button
+        type="button"
+        onClick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          cast(-1);
+        }}
+        aria-pressed={local.mine === -1}
+        aria-label={local.mine === -1 ? "Remove your downvote" : "Downvote"}
+        className={cn(
+          "flex items-center justify-center transition-colors duration-150",
+          cell,
+          local.mine === -1
+            ? "bg-danger/12 text-danger"
+            : "text-faint hover:bg-raised hover:text-ink"
+        )}
+      >
+        <ArrowBigDown className={icon} aria-hidden />
+      </button>
+    </div>
+  );
+}
+
+/**
+ * "6 / 8 to promote" — a thin progress hairline showing how close an open idea
+ * is to the unanimous bar. A single veto (any downvote) blocks promotion, so
+ * when one exists we say so plainly in danger tone rather than pretending the
+ * bar is still reachable by counting up. Quiet by design — an instrument reading,
+ * not a game meter.
+ */
+export function PromoteProgress({
+  up,
+  down,
+  required,
+}: {
+  up: number;
+  down: number;
+  required: number | null;
+}) {
+  // No meaningful bar for a one-person board or a missing snapshot.
+  if (!required || required < 2) return null;
+
+  const blocked = down > 0;
+  const pct = Math.min(100, Math.round((up / required) * 100));
+
+  return (
+    <div className="space-y-1">
+      <div className="flex items-center justify-between text-[11px]">
+        {blocked ? (
+          <span className="font-medium text-danger">
+            Blocked — {down} {down === 1 ? "veto" : "vetoes"}
+          </span>
+        ) : up >= required ? (
+          <span className="font-medium text-primary-dim">Unanimous — promoting…</span>
+        ) : (
+          <span className="text-faint">
+            <span className="font-mono tabular-nums text-muted">
+              {up} / {required}
+            </span>{" "}
+            to promote
+          </span>
+        )}
+      </div>
+      <div
+        className="h-1 overflow-hidden rounded-full bg-raised"
+        role="progressbar"
+        aria-valuenow={up}
+        aria-valuemin={0}
+        aria-valuemax={required}
+        aria-label="Progress toward unanimous promotion"
+      >
+        <div
+          className={cn(
+            "h-full rounded-full transition-[width,background-color] duration-300 ease-out",
+            blocked ? "bg-danger/50" : "bg-primary/70"
+          )}
+          style={{ width: `${blocked ? 100 : pct}%` }}
+        />
+      </div>
+    </div>
   );
 }
 
@@ -165,7 +293,7 @@ export function IdeaActions({
   canDelete,
 }: {
   ideaId: string;
-  status: "open" | "promoted" | "archived";
+  status: "open" | "promoted" | "archived" | "rejected";
   canDelete: boolean;
 }) {
   const { pending, run } = useAction();
