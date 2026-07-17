@@ -5,6 +5,7 @@ import type { Section } from "@/lib/types";
 
 type NotifyKind =
   | "debug_task_new"
+  | "debug_suggested"
   | "idea_new"
   | "idea_promoted"
   | "idea_comment"

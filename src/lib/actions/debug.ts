@@ -1,8 +1,8 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { blockIfShowcase, requireSection } from "@/lib/data/session";
-import { notifySection } from "@/lib/actions/notify";
+import { blockIfShowcase, requireAdmin, requireSection } from "@/lib/data/session";
+import { notifySection, notifyUser } from "@/lib/actions/notify";
 import type { ActionResult } from "@/lib/actions/account";
 import type { DebugPriority, DebugState } from "@/lib/types";
 
@@ -46,6 +46,16 @@ export async function createTask(
     title: `New task: ${title}`,
     href: "/debug",
   });
+
+  // Tell the suggested person directly. notifyUser excludes the actor, so an
+  // admin suggesting a task to themselves won't ping themselves.
+  if (suggestedFor) {
+    notifyUser(ctx, suggestedFor, {
+      kind: "debug_suggested",
+      title: `You were suggested for a task: ${title}`,
+      href: "/debug",
+    });
+  }
 
   revalidatePath("/debug");
   return { ok: true, message: "Task posted." };
@@ -150,4 +160,31 @@ export async function deleteTask(taskId: string): Promise<ActionResult> {
 
   revalidatePath("/debug");
   return { ok: true, message: "Task deleted." };
+}
+
+/**
+ * Admin-only bulk hard-delete — the escape valve for archived tasks so they
+ * don't pile up invisibly forever. requireAdmin (not just section) because it
+ * removes tasks created by anyone. RLS already permits admin deletes; the guard
+ * is the app-level gate.
+ */
+export async function deleteTasks(taskIds: string[]): Promise<ActionResult> {
+  const showcaseStop = await blockIfShowcase();
+  if (showcaseStop) return showcaseStop;
+  const ctx = await requireAdmin();
+
+  const ids = taskIds.filter(Boolean);
+  if (ids.length === 0) return { ok: false, message: "Nothing selected." };
+
+  const { error } = await ctx.supabase
+    .from("debug_tasks")
+    .delete()
+    .in("id", ids);
+  if (error) return { ok: false, message: error.message };
+
+  revalidatePath("/debug");
+  return {
+    ok: true,
+    message: `Deleted ${ids.length} task${ids.length === 1 ? "" : "s"}.`,
+  };
 }

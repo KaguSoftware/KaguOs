@@ -211,6 +211,7 @@ export function Dropdown({
               <Search className="size-3.5 shrink-0 text-faint" aria-hidden />
               <input
                 ref={searchRef}
+                data-no-ring
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder={searchPlaceholder}

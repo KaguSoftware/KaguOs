@@ -12,12 +12,17 @@ export const metadata: Metadata = { title: "Debug" };
 export default async function DebugPage() {
   const ctx = await requireSection("debug");
 
+  // Archived tasks (done 7+ days) only reach admins — they're the ones who see
+  // the cleanup section. Everyone else gets live tasks only.
+  const taskQuery = ctx.supabase
+    .from("debug_tasks")
+    .select("*")
+    .eq("is_demo", ctx.showcase)
+    .order("created_at", { ascending: false });
+  if (!ctx.isAdmin) taskQuery.is("archived_at", null);
+
   const [{ data: tasks }, { data: projects }, members] = await Promise.all([
-    ctx.supabase
-      .from("debug_tasks")
-      .select("*")
-      .eq("is_demo", ctx.showcase)
-      .order("created_at", { ascending: false }),
+    taskQuery,
     ctx.supabase
       .from("projects")
       .select("id, name")

@@ -1,16 +1,20 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Bug, Search, X } from "lucide-react";
+import { Archive, Bug, ChevronDown, Search, Trash2, X } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { deleteTasks } from "@/lib/actions/debug";
 import { TaskRow } from "@/components/debug/task-row";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Dropdown } from "@/components/ui/dropdown";
-import { cn } from "@/lib/utils";
+import { ConfirmButton } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { useAction } from "@/lib/use-action";
+import { cn, formatDate } from "@/lib/utils";
 import type { DebugState, DebugTask, MembersMap } from "@/lib/types";
 
 /** Above this many project boards, the tab strip gets a filter box. */
-const BOARD_SEARCH_THRESHOLD = 8;
+const BOARD_SEARCH_THRESHOLD = 5;
 
 type Filter = "active" | "done" | "mine" | "all";
 type Sort = "smart" | "priority" | "deadline" | "newest";
@@ -101,6 +105,8 @@ export function DebugBoard({
   const [taskQuery, setTaskQuery] = useState("");
   const [sort, setSort] = useState<Sort>("smart");
   const [live, setLive] = useState(false);
+  const [showArchived, setShowArchived] = useState(false);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
 
   // Server refreshes (revalidatePath after actions) re-send props — adopt them.
   //
@@ -174,8 +180,16 @@ export function DebugBoard({
     };
   }, []);
 
+  // Archived tasks (auto-archived after 7 days done) never show on the normal
+  // board — they live in the admin-only cleanup section below.
+  const liveTasks = useMemo(() => tasks.filter((t) => !t.archived_at), [tasks]);
+  const archivedTasks = useMemo(
+    () => tasks.filter((t) => t.archived_at),
+    [tasks]
+  );
+
   const visible = useMemo(() => {
-    let list = sortTasks(tasks, sort);
+    let list = sortTasks(liveTasks, sort);
     if (board === "general") list = list.filter((t) => !t.project_id);
     else if (board !== "all") list = list.filter((t) => t.project_id === board);
 
@@ -205,15 +219,15 @@ export function DebugBoard({
       );
     }
     return list;
-  }, [tasks, filter, board, meId, assignee, priority, taskQuery, sort]);
+  }, [liveTasks, filter, board, meId, assignee, priority, taskQuery, sort]);
 
-  const openCount = tasks.filter((t) => t.state === "open").length;
+  const openCount = liveTasks.filter((t) => t.state === "open").length;
 
   // Assignee filter options: only people who actually hold a task, so the list
   // stays short and relevant. "Anyone" and "Unassigned" are always offered.
   const assigneeOptions = useMemo(() => {
     const ids = new Set<string>();
-    for (const t of tasks) if (t.assignee_id) ids.add(t.assignee_id);
+    for (const t of liveTasks) if (t.assignee_id) ids.add(t.assignee_id);
     const people = [...ids]
       .map((id) => ({ value: id, label: members[id]?.name ?? "Someone" }))
       .sort((a, b) => a.label.localeCompare(b.label));
@@ -222,12 +236,12 @@ export function DebugBoard({
       { value: "unassigned", label: "Unassigned" },
       ...people,
     ];
-  }, [tasks, members]);
+  }, [liveTasks, members]);
 
   const secondaryActive = Boolean(assignee || priority || taskQuery);
 
   const countFor = (key: string) =>
-    tasks.filter(
+    liveTasks.filter(
       (t) =>
         t.state !== "done" &&
         (key === "general" ? !t.project_id : t.project_id === key)
@@ -253,6 +267,15 @@ export function DebugBoard({
           <input
             value={boardQuery}
             onChange={(e) => setBoardQuery(e.target.value)}
+            onKeyDown={(e) => {
+              // Enter jumps to the board when the filter narrows to one match —
+              // type "pet", hit Enter, you're on Pet app without reaching for it.
+              if (e.key === "Enter" && projectTabs.length === 1) {
+                e.preventDefault();
+                setBoard(projectTabs[0].key);
+                setBoardQuery("");
+              }
+            }}
             placeholder="Find a project board…"
             aria-label="Find a project board"
             className="h-8 w-full rounded-md border border-line bg-raised pl-8 pr-8 text-sm text-ink placeholder:text-faint transition-colors duration-150 hover:border-line-strong focus-visible:border-line-strong"
@@ -434,6 +457,136 @@ export function DebugBoard({
           </ul>
         )}
       </div>
+
+      {isAdmin && archivedTasks.length > 0 && (
+        <ArchivedSection
+          tasks={archivedTasks}
+          projectNames={projectNames}
+          open={showArchived}
+          onToggle={() => setShowArchived((v) => !v)}
+          selected={selected}
+          setSelected={setSelected}
+          onDeleted={(ids) => {
+            setTasks((prev) => prev.filter((t) => !ids.includes(t.id)));
+            setSelected(new Set());
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+/**
+ * Admin-only cleanup for auto-archived tasks: batch-select and hard-delete.
+ * Archived tasks are already off the main board; this is where they go to die
+ * for good so they don't accumulate invisibly. Collapsed by default.
+ */
+function ArchivedSection({
+  tasks,
+  projectNames,
+  open,
+  onToggle,
+  selected,
+  setSelected,
+  onDeleted,
+}: {
+  tasks: DebugTask[];
+  projectNames: Record<string, string>;
+  open: boolean;
+  onToggle: () => void;
+  selected: Set<string>;
+  setSelected: (next: Set<string>) => void;
+  onDeleted: (ids: string[]) => void;
+}) {
+  const { pending, run } = useAction();
+  const allSelected = tasks.length > 0 && selected.size === tasks.length;
+
+  function toggle(id: string) {
+    const next = new Set(selected);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    setSelected(next);
+  }
+
+  function toggleAll() {
+    setSelected(allSelected ? new Set() : new Set(tasks.map((t) => t.id)));
+  }
+
+  return (
+    <div className="rounded-lg border border-line bg-surface">
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-expanded={open}
+        className="flex w-full items-center justify-between px-4 py-2.5 text-left"
+      >
+        <span className="flex items-center gap-2 text-[13px] text-muted">
+          <Archive className="size-3.5 text-faint" aria-hidden />
+          Archived ({tasks.length})
+          <span className="text-faint">· done 7+ days, admin cleanup</span>
+        </span>
+        <ChevronDown
+          className={cn(
+            "size-4 text-faint transition-transform duration-150",
+            open && "rotate-180"
+          )}
+          aria-hidden
+        />
+      </button>
+
+      {open && (
+        <div className="border-t border-line">
+          <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-2">
+            <Checkbox
+              checked={allSelected}
+              onChange={toggleAll}
+              label={`Select all (${tasks.length})`}
+            />
+            {selected.size > 0 && (
+              <ConfirmButton
+                size="sm"
+                disabled={pending}
+                confirmLabel={`Delete ${selected.size}?`}
+                onConfirm={() => {
+                  const ids = [...selected];
+                  run(() => deleteTasks(ids), {
+                    success: `Deleted ${ids.length} task${ids.length === 1 ? "" : "s"}.`,
+                    optimistic: () => onDeleted(ids),
+                  });
+                }}
+              >
+                <Trash2 className="size-3.5" aria-hidden />
+                Delete {selected.size}
+              </ConfirmButton>
+            )}
+          </div>
+          <ul className="divide-y divide-line">
+            {tasks.map((t) => (
+              <li
+                key={t.id}
+                className="flex items-center gap-3 px-4 py-2.5 text-sm"
+              >
+                <Checkbox
+                  checked={selected.has(t.id)}
+                  onChange={() => toggle(t.id)}
+                  aria-label={`Select ${t.title}`}
+                />
+                <span className="min-w-0 flex-1 truncate text-muted line-through decoration-faint">
+                  {t.title}
+                </span>
+                {t.project_id && projectNames[t.project_id] && (
+                  <span className="shrink-0 text-xs text-faint">
+                    {projectNames[t.project_id]}
+                  </span>
+                )}
+                <span className="shrink-0 font-mono text-xs text-faint">
+                  {t.done_at ? formatDate(t.done_at) : "—"}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
     </div>
   );
 }

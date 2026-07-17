@@ -8,18 +8,30 @@ export const metadata: Metadata = { title: "New task" };
 
 export default async function NewTaskPage() {
   const ctx = await requireSection("debug");
-  const [{ data: projects }, members] = await Promise.all([
-    ctx.supabase
-      .from("projects")
-      .select("id, name")
-      .eq("is_demo", ctx.showcase)
-      .order("name"),
-    getMembersMap(ctx.supabase),
-  ]);
+  // Admins get the "suggest for" field; suggestions target WORK members only
+  // (the people who take on this kind of work), so we fetch that roster too.
+  const [{ data: projects }, members, { data: workMemberships }] =
+    await Promise.all([
+      ctx.supabase
+        .from("projects")
+        .select("id, name")
+        .eq("is_demo", ctx.showcase)
+        .order("name"),
+      getMembersMap(ctx.supabase),
+      ctx.isAdmin
+        ? ctx.supabase
+            .from("section_memberships")
+            .select("user_id")
+            .eq("section", "work")
+        : Promise.resolve({ data: [] as { user_id: string }[] }),
+    ]);
 
   // Only admins get the "suggest for" field — a soft nudge, not a claim.
   const memberOptions = ctx.isAdmin
-    ? Object.entries(members).map(([id, m]) => ({ value: id, label: m.name }))
+    ? (workMemberships ?? [])
+        .map((m) => ({ value: m.user_id, label: members[m.user_id]?.name }))
+        .filter((o): o is { value: string; label: string } => Boolean(o.label))
+        .sort((a, b) => a.label.localeCompare(b.label))
     : [];
 
   return (

@@ -208,6 +208,10 @@ export type DebugTask = {
   suggested_for: string | null;
   /** Optional deadline (date only). */
   due_on: string | null;
+  /** When it entered 'done' (null otherwise). Drives the 7-day auto-archive. */
+  done_at: string | null;
+  /** When it was auto-archived off the board (null = live). */
+  archived_at: string | null;
   created_by: string | null;
   created_at: string;
   updated_at: string;
