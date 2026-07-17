@@ -8,7 +8,9 @@ type NotifyKind =
   | "idea_new"
   | "idea_promoted"
   | "idea_comment"
-  | "reminder_shared";
+  | "reminder_shared"
+  | "learn_question"
+  | "learn_answer";
 
 type NotifyInput = {
   kind: NotifyKind;
@@ -69,6 +71,17 @@ export function notifySection(
 export function notifyEveryone(ctx: SessionContext, input: NotifyInput) {
   after(async () => {
     const { data } = await ctx.supabase.from("profiles").select("id");
+    await insertFor(ctx, (data ?? []).map((p) => p.id), input);
+  });
+}
+
+/** Notify the admins (minus the actor) — e.g. admin-only sprint questions. */
+export function notifyAdmins(ctx: SessionContext, input: NotifyInput) {
+  after(async () => {
+    const { data } = await ctx.supabase
+      .from("profiles")
+      .select("id")
+      .eq("is_admin", true);
     await insertFor(ctx, (data ?? []).map((p) => p.id), input);
   });
 }

@@ -81,13 +81,26 @@ then verified against prod with two throwaway users (created + deleted the same 
   wave), `updateGoal` (blank keeps old title). All optimistic w/ rollback.
 - **Race standings (Parsa request: "progress like a race, not a game")**: `race-standings.tsx` —
   identical full-width lanes per participant toward one finish-line hairline, sorted by done count
-  (competition ranking, ties share rank), identity-colored fills, FLIP-style 200ms `ease-mac` lane
-  swaps, viewer's lane tinted + "You". No badges/confetti — restraint held. Shown when ≥2
-  participants.
+  (competition ranking, ties share rank), identity-colored fills, viewer's lane tinted + "You".
+  No badges/confetti — restraint held. **Round 2 (same day, Parsa): Standings IS the progress
+  view** — each lane carries an "on · <first unticked goal>" / "finished" status line and expands
+  on click to that person's full per-goal checklist (with a "now" tag); lane swaps animate via
+  measured FLIP (`el.animate`, transform-only, reduced-motion aware). **The Team progress grid was
+  REMOVED** (`progress-grid.tsx` deleted) — the expanded lanes carry the who-did-which detail.
 - **One optimistic owner for ticks**: `sprint-progress.tsx` owns the shared done-set and renders
-  Your goals + Standings + the grid; a tick moves your race lane instantly. `my-goals.tsx` was
-  absorbed into it (deleted). `progress-grid.tsx` is now presentational + sticky first column,
-  per-goal `n/m`, per-person totals row, viewer-column tint, toast errors via the shared owner.
+  Your goals (with an "up next" marker on your first unticked goal) + Standings; a tick moves your
+  race lane instantly. `my-goals.tsx` was absorbed into it (deleted).
+- **Q&A (Parsa, round 2)**: Questions panel on the sprint detail (`sprint-questions.tsx`).
+  Any learn member asks; a Dropdown picks the audience — **Everyone** (notifies the learn section)
+  or **Admins only** (asker + admins; RLS-enforced, other members never see it — verified with a
+  3rd user). Replies inherit the question's visibility (their RLS policy EXISTS-es against
+  `sprint_questions`, so its policy decides both); reply notifies the asker. Ask/reply via
+  ⌘+Enter; delete own (or any, as admin) with success toasts. **Migration `0019_sprint_questions.sql`
+  — APPLIED to prod via `db push` (2026-07-17)**: `sprint_questions` + `sprint_question_replies`
+  (+ is_demo, composite indexes) and widened `notifications_kind_check` for `learn_question` /
+  `learn_answer`. `notify.ts` gained `notifyAdmins()` (same fire-and-forget `after()` shape —
+  call WITHOUT await). Both tables added to check:demo's DEMOABLE list (now **68 reads, all
+  filtered**; the detail-page reads are parent-scoped so they're SAFE shapes).
 - **Detail hero**: "day X of Y · team N% done" mono line + thin elapsed-time bar (active),
   "starts in N days" (upcoming). Resources rows fixed: title = ONE primary link (url, else signed
   file), both-url-and-file → small "file" chip (the confusing twin anchors are gone).
@@ -98,13 +111,17 @@ then verified against prod with two throwaway users (created + deleted the same 
 - Small kit changes: `DatePicker` gained optional `onChange` (additive); `CreatePage` gained
   `wide` prop (max-w-2xl) for composer-type surfaces. `deleteSprint` now sweeps the sprint's
   storage folder (uploads no longer orphan).
-- **Verified** (Playwright vs `npm run dev`, two seeded users, screenshots reviewed): composer
-  end-to-end incl. draft reorder/rename + link resource; empty-submit confirm → "Untitled sprint"
-  defaults; detail race/grid/hero; member sees no Edit button, `/edit` redirects them, their tick
-  moves their lane; drag reorder persists; rename persists; duplicate lands on a NEW edit page
-  with 3 goals; deletes clean. NOT exercised live: file-upload path on create (link path was;
-  upload code is the same browser→bucket pattern as before) and the storage sweep on delete.
-  Build + lint clean (the 2 pre-existing lint errors remain), check:demo green.
+- **Verified** (Playwright vs `npm run dev`, throwaway users seeded then deleted, screenshots
+  reviewed — both rounds): composer end-to-end incl. draft reorder/rename + link resource;
+  empty-submit confirm → "Untitled sprint" defaults; member sees no Edit button, `/edit` redirects
+  them, their tick moves their lane; drag reorder + rename persist; duplicate lands on a NEW edit
+  page; standings status lines advance on tick, lanes expand, "Team progress" gone; Q&A: B's
+  admins-only question invisible to C, visible to admin A; A's reply visible to B + notification;
+  B deletes own question (row leaves after revalidation). NOT exercised live: file-upload path on
+  create (link path was; upload code is the same browser→bucket pattern as before) and the storage
+  sweep on delete. Build + lint clean (the 2 pre-existing lint errors remain), check:demo green.
+  ⚠️ Verification gotcha: TaskStop on `npm run dev` can orphan the listener on Windows — kill the
+  PID on the port (`netstat -ano | findstr :3400`) or the next run drives STALE code.
 
 ### ⚡ Perf pass 2 (2026-07-17) — the numbers that should govern every future change
 
@@ -319,9 +336,10 @@ volume. They're insurance, not a speedup.
   `learn/sprint-composer.tsx` (one-shot builder) · `learn/[id]/page.tsx` (consume-only detail) ·
   `learn/[id]/edit/page.tsx` + `learn/sprint-forms.tsx` (admin builder + Duplicate/Delete) ·
   `learn/goal-list-editor.tsx` (shared drag/arrows/rename list) · `learn/sprint-progress.tsx`
-  (owns the optimistic done-set; renders Your goals + Standings + grid) · `learn/race-standings.tsx`
-  (the race) · `learn/progress-grid.tsx` (presentational matrix). `my-goals.tsx` and
-  `new-sprint-form.tsx` no longer exist.
+  (owns the optimistic done-set; renders Your goals + Standings) · `learn/race-standings.tsx`
+  (the race: status lines + expandable per-person checklists) · `learn/sprint-questions.tsx`
+  (Q&A panel, audience-scoped). `my-goals.tsx`, `new-sprint-form.tsx`, and `progress-grid.tsx`
+  no longer exist.
 - `src/components/ui/toast.tsx` — toast provider + `useToast()` (success/error/loading/info,
   promise wrapper). Mounted once in `(app)/layout.tsx`. `src/lib/use-action.ts` — `useAction()`
   wraps optimistic mutate→run→rollback+toast; the one way client components fire actions now.

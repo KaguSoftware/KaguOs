@@ -103,6 +103,25 @@ export type SprintGoal = {
   created_at: string;
 };
 
+export type QuestionAudience = "everyone" | "admins";
+
+export type SprintQuestion = {
+  id: string;
+  sprint_id: string;
+  created_by: string | null;
+  body: string;
+  audience: QuestionAudience;
+  created_at: string;
+};
+
+export type SprintQuestionReply = {
+  id: string;
+  question_id: string;
+  created_by: string | null;
+  body: string;
+  created_at: string;
+};
+
 export type TransactionType = "income" | "expense";
 export type Currency = "TRY" | "USD" | "EUR";
 export const CURRENCIES: Currency[] = ["TRY", "USD", "EUR"];

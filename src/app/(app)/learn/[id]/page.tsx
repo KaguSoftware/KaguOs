@@ -8,9 +8,16 @@ import { Panel, PanelHeader } from "@/components/ui/panel";
 import { Badge, type BadgeTone } from "@/components/ui/badge";
 import { LinkButton } from "@/components/ui/link-button";
 import { SprintProgress } from "@/components/learn/sprint-progress";
+import { SprintQuestions } from "@/components/learn/sprint-questions";
 import { memberColorCss } from "@/lib/colors";
 import { formatDate } from "@/lib/utils";
-import type { Sprint, SprintGoal, SprintResource } from "@/lib/types";
+import type {
+  Sprint,
+  SprintGoal,
+  SprintQuestion,
+  SprintQuestionReply,
+  SprintResource,
+} from "@/lib/types";
 
 export const metadata: Metadata = { title: "Sprint" };
 
@@ -37,6 +44,7 @@ export default async function SprintPage({
     { data: participants },
     { data: goals },
     { data: learnMembers },
+    { data: questions },
   ] = await Promise.all([
     ctx.supabase.from("sprints").select("*").eq("id", id).maybeSingle(),
     ctx.supabase
@@ -55,16 +63,33 @@ export default async function SprintPage({
       .from("section_memberships")
       .select("user_id, profiles(id, full_name, email, color)")
       .eq("section", "learn"),
+    ctx.supabase
+      .from("sprint_questions")
+      .select("*")
+      .eq("sprint_id", id)
+      .order("created_at", { ascending: false }),
   ]);
   if (!sprint) notFound();
 
+  // Second wave: both reads depend on ids from the first (goal ids, question
+  // ids) — still ONE wave, per the perf doctrine.
   const goalIds = (goals ?? []).map((g) => g.id);
-  const { data: progress } = goalIds.length
-    ? await ctx.supabase
-        .from("sprint_goal_progress")
-        .select("goal_id, user_id")
-        .in("goal_id", goalIds)
-    : { data: [] };
+  const questionIds = (questions ?? []).map((q) => q.id);
+  const [{ data: progress }, { data: replies }] = await Promise.all([
+    goalIds.length
+      ? ctx.supabase
+          .from("sprint_goal_progress")
+          .select("goal_id, user_id")
+          .in("goal_id", goalIds)
+      : Promise.resolve({ data: [] }),
+    questionIds.length
+      ? ctx.supabase
+          .from("sprint_question_replies")
+          .select("*")
+          .in("question_id", questionIds)
+          .order("created_at")
+      : Promise.resolve({ data: [] }),
+  ]);
 
   const people = (learnMembers ?? [])
     .map((m) => {
@@ -252,6 +277,27 @@ export default async function SprintPage({
           meId={ctx.userId}
           isAdmin={ctx.isAdmin}
         />
+
+        <Panel>
+          <PanelHeader
+            title="Questions"
+            action={
+              (questions ?? []).length > 0 ? (
+                <span className="font-mono text-xs text-muted">
+                  {(questions ?? []).length}
+                </span>
+              ) : undefined
+            }
+          />
+          <SprintQuestions
+            sprintId={sprint.id}
+            questions={(questions ?? []) as SprintQuestion[]}
+            replies={(replies ?? []) as SprintQuestionReply[]}
+            people={people}
+            meId={ctx.userId}
+            isAdmin={ctx.isAdmin}
+          />
+        </Panel>
       </div>
     </>
   );

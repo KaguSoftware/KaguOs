@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { blockIfShowcase, requireAdmin, requireSection } from "@/lib/data/session";
+import { notifyAdmins, notifySection, notifyUser } from "@/lib/actions/notify";
 import type { ActionResult } from "@/lib/actions/account";
 
 function normalizeSprintFields(raw: {
@@ -407,6 +408,130 @@ export async function removeResource(
 
   revalidatePath(`/learn/${sprintId}`);
   return { ok: true, message: "Resource removed." };
+}
+
+/**
+ * Q&A: any learn member asks; audience 'everyone' notifies the section,
+ * 'admins' stays between the asker and the admins (RLS enforces visibility).
+ */
+export async function askQuestion(
+  sprintId: string,
+  body: string,
+  audience: "everyone" | "admins"
+): Promise<ActionResult> {
+  const showcaseStop = await blockIfShowcase();
+  if (showcaseStop) return showcaseStop;
+  const ctx = await requireSection("learn");
+
+  const text = body.trim().slice(0, 2000);
+  if (!text) return { ok: false, message: "Write a question first." };
+  if (!sprintId) return { ok: false, message: "Missing sprint id." };
+
+  const { error } = await ctx.supabase.from("sprint_questions").insert({
+    sprint_id: sprintId,
+    created_by: ctx.userId,
+    body: text,
+    audience: audience === "admins" ? "admins" : "everyone",
+  });
+  if (error) return { ok: false, message: error.message };
+
+  const preview = text.length > 60 ? `${text.slice(0, 60)}…` : text;
+  if (audience === "admins") {
+    notifyAdmins(ctx, {
+      kind: "learn_question",
+      title: `Question for admins: “${preview}”`,
+      href: `/learn/${sprintId}`,
+    });
+  } else {
+    notifySection(ctx, "learn", {
+      kind: "learn_question",
+      title: `New question: “${preview}”`,
+      href: `/learn/${sprintId}`,
+    });
+  }
+
+  revalidatePath(`/learn/${sprintId}`);
+  return { ok: true, message: "Question posted." };
+}
+
+export async function replyToQuestion(
+  questionId: string,
+  sprintId: string,
+  body: string
+): Promise<ActionResult> {
+  const showcaseStop = await blockIfShowcase();
+  if (showcaseStop) return showcaseStop;
+  const ctx = await requireSection("learn");
+
+  const text = body.trim().slice(0, 2000);
+  if (!text) return { ok: false, message: "Write a reply first." };
+
+  // The asker is looked up before the insert (same wave as nothing — it's the
+  // only read) so the notification can target them; RLS hides questions this
+  // user may not see, which also blocks replying to them.
+  const { data: question } = await ctx.supabase
+    .from("sprint_questions")
+    .select("created_by, body")
+    .eq("id", questionId)
+    .maybeSingle();
+  if (!question) return { ok: false, message: "Question not found." };
+
+  const { error } = await ctx.supabase.from("sprint_question_replies").insert({
+    question_id: questionId,
+    created_by: ctx.userId,
+    body: text,
+  });
+  if (error) return { ok: false, message: error.message };
+
+  if (question.created_by) {
+    const preview =
+      question.body.length > 60 ? `${question.body.slice(0, 60)}…` : question.body;
+    notifyUser(ctx, question.created_by, {
+      kind: "learn_answer",
+      title: `Reply to your question “${preview}”`,
+      href: `/learn/${sprintId}`,
+    });
+  }
+
+  revalidatePath(`/learn/${sprintId}`);
+  return { ok: true, message: "Reply posted." };
+}
+
+export async function deleteQuestion(
+  questionId: string,
+  sprintId: string
+): Promise<ActionResult> {
+  const showcaseStop = await blockIfShowcase();
+  if (showcaseStop) return showcaseStop;
+  const ctx = await requireSection("learn");
+
+  // RLS: only the asker or an admin may delete (replies cascade).
+  const { error } = await ctx.supabase
+    .from("sprint_questions")
+    .delete()
+    .eq("id", questionId);
+  if (error) return { ok: false, message: error.message };
+
+  revalidatePath(`/learn/${sprintId}`);
+  return { ok: true, message: "Question removed." };
+}
+
+export async function deleteReply(
+  replyId: string,
+  sprintId: string
+): Promise<ActionResult> {
+  const showcaseStop = await blockIfShowcase();
+  if (showcaseStop) return showcaseStop;
+  const ctx = await requireSection("learn");
+
+  const { error } = await ctx.supabase
+    .from("sprint_question_replies")
+    .delete()
+    .eq("id", replyId);
+  if (error) return { ok: false, message: error.message };
+
+  revalidatePath(`/learn/${sprintId}`);
+  return { ok: true, message: "Reply removed." };
 }
 
 /** Participants tick their OWN goals; RLS restricts rows to user_id = auth.uid(). */
