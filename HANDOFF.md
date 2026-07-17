@@ -110,7 +110,15 @@ then verified against prod with two throwaway users (created + deleted the same 
   it now reports **65 reads, all filtered**).
 - Small kit changes: `DatePicker` gained optional `onChange` (additive); `CreatePage` gained
   `wide` prop (max-w-2xl) for composer-type surfaces. `deleteSprint` now sweeps the sprint's
-  storage folder (uploads no longer orphan).
+  storage folder (uploads no longer orphan) AND everyone's notifications whose `href` deep-links
+  to the sprint (service client — other users' rows are outside the admin's RLS; verified by
+  planting a notification, deleting the sprint via UI, asserting the row gone). Without the sweep
+  a question notification outlives its sprint and 404s from the bell — Parsa hit exactly this
+  from the test-run fan-outs (those 14 stray rows were deleted from prod by hand, 2026-07-17).
+  ⚠️ Same dead-link shape exists app-wide (idea/debug notifications vs deleted content) — worth
+  the same sweep if it ever bites there.
+  ⚠️ Testing lesson: notifySection/notifyAdmins fan out to REAL accounts even from a dev-server
+  test drive — plant rows with the service client instead of triggering fan-out when verifying.
 - **Verified** (Playwright vs `npm run dev`, throwaway users seeded then deleted, screenshots
   reviewed — both rounds): composer end-to-end incl. draft reorder/rename + link resource;
   empty-submit confirm → "Untitled sprint" defaults; member sees no Edit button, `/edit` redirects

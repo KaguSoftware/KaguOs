@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { blockIfShowcase, requireAdmin, requireSection } from "@/lib/data/session";
 import { notifyAdmins, notifySection, notifyUser } from "@/lib/actions/notify";
+import { createServiceClient } from "@/lib/supabase/service";
 import type { ActionResult } from "@/lib/actions/account";
 
 function normalizeSprintFields(raw: {
@@ -140,9 +141,18 @@ export async function deleteSprint(sprintId: string): Promise<ActionResult> {
   const { error } = await ctx.supabase.from("sprints").delete().eq("id", sprintId);
   if (error) return { ok: false, message: error.message };
 
-  // Best effort: sweep the sprint's uploads so storage doesn't collect orphans
-  // (the row cascade removes sprint_resources, not the files behind them).
-  const { data: files } = await ctx.supabase.storage.from("learn").list(sprintId);
+  // Best effort: sweep what the row cascade can't reach — the sprint's uploads
+  // in storage, and everyone's notifications that deep-link to this sprint
+  // (question/reply fan-outs); left alone they'd 404 from the bell. The
+  // notification sweep needs the service client: other users' rows are outside
+  // this admin's RLS. Both run in one wave; failures never block the delete.
+  const [{ data: files }] = await Promise.all([
+    ctx.supabase.storage.from("learn").list(sprintId),
+    createServiceClient()
+      .from("notifications")
+      .delete()
+      .eq("href", `/learn/${sprintId}`),
+  ]);
   if (files && files.length > 0) {
     await ctx.supabase.storage
       .from("learn")
