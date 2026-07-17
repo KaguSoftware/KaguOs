@@ -26,10 +26,13 @@ export function ProgressGrid({
   );
   const iParticipate = participants.some((p) => p.id === meId);
 
-  useEffect(
-    () => setDone(new Set(progress.map((p) => `${p.goal_id}:${p.user_id}`))),
-    [progress]
-  );
+  // Adopted during render, not in an effect — see board.tsx. An effect would
+  // commit the stale grid first, flashing a just-ticked cell back for a frame.
+  const [seenProgress, setSeenProgress] = useState(progress);
+  if (seenProgress !== progress) {
+    setSeenProgress(progress);
+    setDone(new Set(progress.map((p) => `${p.goal_id}:${p.user_id}`)));
+  }
 
   function toggleCell(goalId: string, next: boolean) {
     const key = `${goalId}:${meId}`;

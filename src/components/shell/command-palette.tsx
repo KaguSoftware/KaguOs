@@ -109,7 +109,14 @@ export function CommandPalette({
     }
   }, [open]);
 
-  useEffect(() => setActive(0), [query]);
+  // Reset the highlight to the first hit whenever the query changes. During
+  // render, not in an effect: an effect would paint one frame with the old
+  // highlight still on a row that no longer matches what was typed.
+  const [seenQuery, setSeenQuery] = useState(query);
+  if (seenQuery !== query) {
+    setSeenQuery(query);
+    setActive(0);
+  }
 
   function choose(cmd: Command | undefined) {
     if (!cmd) return;

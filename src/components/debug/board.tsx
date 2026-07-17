@@ -53,14 +53,24 @@ export function DebugBoard({
   const [board, setBoard] = useState<string>("all");
   const [live, setLive] = useState(false);
 
+  // Server refreshes (revalidatePath after actions) re-send props — adopt them.
+  //
+  // Done DURING RENDER, not in an effect. Syncing props to state in an effect
+  // makes React commit the stale rows first, then re-render with the new ones —
+  // a visible flash where an optimistic edit reverts for a frame before the
+  // server value lands. Resetting while rendering lets React throw the stale
+  // pass away before it ever reaches the screen.
+  const [seenTasks, setSeenTasks] = useState(initialTasks);
+  if (seenTasks !== initialTasks) {
+    setSeenTasks(initialTasks);
+    setTasks(initialTasks);
+  }
+
   const projectNames = useMemo(() => {
     const map: Record<string, string> = {};
     for (const p of projects) map[p.id] = p.name;
     return map;
   }, [projects]);
-
-  // Server refreshes (revalidatePath after actions) re-send props — adopt them.
-  useEffect(() => setTasks(initialTasks), [initialTasks]);
 
   // Optimistic layer: rows update instantly, server + realtime reconcile after.
   const patchTask = useCallback((id: string, patch: Partial<DebugTask>) => {

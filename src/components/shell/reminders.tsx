@@ -36,7 +36,14 @@ export function Reminders({
   const [items, setItems] = useState<Reminder[]>(reminders);
 
   // Reconcile if the server sends a fresh list (e.g. another tab added one).
-  useEffect(() => setItems(reminders), [reminders]);
+  // Adjusted during render rather than in an effect: an effect would commit the
+  // stale list first and re-render, flashing a just-ticked reminder back to
+  // un-ticked for a frame. See board.tsx for the same pattern.
+  const [seen, setSeen] = useState(reminders);
+  if (seen !== reminders) {
+    setSeen(reminders);
+    setItems(reminders);
+  }
 
   const pending = false;
   const openCount = items.filter((r) => !r.done).length;

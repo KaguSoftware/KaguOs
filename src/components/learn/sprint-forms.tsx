@@ -82,7 +82,13 @@ export function ParticipantsEditor({
   // Optimistic: the checkbox flips instantly; the server reconciles after.
   const [selected, setSelected] = useState<Set<string>>(() => new Set(current));
 
-  useEffect(() => setSelected(new Set(current)), [current]);
+  // Adopted during render, not in an effect — see board.tsx. An effect would
+  // commit the old selection first and flash the checkbox back for a frame.
+  const [seenCurrent, setSeenCurrent] = useState(current);
+  if (seenCurrent !== current) {
+    setSeenCurrent(current);
+    setSelected(new Set(current));
+  }
 
   function toggle(userId: string) {
     const was = new Set(selected);
@@ -123,7 +129,11 @@ export function GoalsEditor({
   const [text, setText] = useState("");
   const [list, setList] = useState<SprintGoal[]>(goals);
 
-  useEffect(() => setList(goals), [goals]);
+  const [seenGoals, setSeenGoals] = useState(goals);
+  if (seenGoals !== goals) {
+    setSeenGoals(goals);
+    setList(goals);
+  }
 
   const draftCount = text
     .split("\n")

@@ -20,7 +20,13 @@ export function MyGoals({
   const { pending, run } = useAction();
   const [done, setDone] = useState(() => new Set(doneGoalIds));
 
-  useEffect(() => setDone(new Set(doneGoalIds)), [doneGoalIds]);
+  // Adopt the server's list during render, not in an effect: an effect commits
+  // the stale ticks first, so a goal you just checked flickers back for a frame.
+  const [seen, setSeen] = useState(doneGoalIds);
+  if (seen !== doneGoalIds) {
+    setSeen(doneGoalIds);
+    setDone(new Set(doneGoalIds));
+  }
 
   function toggle(goalId: string, next: boolean) {
     const flip = (add: boolean) =>

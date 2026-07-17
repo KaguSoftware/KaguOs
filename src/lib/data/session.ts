@@ -30,23 +30,26 @@ export const getSessionContext = cache(async function getSessionContext(): Promi
   const userId = claims?.claims.sub;
   if (!userId) redirect("/login");
 
-  const [{ data: profile }, { data: memberships }] = await Promise.all([
-    supabase.from("profiles").select("*").eq("id", userId).single(),
-    supabase.from("section_memberships").select("section").eq("user_id", userId),
-  ]);
-  if (!profile) redirect("/login");
+  // One RPC, not two queries. The profile and the memberships are always needed
+  // together and always gate the rest of the page, so they're fetched in a
+  // single trip (see 0017_session_context_rpc.sql). The database answers in
+  // microseconds; what costs ~305ms is the flight to it — so trips, not query
+  // count, are what to optimise. The function reads auth.uid() internally, so
+  // there's no id to pass and nothing for a client to tamper with.
+  const { data: row } = await supabase.rpc("session_context");
+  const ctx = row as { profile: Profile; sections: Section[] } | null;
+  if (!ctx?.profile) redirect("/login");
 
-  const sections = new Set<Section>(
-    (memberships ?? []).map((m) => m.section as Section)
-  );
+  const profile = ctx.profile;
+  const sections = new Set<Section>(ctx.sections ?? []);
 
   return {
     supabase,
     userId,
-    profile: profile as Profile,
+    profile,
     sections,
-    isAdmin: (profile as Profile).is_admin,
-    showcase: Boolean((profile as Profile).showcase_mode),
+    isAdmin: profile.is_admin,
+    showcase: Boolean(profile.showcase_mode),
   };
 });
 

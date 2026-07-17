@@ -32,7 +32,13 @@ export function VoteButton({
   // Optimistic: the vote lands instantly, the server reconciles after.
   const [local, setLocal] = useState({ votes, voted });
 
-  useEffect(() => setLocal({ votes, voted }), [votes, voted]);
+  // Adopt the server's count during render, not in an effect — an effect would
+  // paint the old count for a frame first, so a just-cast vote visibly bounces.
+  const [seen, setSeen] = useState({ votes, voted });
+  if (seen.votes !== votes || seen.voted !== voted) {
+    setSeen({ votes, voted });
+    setLocal({ votes, voted });
+  }
 
   return (
     <button

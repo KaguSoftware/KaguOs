@@ -1,4 +1,6 @@
-import { getSessionContext } from "@/lib/data/session";
+import { redirect } from "next/navigation";
+import { createClient } from "@/lib/supabase/server";
+import { getSessionContext, getUserId } from "@/lib/data/session";
 import { getMembersMap } from "@/lib/data/members";
 import { Sidebar } from "@/components/shell/sidebar";
 import { CommandPalette } from "@/components/shell/command-palette";
@@ -11,16 +13,25 @@ export default async function AppLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const ctx = await getSessionContext();
+  // The user id comes from the LOCALLY-verified JWT, so it costs nothing and is
+  // available before the profile lookup returns. That lets the notifications
+  // query — which only needs the id — start in the same wave as the session
+  // fetch instead of waiting a full round-trip behind it.
+  const supabase = await createClient();
+  const userId = await getUserId(supabase);
+  if (!userId) redirect("/login");
 
-  const [{ data: notifRows }, members] = await Promise.all([
-    ctx.supabase
+  // One wave: the profile lookup, the notifications, and the members map all
+  // fly together. getMembersMap is cache()-deduped against the page's own call.
+  const [ctx, { data: notifRows }, members] = await Promise.all([
+    getSessionContext(),
+    supabase
       .from("notifications")
       .select("*")
-      .eq("recipient_id", ctx.userId)
+      .eq("recipient_id", userId)
       .order("created_at", { ascending: false })
       .limit(30),
-    getMembersMap(ctx.supabase),
+    getMembersMap(supabase),
   ]);
 
   return (
