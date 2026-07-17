@@ -124,15 +124,18 @@ export function CreateForm({
 export function CreatePage({
   title,
   hint,
+  wide = false,
   children,
 }: {
   title: string;
   hint?: string;
+  /** Composer-style surfaces (multi-section builders) get a wider column. */
+  wide?: boolean;
   children: React.ReactNode;
 }) {
   const router = useRouter();
   return (
-    <div className="mx-auto max-w-xl">
+    <div className={cn("mx-auto", wide ? "max-w-2xl" : "max-w-xl")}>
       <div className="mb-6 flex items-start justify-between gap-3">
         <div>
           <h1 className="text-[22px] font-semibold tracking-tight">{title}</h1>

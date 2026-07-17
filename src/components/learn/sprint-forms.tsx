@@ -1,14 +1,18 @@
 "use client";
 
-import { useActionState, useState, useTransition } from "react";
-import { FileText, Link2, Loader2, Plus, Trash2 } from "lucide-react";
+import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
+import { Copy, FileText, Link2, Plus, Trash2 } from "lucide-react";
 import {
   addGoals,
   addResource,
   deleteSprint,
+  duplicateSprint,
   removeGoal,
   removeResource,
+  reorderGoals,
   setParticipants,
+  updateGoal,
   updateSprint,
 } from "@/lib/actions/learn";
 import type { ActionResult } from "@/lib/actions/account";
@@ -20,27 +24,23 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { DatePicker } from "@/components/ui/date-picker";
 import { FileInput, UrlInput } from "@/components/ui/typed-inputs";
 import { CreateForm, CreateOverlay } from "@/components/ui/create";
+import { useToast } from "@/components/ui/toast";
 import { useAction } from "@/lib/use-action";
-import { cn } from "@/lib/utils";
+import { GoalListEditor, type GoalItem } from "@/components/learn/goal-list-editor";
 import type { Sprint, SprintGoal, SprintResource } from "@/lib/types";
 
-function ResultNote({ result }: { result: ActionResult }) {
-  if (!result) return null;
-  return (
-    <p
-      role="status"
-      className={cn("text-[13px]", result.ok ? "text-primary-dim" : "text-danger")}
-    >
-      {result.message}
-    </p>
-  );
-}
-
 export function EditSprintForm({ sprint }: { sprint: Sprint }) {
-  const [result, action] = useActionState(updateSprint, null);
+  const { pending, run } = useAction();
 
   return (
-    <form action={action} className="space-y-4 p-4">
+    <form
+      onSubmit={(event) => {
+        event.preventDefault();
+        const data = new FormData(event.currentTarget);
+        run(() => updateSprint(null, data), { success: "Sprint saved." });
+      }}
+      className="space-y-4 p-4"
+    >
       <input type="hidden" name="id" value={sprint.id} />
       <Field label="Title" htmlFor="sprint-title">
         <Input id="sprint-title" name="title" maxLength={120} defaultValue={sprint.title} />
@@ -61,10 +61,9 @@ export function EditSprintForm({ sprint }: { sprint: Sprint }) {
           defaultValue={sprint.description ?? ""}
         />
       </Field>
-      <div className="flex items-center gap-3">
-        <SubmitButton size="sm">Save sprint</SubmitButton>
-        <ResultNote result={result} />
-      </div>
+      <SubmitButton size="sm" disabled={pending}>
+        {pending ? "Saving…" : "Save sprint"}
+      </SubmitButton>
     </form>
   );
 }
@@ -127,7 +126,7 @@ export function GoalsEditor({
   const { pending, run } = useAction();
   const [adding, setAdding] = useState(false);
   const [text, setText] = useState("");
-  const [list, setList] = useState<SprintGoal[]>(goals);
+  const [list, setList] = useState<GoalItem[]>(goals);
 
   const [seenGoals, setSeenGoals] = useState(goals);
   if (seenGoals !== goals) {
@@ -155,39 +154,41 @@ export function GoalsEditor({
     });
   }
 
-  function remove(goal: SprintGoal) {
-    setList((prev) => prev.filter((g) => g.id !== goal.id));
-    run(() => removeGoal(goal.id, sprintId), {
-      rollback: () =>
-        setList((prev) =>
-          [...prev, goal].sort((a, b) => a.sort_order - b.sort_order)
-        ),
+  function reorder(orderedIds: string[]) {
+    const was = list;
+    const next = orderedIds
+      .map((id) => list.find((g) => g.id === id))
+      .filter((g): g is GoalItem => Boolean(g));
+    setList(next);
+    run(() => reorderGoals(sprintId, orderedIds), {
+      rollback: () => setList(was),
+    });
+  }
+
+  function rename(id: string, title: string) {
+    const was = list;
+    setList((prev) => prev.map((g) => (g.id === id ? { ...g, title } : g)));
+    run(() => updateGoal(id, sprintId, title), {
+      rollback: () => setList(was),
+    });
+  }
+
+  function remove(id: string) {
+    const was = list;
+    setList((prev) => prev.filter((g) => g.id !== id));
+    run(() => removeGoal(id, sprintId), {
+      rollback: () => setList(was),
     });
   }
 
   return (
     <div className="space-y-3 p-4">
-      <ul className="space-y-1.5">
-        {list.map((goal) => (
-          <li key={goal.id} className="flex items-center justify-between gap-2 text-sm">
-            <span className="text-ink">{goal.title}</span>
-            <button
-              type="button"
-              onClick={() => remove(goal)}
-              title="Remove goal"
-              aria-label={`Remove goal ${goal.title}`}
-              className="text-faint hover:text-danger"
-            >
-              <Trash2 className="size-3.5" aria-hidden />
-            </button>
-          </li>
-        ))}
-        {list.length === 0 && (
-          <li className="text-[13px] text-faint">
-            No goals yet — the checklist everyone ticks lives here.
-          </li>
-        )}
-      </ul>
+      <GoalListEditor
+        goals={list}
+        onReorder={reorder}
+        onRename={rename}
+        onRemove={remove}
+      />
 
       {adding ? (
         <div className="space-y-2 rounded-md border border-line bg-surface p-3">
@@ -345,31 +346,52 @@ export function ResourcesEditor({
   );
 }
 
-export function DeleteSprintButton({ sprintId }: { sprintId: string }) {
+export function DuplicateSprintButton({ sprintId }: { sprintId: string }) {
+  const router = useRouter();
+  const toast = useToast();
   const [pending, startTransition] = useTransition();
-  const [error, setError] = useState<string | null>(null);
 
   return (
-    <div className="flex items-center gap-3">
-      <ConfirmButton
-        size="sm"
-        disabled={pending}
-        confirmLabel="Really delete?"
-        onConfirm={() => {
-          setError(null);
-          startTransition(async () => {
-            const result = await deleteSprint(sprintId);
-            if (result && !result.ok) setError(result.message);
-          });
-        }}
-      >
-        Delete sprint
-      </ConfirmButton>
-      {error && (
-        <p role="status" className="text-[13px] text-danger">
-          {error}
-        </p>
-      )}
-    </div>
+    <Button
+      variant="outline"
+      size="sm"
+      disabled={pending}
+      onClick={() =>
+        startTransition(async () => {
+          const result = await duplicateSprint(sprintId);
+          if (!result?.id) {
+            toast.error(result?.message ?? "Failed to duplicate.");
+            return;
+          }
+          if (result.ok) toast.success("Duplicated — set the dates and go.");
+          else toast.error(result.message);
+          router.push(`/learn/${result.id}/edit`);
+        })
+      }
+    >
+      <Copy className="size-3.5" aria-hidden />
+      {pending ? "Duplicating…" : "Duplicate sprint"}
+    </Button>
+  );
+}
+
+export function DeleteSprintButton({ sprintId }: { sprintId: string }) {
+  const toast = useToast();
+  const [pending, startTransition] = useTransition();
+
+  return (
+    <ConfirmButton
+      size="sm"
+      disabled={pending}
+      confirmLabel="Really delete?"
+      onConfirm={() => {
+        startTransition(async () => {
+          const result = await deleteSprint(sprintId);
+          if (result && !result.ok) toast.error(result.message);
+        });
+      }}
+    >
+      Delete sprint
+    </ConfirmButton>
   );
 }

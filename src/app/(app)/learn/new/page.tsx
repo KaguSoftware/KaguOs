@@ -1,19 +1,39 @@
 import type { Metadata } from "next";
 import { requireAdmin } from "@/lib/data/session";
 import { CreatePage } from "@/components/ui/create";
-import { NewSprintForm } from "@/components/learn/new-sprint-form";
+import { SprintComposer } from "@/components/learn/sprint-composer";
 
 export const metadata: Metadata = { title: "New sprint" };
 
 export default async function NewSprintPage() {
-  await requireAdmin();
+  const ctx = await requireAdmin();
+
+  const { data: learnMembers } = await ctx.supabase
+    .from("section_memberships")
+    .select("user_id, profiles(id, full_name, email)")
+    .eq("section", "learn");
+
+  const members = (learnMembers ?? [])
+    .map((m) => {
+      const profile = m.profiles as unknown as {
+        id: string;
+        full_name: string | null;
+        email: string;
+      } | null;
+      return profile
+        ? { id: profile.id, name: profile.full_name || profile.email }
+        : null;
+    })
+    .filter((p): p is { id: string; name: string } => p !== null)
+    .sort((a, b) => a.name.localeCompare(b.name));
 
   return (
     <CreatePage
       title="New learning sprint"
-      hint="You'll land on the sprint page next to pick participants, goals and resources."
+      hint="Build the whole sprint here — participants, goals and resources included."
+      wide
     >
-      <NewSprintForm />
+      <SprintComposer members={members} />
     </CreatePage>
   );
 }

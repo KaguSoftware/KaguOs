@@ -5,29 +5,57 @@ import { redirect } from "next/navigation";
 import { blockIfShowcase, requireAdmin, requireSection } from "@/lib/data/session";
 import type { ActionResult } from "@/lib/actions/account";
 
-function sprintFields(formData: FormData) {
+function normalizeSprintFields(raw: {
+  title?: string | null;
+  description?: string | null;
+  starts_on?: string | null;
+  ends_on?: string | null;
+}) {
   // No required fields (create-flow rule): sensible defaults keep dates valid.
   const today = new Date().toISOString().slice(0, 10);
-  const starts = String(formData.get("starts_on") ?? "") || today;
-  let ends = String(formData.get("ends_on") ?? "") || starts;
+  const starts = (raw.starts_on ?? "") || today;
+  let ends = (raw.ends_on ?? "") || starts;
   if (ends < starts) ends = starts;
   return {
-    title:
-      String(formData.get("title") ?? "").trim().slice(0, 120) || "Untitled sprint",
-    description: String(formData.get("description") ?? "").trim() || null,
+    title: (raw.title ?? "").trim().slice(0, 120) || "Untitled sprint",
+    description: (raw.description ?? "").trim() || null,
     starts_on: starts,
     ends_on: ends,
   };
 }
 
-export async function createSprint(
-  _prev: ActionResult,
-  formData: FormData
-): Promise<ActionResult> {
+function sprintFields(formData: FormData) {
+  return normalizeSprintFields({
+    title: String(formData.get("title") ?? ""),
+    description: String(formData.get("description") ?? ""),
+    starts_on: String(formData.get("starts_on") ?? ""),
+    ends_on: String(formData.get("ends_on") ?? ""),
+  });
+}
+
+export type SprintDraft = {
+  title: string;
+  description: string;
+  starts_on: string;
+  ends_on: string;
+  participantIds: string[];
+  goalTitles: string[];
+  linkResources: { title: string; url: string }[];
+};
+
+export type SprintResult = ActionResult & { id?: string };
+
+/**
+ * The composer saves a whole sprint in one go: basics, participants, goals,
+ * and link resources. Returns the id (no redirect) so the client can upload
+ * staged files under `${id}/…` before navigating. This replaced the old
+ * two-step createSprint → configure-on-the-detail-page flow.
+ */
+export async function createSprintFull(draft: SprintDraft): Promise<SprintResult> {
   const showcaseStop = await blockIfShowcase();
   if (showcaseStop) return showcaseStop;
   const ctx = await requireAdmin();
-  const fields = sprintFields(formData);
+  const fields = normalizeSprintFields(draft);
 
   const { data: sprint, error } = await ctx.supabase
     .from("sprints")
@@ -36,8 +64,51 @@ export async function createSprint(
     .single();
   if (error || !sprint) return { ok: false, message: error?.message ?? "Failed." };
 
+  const goalRows = draft.goalTitles
+    .map((t) => t.trim().slice(0, 200))
+    .filter(Boolean)
+    .map((title, i) => ({ sprint_id: sprint.id, title, sort_order: i }));
+  const participantRows = [...new Set(draft.participantIds)].map((user_id) => ({
+    sprint_id: sprint.id,
+    user_id,
+  }));
+  const resourceRows = draft.linkResources
+    .map((r) => {
+      let url = r.url.trim();
+      if (url && !/^https?:\/\//.test(url)) url = `https://${url}`;
+      return {
+        sprint_id: sprint.id,
+        title: r.title.trim().slice(0, 200) || "Untitled resource",
+        url: url || null,
+      };
+    })
+    .filter((r) => r.url || r.title !== "Untitled resource");
+
+  // One wave for everything the sprint contains.
+  const results = await Promise.all([
+    goalRows.length
+      ? ctx.supabase.from("sprint_goals").insert(goalRows)
+      : Promise.resolve({ error: null }),
+    participantRows.length
+      ? ctx.supabase.from("sprint_participants").insert(participantRows)
+      : Promise.resolve({ error: null }),
+    resourceRows.length
+      ? ctx.supabase.from("sprint_resources").insert(resourceRows)
+      : Promise.resolve({ error: null }),
+  ]);
+  const failed = results.find((r) => r.error);
+
   revalidatePath("/learn");
-  redirect(`/learn/${sprint.id}`);
+  revalidatePath(`/learn/${sprint.id}`);
+  if (failed?.error) {
+    // The sprint exists — hand back the id so the client still lands on it.
+    return {
+      ok: false,
+      id: sprint.id,
+      message: `Sprint created, but part of it failed: ${failed.error.message}`,
+    };
+  }
+  return { ok: true, id: sprint.id, message: "Sprint created." };
 }
 
 export async function updateSprint(
@@ -68,8 +139,93 @@ export async function deleteSprint(sprintId: string): Promise<ActionResult> {
   const { error } = await ctx.supabase.from("sprints").delete().eq("id", sprintId);
   if (error) return { ok: false, message: error.message };
 
+  // Best effort: sweep the sprint's uploads so storage doesn't collect orphans
+  // (the row cascade removes sprint_resources, not the files behind them).
+  const { data: files } = await ctx.supabase.storage.from("learn").list(sprintId);
+  if (files && files.length > 0) {
+    await ctx.supabase.storage
+      .from("learn")
+      .remove(files.map((f) => `${sprintId}/${f.name}`));
+  }
+
   revalidatePath("/learn");
   redirect("/learn");
+}
+
+/** Starts today, keeps the duration, copies goals + participants (not files). */
+export async function duplicateSprint(sprintId: string): Promise<SprintResult> {
+  const showcaseStop = await blockIfShowcase();
+  if (showcaseStop) return showcaseStop;
+  const ctx = await requireAdmin();
+
+  const [{ data: sprint }, { data: goals }, { data: participants }] =
+    await Promise.all([
+      ctx.supabase.from("sprints").select("*").eq("id", sprintId).maybeSingle(),
+      ctx.supabase
+        .from("sprint_goals")
+        .select("title, sort_order")
+        .eq("sprint_id", sprintId)
+        .order("sort_order")
+        .order("created_at"),
+      ctx.supabase
+        .from("sprint_participants")
+        .select("user_id")
+        .eq("sprint_id", sprintId),
+    ]);
+  if (!sprint) return { ok: false, message: "Sprint not found." };
+
+  const dayMs = 24 * 60 * 60 * 1000;
+  const durationDays = Math.max(
+    0,
+    Math.round(
+      (Date.parse(sprint.ends_on) - Date.parse(sprint.starts_on)) / dayMs
+    )
+  );
+  const today = new Date().toISOString().slice(0, 10);
+  const ends = new Date(Date.parse(today) + durationDays * dayMs)
+    .toISOString()
+    .slice(0, 10);
+
+  const { data: copy, error } = await ctx.supabase
+    .from("sprints")
+    .insert({
+      title: `${sprint.title} (copy)`.slice(0, 120),
+      description: sprint.description,
+      starts_on: today,
+      ends_on: ends,
+      created_by: ctx.userId,
+    })
+    .select("id")
+    .single();
+  if (error || !copy) return { ok: false, message: error?.message ?? "Failed." };
+
+  const results = await Promise.all([
+    goals && goals.length > 0
+      ? ctx.supabase.from("sprint_goals").insert(
+          goals.map((g, i) => ({
+            sprint_id: copy.id,
+            title: g.title,
+            sort_order: i,
+          }))
+        )
+      : Promise.resolve({ error: null }),
+    participants && participants.length > 0
+      ? ctx.supabase.from("sprint_participants").insert(
+          participants.map((p) => ({ sprint_id: copy.id, user_id: p.user_id }))
+        )
+      : Promise.resolve({ error: null }),
+  ]);
+  const failed = results.find((r) => r.error);
+
+  revalidatePath("/learn");
+  if (failed?.error) {
+    return {
+      ok: false,
+      id: copy.id,
+      message: `Duplicated, but part of it failed: ${failed.error.message}`,
+    };
+  }
+  return { ok: true, id: copy.id, message: "Sprint duplicated." };
 }
 
 export async function setParticipants(
@@ -136,6 +292,55 @@ export async function addGoals(
     ok: true,
     message: rows.length === 1 ? "Goal added." : `${rows.length} goals added.`,
   };
+}
+
+/** Rename in place. A blank title keeps the old one (no required fields). */
+export async function updateGoal(
+  goalId: string,
+  sprintId: string,
+  title: string
+): Promise<ActionResult> {
+  const showcaseStop = await blockIfShowcase();
+  if (showcaseStop) return showcaseStop;
+  const ctx = await requireAdmin();
+
+  const next = title.trim().slice(0, 200);
+  if (!next) return { ok: true, message: "Kept the old title." };
+
+  const { error } = await ctx.supabase
+    .from("sprint_goals")
+    .update({ title: next })
+    .eq("id", goalId);
+  if (error) return { ok: false, message: error.message };
+
+  revalidatePath(`/learn/${sprintId}`);
+  return { ok: true, message: "Goal renamed." };
+}
+
+/** Persist a full ordering — parallel updates, one wave. */
+export async function reorderGoals(
+  sprintId: string,
+  orderedIds: string[]
+): Promise<ActionResult> {
+  const showcaseStop = await blockIfShowcase();
+  if (showcaseStop) return showcaseStop;
+  const ctx = await requireAdmin();
+  if (orderedIds.length === 0) return { ok: true, message: "Nothing to order." };
+
+  const results = await Promise.all(
+    orderedIds.map((id, i) =>
+      ctx.supabase
+        .from("sprint_goals")
+        .update({ sort_order: i })
+        .eq("id", id)
+        .eq("sprint_id", sprintId)
+    )
+  );
+  const failed = results.find((r) => r.error);
+  if (failed?.error) return { ok: false, message: failed.error.message };
+
+  revalidatePath(`/learn/${sprintId}`);
+  return { ok: true, message: "Order saved." };
 }
 
 export async function removeGoal(goalId: string, sprintId: string): Promise<ActionResult> {

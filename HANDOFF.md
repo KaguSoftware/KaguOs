@@ -61,6 +61,51 @@ Contracts w/ PDFs), **Debug** (everyone: per-project boards, self-claim-only, re
 
 ## Current status (2026-07-17)
 
+### 🎓 LEARN OVERHAUL (2026-07-17) — authoring flow + visuals rebuilt, VERIFIED end-to-end
+Parsa: "insanely hard to build new things as an admin, visuals bad." Agreed in plan mode, built,
+then verified against prod with two throwaway users (created + deleted the same session; all
+`[test]` sprints removed, checked zero leftovers). What changed:
+- **`/learn/new` is now a full composer** (`learn/sprint-composer.tsx`): basics + live duration
+  hint + participant picker ("Everyone" toggle) + goals (batch textarea → orderable draft list) +
+  resources (links + staged file uploads) — ONE submit creates everything via `createSprintFull`
+  (returns `{ok, id}`, no redirect, so staged files upload under `${id}/…` before navigating).
+  Empty-confirm bar covers Title/Description/Participants/Goals. Old two-step create is gone
+  (`new-sprint-form.tsx` deleted, `createSprint` action removed).
+- **`/learn/[id]/edit`** (new route, `requireAdmin`): two-column builder (settings+participants |
+  goals+resources) + danger zone (**Duplicate sprint** → copies goals/participants, starts today,
+  same duration → lands on the copy's edit page; Delete). The detail page is now consume-only with
+  an Edit button for admins.
+- **Goal ordering finally uses `sort_order`**: shared `goal-list-editor.tsx` (composer + edit page)
+  — hand-rolled pointer drag on a grip (NO new dependency), up/down arrow buttons, arrow-key
+  support on the handle, inline click-to-rename. Actions: `reorderGoals` (parallel updates, one
+  wave), `updateGoal` (blank keeps old title). All optimistic w/ rollback.
+- **Race standings (Parsa request: "progress like a race, not a game")**: `race-standings.tsx` —
+  identical full-width lanes per participant toward one finish-line hairline, sorted by done count
+  (competition ranking, ties share rank), identity-colored fills, FLIP-style 200ms `ease-mac` lane
+  swaps, viewer's lane tinted + "You". No badges/confetti — restraint held. Shown when ≥2
+  participants.
+- **One optimistic owner for ticks**: `sprint-progress.tsx` owns the shared done-set and renders
+  Your goals + Standings + the grid; a tick moves your race lane instantly. `my-goals.tsx` was
+  absorbed into it (deleted). `progress-grid.tsx` is now presentational + sticky first column,
+  per-goal `n/m`, per-person totals row, viewer-column tint, toast errors via the shared owner.
+- **Detail hero**: "day X of Y · team N% done" mono line + thin elapsed-time bar (active),
+  "starts in N days" (upcoming). Resources rows fixed: title = ONE primary link (url, else signed
+  file), both-url-and-file → small "file" chip (the confusing twin anchors are gone).
+- **`/learn` list**: grouped Active / Upcoming / Past (badges dropped — group labels carry phase),
+  meta gains "Nd left" + "team N%", personal progress bar as before. Team % needed everyone's
+  progress rows — same wave, `.eq("is_demo", ctx.showcase)` added (check:demo caught the miss;
+  it now reports **65 reads, all filtered**).
+- Small kit changes: `DatePicker` gained optional `onChange` (additive); `CreatePage` gained
+  `wide` prop (max-w-2xl) for composer-type surfaces. `deleteSprint` now sweeps the sprint's
+  storage folder (uploads no longer orphan).
+- **Verified** (Playwright vs `npm run dev`, two seeded users, screenshots reviewed): composer
+  end-to-end incl. draft reorder/rename + link resource; empty-submit confirm → "Untitled sprint"
+  defaults; detail race/grid/hero; member sees no Edit button, `/edit` redirects them, their tick
+  moves their lane; drag reorder persists; rename persists; duplicate lands on a NEW edit page
+  with 3 goals; deletes clean. NOT exercised live: file-upload path on create (link path was;
+  upload code is the same browser→bucket pattern as before) and the storage sweep on delete.
+  Build + lint clean (the 2 pre-existing lint errors remain), check:demo green.
+
 ### ⚡ Perf pass 2 (2026-07-17) — the numbers that should govern every future change
 
 **THE ONE RULE: a round-trip costs ~305ms; a query added to an EXISTING wave costs ~3ms.**
@@ -123,7 +168,7 @@ volume. They're insurance, not a speedup.
 - ✅ **`npm run check:demo`** (`scripts/check-demo-filters.ts`) — the showcase invariant is now
   machine-checked instead of resting on reviewer memory. Flags any read of a demo-able table with no
   `is_demo` filter, ignoring the shapes that legitimately skip it (by-id, parent-scoped, writes).
-  Currently: 58 reads, all filtered. **Validated both directions** — deleting one `is_demo` line
+  Currently: 65 reads, all filtered (it caught the Learn list's new team-progress query same day). **Validated both directions** — deleting one `is_demo` line
   makes it fail with the exact file:line and exit 1. Run it after touching any query on a demo-able
   table. A full audit of all 19 tables found **no leaks** in the current code.
 - ✅ **Skip-to-content link** — PRODUCT.md promises full keyboard operability, but every page put 6+
@@ -182,8 +227,9 @@ volume. They're insurance, not a speedup.
 - HCI foundation (2026-07-16): app-wide **toast system** (`ui/toast.tsx`, mounted in the (app)
   layout) + **`useAction` hook** (`lib/use-action.ts`) standardizing optimistic run→rollback→
   toast-on-failure. High-traffic flows refactored onto it; create forms toast success/error. Every
-  action now tells the user what happened. Lower-traffic admin flows (fx-editor, sprint-forms,
-  user-row, contract-bits, progress-grid, color-form, import-debug) still use inline errors — fine.
+  action now tells the user what happened. Lower-traffic admin flows (fx-editor, user-row,
+  contract-bits, color-form, import-debug) still use inline errors — fine. (sprint-forms and
+  progress-grid moved onto `useAction`/toasts in the 2026-07-17 Learn overhaul.)
 - Features shipped (2026-07-16): **in-app notifications** (bell in sidebar, unread badge, event
   fan-out via `lib/actions/notify.ts`); **announcements hero** (admin-posted dashboard banner);
   **⌘K command palette** (`shell/command-palette.tsx`, mounted in (app) layout, sidebar Search
@@ -269,6 +315,13 @@ volume. They're insurance, not a speedup.
     `/marketing/content|links` → `/marketing?tab=…`.
   Old sub-routes are redirect stubs; list-level `revalidatePath`, form `onDone`, and detail back-links
   all point at the `?tab=` URLs. `SectionTabs` + per-section `tabs.ts` were retired.
+- **Learn (post-overhaul 2026-07-17)**: `learn/page.tsx` (phase-grouped list) · `learn/new` +
+  `learn/sprint-composer.tsx` (one-shot builder) · `learn/[id]/page.tsx` (consume-only detail) ·
+  `learn/[id]/edit/page.tsx` + `learn/sprint-forms.tsx` (admin builder + Duplicate/Delete) ·
+  `learn/goal-list-editor.tsx` (shared drag/arrows/rename list) · `learn/sprint-progress.tsx`
+  (owns the optimistic done-set; renders Your goals + Standings + grid) · `learn/race-standings.tsx`
+  (the race) · `learn/progress-grid.tsx` (presentational matrix). `my-goals.tsx` and
+  `new-sprint-form.tsx` no longer exist.
 - `src/components/ui/toast.tsx` — toast provider + `useToast()` (success/error/loading/info,
   promise wrapper). Mounted once in `(app)/layout.tsx`. `src/lib/use-action.ts` — `useAction()`
   wraps optimistic mutate→run→rollback+toast; the one way client components fire actions now.

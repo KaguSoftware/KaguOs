@@ -1,25 +1,20 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, FileText, Link2 } from "lucide-react";
+import { ArrowLeft, FileText, Link2, Pencil } from "lucide-react";
 import { requireSection } from "@/lib/data/session";
 import { PageHeader } from "@/components/shell/page-header";
 import { Panel, PanelHeader } from "@/components/ui/panel";
 import { Badge, type BadgeTone } from "@/components/ui/badge";
-import { ProgressGrid } from "@/components/learn/progress-grid";
-import { MyGoals } from "@/components/learn/my-goals";
-import {
-  DeleteSprintButton,
-  EditSprintForm,
-  GoalsEditor,
-  ParticipantsEditor,
-  ResourcesEditor,
-} from "@/components/learn/sprint-forms";
+import { LinkButton } from "@/components/ui/link-button";
+import { SprintProgress } from "@/components/learn/sprint-progress";
 import { memberColorCss } from "@/lib/colors";
 import { formatDate } from "@/lib/utils";
 import type { Sprint, SprintGoal, SprintResource } from "@/lib/types";
 
 export const metadata: Metadata = { title: "Sprint" };
+
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 function phaseOf(sprint: Sprint): { label: string; tone: BadgeTone } {
   const today = new Date().toISOString().slice(0, 10);
@@ -91,10 +86,6 @@ export default async function SprintPage({
 
   const participantIds = (participants ?? []).map((p) => p.user_id);
   const gridPeople = people.filter((p) => participantIds.includes(p.id));
-  const iParticipate = participantIds.includes(ctx.userId);
-  const myDoneGoalIds = (progress ?? [])
-    .filter((p) => p.user_id === ctx.userId)
-    .map((p) => p.goal_id);
 
   // Signed URLs for uploaded files (private bucket, 1 hour).
   //
@@ -124,6 +115,30 @@ export default async function SprintPage({
 
   const phase = phaseOf(sprint as Sprint);
 
+  // Timeline: where in the sprint are we? Dates are inclusive on both ends.
+  const today = new Date().toISOString().slice(0, 10);
+  const totalDays =
+    Math.round((Date.parse(sprint.ends_on) - Date.parse(sprint.starts_on)) / DAY_MS) + 1;
+  const dayOf = Math.min(
+    totalDays,
+    Math.max(1, Math.round((Date.parse(today) - Date.parse(sprint.starts_on)) / DAY_MS) + 1)
+  );
+  const daysUntil = Math.round((Date.parse(sprint.starts_on) - Date.parse(today)) / DAY_MS);
+  const timeline =
+    phase.label === "active"
+      ? `day ${dayOf} of ${totalDays}`
+      : phase.label === "upcoming"
+        ? daysUntil === 1
+          ? "starts tomorrow"
+          : `starts in ${daysUntil} days`
+        : null;
+
+  // Team completion across every participant and goal, from rows already fetched.
+  const totalCells = (goals?.length ?? 0) * gridPeople.length;
+  const participantSet = new Set(participantIds);
+  const doneCells = (progress ?? []).filter((p) => participantSet.has(p.user_id)).length;
+  const teamPct = totalCells > 0 ? Math.round((doneCells / totalCells) * 100) : null;
+
   return (
     <>
       <Link
@@ -136,8 +151,45 @@ export default async function SprintPage({
       <PageHeader
         title={sprint.title}
         description={`${formatDate(sprint.starts_on)} → ${formatDate(sprint.ends_on)}`}
-        action={<Badge tone={phase.tone}>{phase.label}</Badge>}
+        action={
+          <span className="flex items-center gap-2">
+            <Badge tone={phase.tone}>{phase.label}</Badge>
+            {ctx.isAdmin && (
+              <LinkButton href={`/learn/${id}/edit`} variant="outline">
+                <Pencil className="size-3.5" aria-hidden />
+                Edit
+              </LinkButton>
+            )}
+          </span>
+        }
       />
+
+      {(timeline || teamPct !== null) && (
+        <div className="mb-6 max-w-md">
+          <p className="flex items-center gap-3 font-mono text-xs text-faint">
+            {timeline && <span>{timeline}</span>}
+            {phase.label === "active" && timeline && teamPct !== null && (
+              <span aria-hidden>·</span>
+            )}
+            {teamPct !== null && <span>team {teamPct}% done</span>}
+          </p>
+          {phase.label === "active" && totalDays > 1 && (
+            <span
+              className="mt-2 block h-1 overflow-hidden rounded-full bg-raised"
+              role="progressbar"
+              aria-valuemin={1}
+              aria-valuemax={totalDays}
+              aria-valuenow={dayOf}
+              aria-label={`Day ${dayOf} of ${totalDays}`}
+            >
+              <span
+                className="block h-full rounded-full bg-primary/60"
+                style={{ width: `${(dayOf / totalDays) * 100}%` }}
+              />
+            </span>
+          )}
+        </div>
+      )}
 
       {sprint.description && (
         <p className="mb-6 max-w-[70ch] whitespace-pre-wrap text-sm leading-relaxed text-muted">
@@ -149,38 +201,41 @@ export default async function SprintPage({
         {resourceList.length > 0 && (
           <Panel>
             <PanelHeader title="Resources" />
-            <ul className="space-y-1.5 p-4">
+            <ul className="divide-y divide-line">
               {resourceList.map((resource) => {
                 const fileUrl = fileUrls.get(resource.id);
+                const primaryHref = resource.url || fileUrl;
+                const Icon = resource.url ? Link2 : FileText;
                 return (
-                  <li key={resource.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
-                    {resource.url && (
+                  <li
+                    key={resource.id}
+                    className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2.5 text-sm transition-colors duration-150 hover:bg-raised/60"
+                  >
+                    <Icon className="size-3.5 shrink-0 text-faint" aria-hidden />
+                    {primaryHref ? (
                       <a
-                        href={resource.url}
+                        href={primaryHref}
                         target="_blank"
                         rel="noreferrer"
-                        className="inline-flex items-center gap-1.5 text-muted underline-offset-2 hover:text-ink hover:underline"
+                        className="min-w-0 truncate text-ink underline-offset-2 hover:text-primary-dim hover:underline"
                       >
-                        <Link2 className="size-3.5 shrink-0 text-faint" aria-hidden />
                         {resource.title}
                       </a>
+                    ) : (
+                      <span className="min-w-0 truncate text-muted">
+                        {resource.title}
+                      </span>
                     )}
-                    {fileUrl && (
+                    {resource.url && fileUrl && (
                       <a
                         href={fileUrl}
                         target="_blank"
                         rel="noreferrer"
-                        className="inline-flex items-center gap-1.5 text-muted underline-offset-2 hover:text-ink hover:underline"
+                        className="inline-flex shrink-0 items-center gap-1 rounded-full border border-line px-2 py-0.5 text-xs text-muted transition-colors duration-150 hover:border-line-strong hover:text-ink"
                       >
-                        <FileText className="size-3.5 shrink-0 text-faint" aria-hidden />
-                        {resource.url ? "attached file" : resource.title}
+                        <FileText className="size-3" aria-hidden />
+                        file
                       </a>
-                    )}
-                    {!resource.url && !fileUrl && (
-                      <span className="inline-flex items-center gap-1.5 text-muted">
-                        <FileText className="size-3.5 shrink-0 text-faint" aria-hidden />
-                        {resource.title}
-                      </span>
                     )}
                   </li>
                 );
@@ -189,70 +244,14 @@ export default async function SprintPage({
           </Panel>
         )}
 
-        {iParticipate && goals && goals.length > 0 && (
-          <Panel>
-            <PanelHeader
-              title="Your goals"
-              action={
-                <span className="font-mono text-xs text-muted">
-                  {myDoneGoalIds.length}/{goals.length} done
-                </span>
-              }
-            />
-            <MyGoals
-              sprintId={sprint.id}
-              goals={(goals ?? []) as SprintGoal[]}
-              doneGoalIds={myDoneGoalIds}
-            />
-          </Panel>
-        )}
-
-        <Panel>
-          <PanelHeader
-            title={`Team progress (${gridPeople.length} ${gridPeople.length === 1 ? "person" : "people"})`}
-          />
-          {goals && goals.length > 0 && gridPeople.length > 0 ? (
-            <ProgressGrid
-              sprintId={sprint.id}
-              goals={(goals ?? []) as SprintGoal[]}
-              participants={gridPeople}
-              progress={progress ?? []}
-              meId={ctx.userId}
-            />
-          ) : (
-            <p className="p-4 text-[13px] text-faint">
-              {ctx.isAdmin
-                ? "Add goals and participants below to start tracking."
-                : "Goals and participants haven't been set up yet."}
-            </p>
-          )}
-        </Panel>
-
-        {ctx.isAdmin && (
-          <>
-            <Panel>
-              <PanelHeader title="Sprint settings" />
-              <EditSprintForm sprint={sprint as Sprint} />
-            </Panel>
-            <Panel>
-              <PanelHeader title="Participants" />
-              <ParticipantsEditor
-                sprintId={sprint.id}
-                people={people}
-                current={participantIds}
-              />
-            </Panel>
-            <Panel>
-              <PanelHeader title="Goals" />
-              <GoalsEditor sprintId={sprint.id} goals={(goals ?? []) as SprintGoal[]} />
-            </Panel>
-            <Panel>
-              <PanelHeader title="Resources" />
-              <ResourcesEditor sprintId={sprint.id} resources={resourceList} />
-            </Panel>
-            <DeleteSprintButton sprintId={sprint.id} />
-          </>
-        )}
+        <SprintProgress
+          sprintId={sprint.id}
+          goals={(goals ?? []) as SprintGoal[]}
+          participants={gridPeople}
+          progress={progress ?? []}
+          meId={ctx.userId}
+          isAdmin={ctx.isAdmin}
+        />
       </div>
     </>
   );

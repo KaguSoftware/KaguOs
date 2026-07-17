@@ -1,77 +1,57 @@
 "use client";
 
-import { useState, useTransition } from "react";
 import { Check, Loader2 } from "lucide-react";
-import { toggleGoalProgress } from "@/lib/actions/learn";
 import { cn } from "@/lib/utils";
 import type { SprintGoal } from "@/lib/types";
 
+/**
+ * The per-goal detail matrix: who did which goal. Presentational — the shared
+ * done-set lives in SprintProgress so the race above moves with every tick.
+ * The first column sticks so wide teams stay readable while scrolling.
+ */
 export function ProgressGrid({
-  sprintId,
   goals,
   participants,
-  progress,
+  done,
   meId,
+  iParticipate,
+  pending,
+  onToggle,
 }: {
-  sprintId: string;
   goals: SprintGoal[];
   participants: { id: string; name: string; color: string }[];
-  progress: { goal_id: string; user_id: string }[];
+  /** keys of the form `${goalId}:${userId}` */
+  done: Set<string>;
   meId: string;
+  iParticipate: boolean;
+  pending: boolean;
+  onToggle: (goalId: string, next: boolean) => void;
 }) {
-  const [pending, startTransition] = useTransition();
-  const [error, setError] = useState<string | null>(null);
-  const [done, setDone] = useState(
-    () => new Set(progress.map((p) => `${p.goal_id}:${p.user_id}`))
-  );
-  const iParticipate = participants.some((p) => p.id === meId);
-
-  // Adopted during render, not in an effect — see board.tsx. An effect would
-  // commit the stale grid first, flashing a just-ticked cell back for a frame.
-  const [seenProgress, setSeenProgress] = useState(progress);
-  if (seenProgress !== progress) {
-    setSeenProgress(progress);
-    setDone(new Set(progress.map((p) => `${p.goal_id}:${p.user_id}`)));
-  }
-
-  function toggleCell(goalId: string, next: boolean) {
-    const key = `${goalId}:${meId}`;
-    setError(null);
-    setDone((prev) => {
-      const copy = new Set(prev);
-      if (next) copy.add(key);
-      else copy.delete(key);
-      return copy;
-    });
-    startTransition(async () => {
-      const result = await toggleGoalProgress(goalId, sprintId, next);
-      if (result && !result.ok) {
-        setDone((prev) => {
-          const copy = new Set(prev);
-          if (next) copy.delete(key);
-          else copy.add(key);
-          return copy;
-        });
-        setError(result.message);
-      }
-    });
-  }
-
   function firstName(name: string) {
     return name.split(" ")[0];
   }
+
+  const goalDone = (goalId: string) =>
+    participants.filter((p) => done.has(`${goalId}:${p.id}`)).length;
+  const personDone = (personId: string) =>
+    goals.filter((g) => done.has(`${g.id}:${personId}`)).length;
 
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-sm">
         <thead>
           <tr className="border-b border-line text-left">
-            <th className="px-4 py-2.5 text-xs font-medium text-faint">Goal</th>
+            <th className="sticky left-0 z-10 bg-surface px-4 py-2.5 text-xs font-medium text-faint">
+              Goal
+            </th>
             {participants.map((person) => (
               <th
                 key={person.id}
                 style={{ color: person.color }}
-                className="px-3 py-2.5 text-center text-xs font-medium"
+                className={cn(
+                  "px-3 py-2.5 text-center text-xs font-medium",
+                  person.id === meId && "bg-primary/[0.04]"
+                )}
               >
                 {person.id === meId ? "You" : firstName(person.name)}
               </th>
@@ -80,19 +60,32 @@ export function ProgressGrid({
         </thead>
         <tbody className="divide-y divide-line">
           {goals.map((goal) => (
-            <tr key={goal.id}>
-              <td className="max-w-72 px-4 py-2.5 text-ink">{goal.title}</td>
+            <tr key={goal.id} className="group">
+              <td className="sticky left-0 z-10 max-w-72 bg-surface px-4 py-2.5">
+                <span className="flex items-baseline justify-between gap-3">
+                  <span className="truncate text-ink">{goal.title}</span>
+                  <span className="shrink-0 font-mono text-xs text-faint">
+                    {goalDone(goal.id)}/{participants.length}
+                  </span>
+                </span>
+              </td>
               {participants.map((person) => {
                 const isDone = done.has(`${goal.id}:${person.id}`);
                 const isMe = person.id === meId;
                 return (
-                  <td key={person.id} className="px-3 py-2.5 text-center">
-                    {isMe ? (
+                  <td
+                    key={person.id}
+                    className={cn(
+                      "px-3 py-2.5 text-center transition-colors duration-150 group-hover:bg-raised/40",
+                      isMe && "bg-primary/[0.04]"
+                    )}
+                  >
+                    {isMe && iParticipate ? (
                       <button
                         type="button"
                         aria-pressed={isDone}
                         aria-label={`${goal.title}: mark ${isDone ? "not done" : "done"}`}
-                        onClick={() => toggleCell(goal.id, !isDone)}
+                        onClick={() => onToggle(goal.id, !isDone)}
                         className={cn(
                           "inline-flex size-6 items-center justify-center rounded-md border transition-colors duration-150",
                           isDone
@@ -119,20 +112,39 @@ export function ProgressGrid({
             </tr>
           ))}
         </tbody>
+        {goals.length > 1 && (
+          <tfoot>
+            <tr className="border-t border-line">
+              <td className="sticky left-0 z-10 bg-surface px-4 py-2.5 text-xs font-medium text-faint">
+                Total
+              </td>
+              {participants.map((person) => (
+                <td
+                  key={person.id}
+                  className={cn(
+                    "px-3 py-2.5 text-center font-mono text-xs text-muted",
+                    person.id === meId && "bg-primary/[0.04]"
+                  )}
+                >
+                  {personDone(person.id)}/{goals.length}
+                </td>
+              ))}
+            </tr>
+          </tfoot>
+        )}
       </table>
-      <div className="flex items-center gap-2 px-4 py-2">
-        {pending && <Loader2 className="size-3.5 animate-spin text-faint" aria-hidden />}
-        {!iParticipate && (
-          <p className="text-xs text-faint">
-            You&apos;re viewing — this sprint isn&apos;t assigned to you.
-          </p>
-        )}
-        {error && (
-          <p role="status" className="text-[13px] text-danger">
-            {error}
-          </p>
-        )}
-      </div>
+      {(pending || !iParticipate) && (
+        <div className="flex items-center gap-2 px-4 py-2">
+          {pending && (
+            <Loader2 className="size-3.5 animate-spin text-faint" aria-hidden />
+          )}
+          {!iParticipate && (
+            <p className="text-xs text-faint">
+              You&apos;re viewing — this sprint isn&apos;t assigned to you.
+            </p>
+          )}
+        </div>
+      )}
     </div>
   );
 }

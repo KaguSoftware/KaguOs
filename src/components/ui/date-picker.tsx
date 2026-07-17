@@ -28,15 +28,22 @@ export function DatePicker({
   id,
   defaultValue = "",
   placeholder = "Pick a date…",
+  onChange,
   className,
 }: {
   name: string;
   id?: string;
   defaultValue?: string;
   placeholder?: string;
+  /** Notified with the ISO date ("" when cleared); FormData still works as before. */
+  onChange?: (iso: string) => void;
   className?: string;
 }) {
-  const [value, setValue] = useState(defaultValue);
+  const [value, setRawValue] = useState(defaultValue);
+  function setValue(iso: string) {
+    setRawValue(iso);
+    onChange?.(iso);
+  }
   const [open, setOpen] = useState(false);
   const initial = value || todayISO();
   const [viewYear, setViewYear] = useState(() => Number(initial.slice(0, 4)));
