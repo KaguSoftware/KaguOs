@@ -112,6 +112,46 @@ write real rows; announcements fan out to everyone. Safe ways to verify: (a) Par
 so voting/logging/auto-promote can't be exercised there. If a future session must drive writes, plant rows
 with the service client and DON'T trigger notify fan-out.
 
+### 🧹 WORK/DEBUG/COMMS BATCH 2 (2026-07-17) — BUILT + STATICALLY VERIFIED, live-drive by Parsa pending
+Follow-on to the pipeline batch, same session. Green: tsc, lint (still only the 2 pre-existing errors),
+`check:demo` (**77 reads, all filtered** — the new ⌘K search + interaction reads), build. **Migrations 0023,
+0024, 0025 all APPLIED to prod** (Management API helper; 0024 enabled pg_cron + scheduled a job — see ⚠️).
+Not runtime-driven by Claude (same prod/fan-out reasons). What shipped:
+
+- **Dropdown filter input** — killed the green focus ring (added `data-no-ring`, the app's existing opt-out).
+- **Debug "suggest for"** now lists **Work members only** (queries `section_memberships` where section='work'
+  on the new-task page; admin-gated) and **notifies the suggested person** on create (`notifyUser`, new
+  `debug_suggested` notification kind — migration **0023** widened `notifications_kind_check`; the union in
+  `notify.ts` gained it too). notifyUser excludes the actor, so self-suggest doesn't self-ping.
+- **Debug auto-archive (migration 0024)** — tasks done for **7 days** get soft-archived (NOT deleted). New
+  `debug_tasks.done_at` (set/cleared by a BEFORE trigger on state change — so editing a done task's title
+  doesn't reset the clock) + `archived_at` (null = live). A **pg_cron** job `archive-stale-done-debug-tasks`
+  runs daily 03:00 UTC calling `private.archive_stale_done_tasks()`. Archived tasks drop off the board
+  (`liveTasks` filter) and only reach admins (page query adds `.is('archived_at', null)` for non-admins).
+  **Admins get an "Archived (N)" cleanup section** (collapsed) with batch-select + hard-delete via
+  `deleteTasks` (requireAdmin). `board.tsx` grew `ArchivedSection`.
+- **Debug board search** threshold lowered 8→**5** (shows with your ~8 boards) + Enter jumps to a single match.
+- **⌘K palette now searches CONTENT**, not just nav actions. `lib/actions/search.ts` → `searchContent()`
+  fetches tasks/projects/ideas/contacts/sprints (section-gated via `canAccess`, demo-filtered, PER_TYPE_CAP
+  200) in ONE wave; the palette loads it **once on first open, caches for the session**, and filters
+  in-memory per keystroke (NO per-keystroke DB hit — that was the explicit perf ask). Content hits only show
+  once you type; each carries a type badge + sub-label (project/company/client). Tasks link to /debug (no
+  per-task route).
+- **Admin "last seen" (migration 0025)** — `profiles.last_seen_at` + column GRANT (same per-column pattern as
+  showcase_mode/color — 0015 lesson). Bumped in `getSessionContext` **throttled to >5 min stale, inside
+  `after()`** (fire-and-forget, ≤1 tiny write per user per 5 min, never blocks the page). Admin user rows show
+  "Online now" (green dot, <6 min) / "Seen 3h ago" (`formatRelative`) / "Never signed in". **NOT** the cheap
+  `auth.last_sign_in_at` — that reads weeks-stale under this app's long-lived JWT sessions, which is why we
+  built real activity tracking.
+
+⚠️ **NEW: a pg_cron job now runs daily (0024).** `select cron.schedule('archive-stale-done-debug-tasks', '0 3
+* * *', …)`. First use of pg_cron in this project. To inspect: `select * from cron.job;` / `select * from
+cron.job_run_details order by start_time desc limit 5;`. To change the window, edit
+`private.archive_stale_done_tasks()` (the `interval '7 days'`). If a future migration needs pg_cron and errors,
+it's already enabled now.
+⚠️ **`notify.ts` NotifyKind + `notifications_kind_check` must stay in sync** — adding a kind means BOTH the TS
+union AND a migration widening the DB constraint (0023 did this for `debug_suggested`; 0019 for the learn kinds).
+
 ### 🎓 LEARN OVERHAUL (2026-07-17) — authoring flow + visuals rebuilt, VERIFIED end-to-end
 Parsa: "insanely hard to build new things as an admin, visuals bad." Agreed in plan mode, built,
 then verified against prod with two throwaway users (created + deleted the same session; all
@@ -422,6 +462,12 @@ volume. They're insurance, not a speedup.
   (one active at a time). `src/components/shell/command-palette.tsx` — ⌘K nav+actions.
 - `supabase/migrations/0001–0010` — full schema history (0008 reminders, 0009 notifications,
   0010 announcements; all applied to cloud).
+- `supabase/migrations/0020–0025` (all APPLIED to prod, 2026-07-17): **0020** idea pipeline (vote value,
+  required_count/stage, work_access_count) · **0021** debug suggest_for/due_on + project due_on · **0022**
+  contact_interactions · **0023** debug_suggested notify kind · **0024** debug auto-archive (done_at/archived_at
+  + triggers + **pg_cron** daily job) · **0025** profiles.last_seen_at + grant.
+- `scripts/apply-migration.mjs <file.sql>` — applies one migration via the Management API (parses
+  `SUPABASE_ACCESS_TOKEN` from `.env.local`, no deps). `scripts/verify-0020.sql` checks 0020/0021/0022 landed.
 - `scripts/seed-admin.ts` — idempotent first-admin seed.
 
 ## Roadmap / next steps
@@ -476,6 +522,9 @@ surface; run `/impeccable audit` after the batch (design hook was silenced after
 | Editing | tasks/ideas/projects inline (done) | — | — |
 | Ideas pipeline | up/down votes, unanimous auto-promote, "N to promote" bar, filters (done) | **stage funnel UI (open→discussing→accepted; cols exist), reactions (🤔/🔥), effort×impact + quick-wins sort, dedupe/merge, auto-archive stale, "needs your vote" nudge, weekly digest** | Phase 2/3 (Parsa's "far more" — agreed, not yet built) |
 | Comms interactions | log per contact + last-interaction on list (done) | analytics / follow-up reminders | later |
+| Debug lifecycle | suggest-for + deadlines + auto-archive (7d, pg_cron) + admin batch-delete (done) | — | — |
+| ⌘K search | nav actions + content (tasks/projects/ideas/contacts/sprints), loaded-once client-filter (done) | live/fresh results, ranking, recents | later |
+| Presence | last_seen_at, throttled, admin "last seen" (done) | per-section activity, "who's on now" | later |
 | Comms/CRM | leads/clients + linked resources (done) | — | — |
 | Project creds | plaintext RLS-gated accounts store (done) | — | — |
 | Showcase mode | none | fake-data demo mode w/ re-auth exit | deferred, needs design (4) |
