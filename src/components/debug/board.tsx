@@ -293,44 +293,49 @@ export function DebugBoard({
         </div>
       )}
 
-      {/* Project boards — one table per project, switched locally */}
-      <div
-        className="flex gap-1 overflow-x-auto border-b border-line pb-px"
-        role="tablist"
-        aria-label="Project boards"
-      >
-        {[
-          { key: "all", name: "All boards" },
-          { key: "general", name: "General" },
-          ...projectTabs,
-        ].map((tab) => {
-          const active = board === tab.key;
-          const count = tab.key === "all" ? null : countFor(tab.key);
-          return (
-            <button
-              key={tab.key}
-              role="tab"
-              aria-selected={active}
-              onClick={() => setBoard(tab.key)}
-              className={cn(
-                "-mb-px flex shrink-0 items-center gap-1.5 border-b-2 px-3 py-2 text-sm transition-colors duration-150",
-                active
-                  ? "border-primary-dim font-medium text-ink"
-                  : "border-transparent text-muted hover:border-line-strong hover:text-ink"
-              )}
-            >
-              {tab.name}
-              {count !== null && count > 0 && (
-                <span className="rounded-full bg-raised px-1.5 font-mono text-[11px] text-muted">
-                  {count}
-                </span>
-              )}
-            </button>
-          );
-        })}
-        {q && projectTabs.length === 0 && (
-          <span className="px-3 py-2 text-sm text-faint">No boards match.</span>
-        )}
+      {/* Project boards — one table per project, switched locally. The divider
+          lives on the wrapper (full-width, always crisp); the inner rail scrolls
+          with no visible bar and fades at both edges, so an overflowing strip
+          reads as "there's more this way" instead of exposing a scrollbar. */}
+      <div className="border-b border-line">
+        <div
+          className="scrollbar-none flex gap-1 overflow-x-auto [mask-image:linear-gradient(to_right,transparent,black_1.25rem,black_calc(100%-1.25rem),transparent)]"
+          role="tablist"
+          aria-label="Project boards"
+        >
+          {[
+            { key: "all", name: "All boards" },
+            { key: "general", name: "General" },
+            ...projectTabs,
+          ].map((tab) => {
+            const active = board === tab.key;
+            const count = tab.key === "all" ? null : countFor(tab.key);
+            return (
+              <button
+                key={tab.key}
+                role="tab"
+                aria-selected={active}
+                onClick={() => setBoard(tab.key)}
+                className={cn(
+                  "-mb-px flex shrink-0 items-center gap-1.5 border-b-2 px-3 py-2 text-sm transition-colors duration-150",
+                  active
+                    ? "border-primary-dim font-medium text-ink"
+                    : "border-transparent text-muted hover:border-line-strong hover:text-ink"
+                )}
+              >
+                {tab.name}
+                {count !== null && count > 0 && (
+                  <span className="rounded-full bg-raised px-1.5 font-mono text-[11px] text-muted">
+                    {count}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+          {q && projectTabs.length === 0 && (
+            <span className="px-3 py-2 text-sm text-faint">No boards match.</span>
+          )}
+        </div>
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-2">

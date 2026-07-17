@@ -183,6 +183,16 @@ h3 {
   background-clip: padding-box;
 }
 
+/* Scrollable but with NO visible bar — for horizontal strips (tab rows, chip
+ * rails) where a scrollbar is the wrong affordance and an edge fade signals
+ * overflow instead. Content still scrolls via wheel/trackpad/drag/keyboard. */
+.scrollbar-none {
+  scrollbar-width: none; /* Firefox */
+}
+.scrollbar-none::-webkit-scrollbar {
+  display: none; /* WebKit */
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
