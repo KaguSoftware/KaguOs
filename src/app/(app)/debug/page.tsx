@@ -21,15 +21,31 @@ export default async function DebugPage() {
     .order("created_at", { ascending: false });
   if (!ctx.isAdmin) taskQuery.is("archived_at", null);
 
-  const [{ data: tasks }, { data: projects }, members] = await Promise.all([
-    taskQuery,
-    ctx.supabase
-      .from("projects")
-      .select("id, name")
-      .eq("is_demo", ctx.showcase)
-      .order("name"),
-    getMembersMap(ctx.supabase),
-  ]);
+  const [{ data: tasks }, { data: projects }, members, { data: workMemberships }] =
+    await Promise.all([
+      taskQuery,
+      ctx.supabase
+        .from("projects")
+        .select("id, name")
+        .eq("is_demo", ctx.showcase)
+        .order("name"),
+      getMembersMap(ctx.supabase),
+      // Admins can (re)set the "suggest for" nudge from the inline edit too —
+      // same Work-members-only roster as the create page.
+      ctx.isAdmin
+        ? ctx.supabase
+            .from("section_memberships")
+            .select("user_id")
+            .eq("section", "work")
+        : Promise.resolve({ data: [] as { user_id: string }[] }),
+    ]);
+
+  const suggestOptions = ctx.isAdmin
+    ? (workMemberships ?? [])
+        .map((m) => ({ value: m.user_id, label: members[m.user_id]?.name }))
+        .filter((o): o is { value: string; label: string } => Boolean(o.label))
+        .sort((a, b) => a.label.localeCompare(b.label))
+    : [];
 
   return (
     <>
@@ -49,6 +65,7 @@ export default async function DebugPage() {
         members={members}
         meId={ctx.userId}
         isAdmin={ctx.isAdmin}
+        suggestOptions={suggestOptions}
       />
     </>
   );

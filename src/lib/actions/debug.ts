@@ -155,6 +155,8 @@ export async function updateTask(
     priority: DebugPriority;
     due_on?: string | null;
     project_id?: string | null;
+    /** Admin-only soft suggestion; silently ignored for everyone else. */
+    suggested_for?: string | null;
   }
 ): Promise<ActionResult> {
   const showcaseStop = await blockIfShowcase();
@@ -175,6 +177,10 @@ export async function updateTask(
       ...(fields.due_on !== undefined ? { due_on: fields.due_on || null } : {}),
       ...(fields.project_id !== undefined
         ? { project_id: fields.project_id || null }
+        : {}),
+      // The suggestion nudge is admin-only — same server-side gate as createTask.
+      ...(fields.suggested_for !== undefined && ctx.isAdmin
+        ? { suggested_for: fields.suggested_for || null }
         : {}),
     })
     .eq("id", taskId);

@@ -45,6 +45,7 @@ export function TaskRow({
   meId,
   isAdmin,
   projects,
+  suggestOptions,
   projectName,
   highlight,
   onPatch,
@@ -56,8 +57,10 @@ export function TaskRow({
   meId: string;
   isAdmin: boolean;
   projects: { id: string; name: string }[];
+  /** Work members an admin can "suggest for". Empty for non-admins. */
+  suggestOptions: { value: string; label: string }[];
   projectName?: string | null;
-  /** Part of the batch-add session trail — tinted until the trail is cleared. */
+  /** Part of the brainstorm session trail — tinted until the trail is cleared. */
   highlight?: boolean;
   onPatch: (id: string, patch: Partial<DebugTask>) => void;
   onRemove: (id: string) => void;
@@ -73,6 +76,7 @@ export function TaskRow({
     priority: task.priority as DebugPriority,
     due_on: task.due_on ?? "",
     project_id: task.project_id ?? "",
+    suggested_for: task.suggested_for ?? "",
   });
 
   const mine = task.assignee_id === meId;
@@ -124,6 +128,7 @@ export function TaskRow({
       priority: draft.priority,
       due_on: draft.due_on || null,
       project_id: draft.project_id || null,
+      suggested_for: draft.suggested_for || null,
     };
     const before = { ...task };
     run(() => updateTask(task.id, draft), {
@@ -288,6 +293,7 @@ export function TaskRow({
                   priority: task.priority,
                   due_on: task.due_on ?? "",
                   project_id: task.project_id ?? "",
+                  suggested_for: task.suggested_for ?? "",
                 });
                 setEditing(true);
               }}
@@ -356,6 +362,18 @@ export function TaskRow({
               placeholder="No deadline"
               onChange={(iso) => setDraft((d) => ({ ...d, due_on: iso }))}
             />
+            {suggestOptions.length > 0 && (
+              <Dropdown
+                className="w-44"
+                value={draft.suggested_for}
+                placeholder="No suggestion"
+                options={[
+                  { value: "", label: "No suggestion" },
+                  ...suggestOptions,
+                ]}
+                onChange={(v) => setDraft((d) => ({ ...d, suggested_for: v }))}
+              />
+            )}
             <div className="ml-auto flex gap-2">
               <Button variant="ghost" size="sm" onClick={() => setEditing(false)}>
                 Cancel

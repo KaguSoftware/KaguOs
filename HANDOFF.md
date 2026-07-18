@@ -97,23 +97,31 @@ helper + schema/grant-verified.** Not runtime-driven by Claude (same prod reason
 - 📝 **0026_debug_grant_with_work.sql** (untracked file from a prior session — work⊆debug
   auto-grant + backfill) was **verified already applied to prod** this session (function body
   includes the debug grant). It just needs committing.
-- 💬 **Debug batch-add ("brainstorm sessions") — DESIGNED WITH PARSA, then BUILT same session.**
-  Agreed shape: rapid-add bar + session trail, NOT a fullscreen mode (capture is already solved
-  by realtime; the win is triage right after). What shipped (`debug/batch-add.tsx` + board.tsx):
-  - **"Batch add" toggle** on the board (next to the live indicator) → slim capture bar above the
-    list: one input (autofocus), **Enter posts + clears + keeps focus**, Esc/X closes. Board
-    Dropdown pre-selected from the current board tab. Tasks land medium-priority/open — details
-    are for triage via the existing inline edit.
-  - **Paste-a-list**: a multi-line paste offers "Add N tasks?" (one confirm, one insert).
-  - **Session trail**: everything added while the bar's open is tinted (`bg-primary/5`, TaskRow
-    `highlight` prop) and **pinned above the rest of the list** until cleared. After the bar
-    closes a slim header ("N added this session — set priorities, claim, clear the dupes." +
-    Clear) keeps the trail alive for triage.
-  - **One collapsed notification per session, not per task**: `quickAddTasks` (new action —
-    N titles in ONE insert trip, NO notify) + `notifyDebugBatch` ("14 new tasks on Pet App",
-    existing `debug_task_new` kind, no migration). Fired on bar close with the DELTA since the
-    last notify (`notifiedCount` ref), so reopen/close never double-pings. If the user navigates
-    away without closing the bar, no ping fires — accepted (realtime already showed the tasks).
+- 💬 **Debug brainstorm mode — v1 (inline bar) REJECTED by Parsa after live testing, REBUILT as a
+  dedicated two-phase page the same day.** The first shape (a slim capture bar on the board) was
+  built, Parsa tested it and said no; he asked for a page flow instead: spam titles → "Done" →
+  step through details one by one. `debug/batch-add.tsx` is DELETED. What exists now:
+  - **`/debug/brainstorm`** (`debug/brainstorm.tsx`, one route, two client phases so the title
+    list never crosses a route change — matches the create-flow rule's dedicated-surface shape):
+    - **Capture**: big autofocus input, **Enter appends a line** (nothing touches the DB), lines
+      are editable inline + removable, multi-line paste appends all, one session-wide board
+      Dropdown, count, "Done — add details" / Cancel.
+    - **Done** posts EVERY title in ONE trip (`quickAddTasks`) + fires the ONE collapsed
+      notification (`notifyDebugBatch`, "14 new tasks on Pet App") + writes the trail ids to
+      `sessionStorage["kagu-debug-brainstorm"]` IMMEDIATELY — so the dump is durable and
+      trail-marked even if the user bails mid-details.
+    - **Details pass**: card per task (title/board/priority/deadline/suggest-for(admin)/details),
+      "N / M" + thin progress bar, Back / **Skip** (leaves it as-is) / **Save & next**
+      (`updateTask`, optimistic) / **"Leave the rest as-is"** escape hatch / "Save & finish".
+      Finish → `/debug` with a toast ("14 posted, 9 detailed").
+  - **Board**: "Batch add" button replaced by a **Brainstorm** Link; the session trail (tint +
+    pin-to-top + "N added this session" header + Clear) now seeds from sessionStorage — adopted
+    in a post-paint rAF inside the mount effect (a sync set trips `set-state-in-effect`; a lazy
+    init mismatches hydration — the rAF sidesteps both). Trail persists across navigations
+    (tab-scoped) until Clear.
+  - **"Suggest for" is now editable in the task edit form too** (Parsa ask): admin-only Dropdown
+    (Work-members roster, fetched in the /debug page wave), `updateTask` gained `suggested_for`
+    **admin-gated server-side** like createTask. The brainstorm details pass reuses it.
 
 ## Current status (2026-07-17)
 
@@ -587,7 +595,7 @@ surface; run `/impeccable audit` after the batch (design hook was silenced after
 | Debug lifecycle | suggest-for + deadlines + auto-archive (7d, pg_cron) + admin batch-delete (done) | — | — |
 | ⌘K search | nav actions + content (tasks/projects/ideas/contacts/sprints), loaded-once client-filter (done) | live/fresh results, ranking, recents | later |
 | Presence | last_seen_at + dashboard team widget: self-set status (working/focus/meeting/break/unavailable/off/custom) + available-to-call + online dot (done 2026-07-18) | per-section activity, realtime presence updates | later |
-| Debug batch-add | rapid-add bar + paste-a-list + session trail + collapsed notify (done 2026-07-18) | — | — |
+| Debug brainstorm | /debug/brainstorm: capture → one-trip post → per-task details pass + board trail + collapsed notify (done 2026-07-18, v2 after Parsa rejected the inline-bar v1) | — | — |
 | Comms/CRM | leads/clients + linked resources (done) | — | — |
 | Project creds | plaintext RLS-gated accounts store (done) | — | — |
 | Showcase mode | none | fake-data demo mode w/ re-auth exit | deferred, needs design (4) |

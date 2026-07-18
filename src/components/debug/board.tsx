@@ -1,11 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { Archive, Bug, ChevronDown, ListPlus, Search, Trash2, X } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
-import { deleteTasks, notifyDebugBatch } from "@/lib/actions/debug";
+import { deleteTasks } from "@/lib/actions/debug";
 import { TaskRow } from "@/components/debug/task-row";
-import { BatchAddBar } from "@/components/debug/batch-add";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Dropdown } from "@/components/ui/dropdown";
 import { ConfirmButton } from "@/components/ui/button";
@@ -89,12 +89,15 @@ export function DebugBoard({
   members,
   meId,
   isAdmin,
+  suggestOptions,
 }: {
   initialTasks: DebugTask[];
   projects: { id: string; name: string }[];
   members: MembersMap;
   meId: string;
   isAdmin: boolean;
+  /** Work members an admin can "suggest for" from the edit form. Empty for non-admins. */
+  suggestOptions: { value: string; label: string }[];
 }) {
   const [tasks, setTasks] = useState<DebugTask[]>(initialTasks);
   const [filter, setFilter] = useState<Filter>("active");
@@ -108,13 +111,9 @@ export function DebugBoard({
   const [live, setLive] = useState(false);
   const [showArchived, setShowArchived] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  // Brainstorm batch-add: the bar + the session trail (ids added this session,
-  // highlighted and pinned to the top until cleared).
-  const [batchOpen, setBatchOpen] = useState(false);
+  // Brainstorm session trail: ids of tasks made in /debug/brainstorm, handed
+  // over via sessionStorage. Highlighted + pinned to the top until cleared.
   const [sessionIds, setSessionIds] = useState<Set<string>>(new Set());
-  // How many of the session's tasks the team has already been notified about —
-  // closing the bar notifies only the delta, so reopen/close never double-pings.
-  const notifiedCount = useRef(0);
 
   // Server refreshes (revalidatePath after actions) re-send props — adopt them.
   //
@@ -150,38 +149,32 @@ export function DebugBoard({
     );
   }, []);
 
-  // Batch-add lands: adopt the rows (realtime may already have delivered some —
-  // dedupe by id) and mark them as this session's trail.
-  const addSessionTasks = useCallback((rows: DebugTask[]) => {
-    setTasks((prev) => {
-      const have = new Set(prev.map((t) => t.id));
-      return [...prev, ...rows.filter((r) => !have.has(r.id))];
+  // Pick up the trail a brainstorm session left behind. It persists across
+  // navigations (sessionStorage, this tab only) until someone clears it, so
+  // the triage highlight survives a detour to another section.
+  useEffect(() => {
+    // Adopt after paint (rAF), not synchronously: the server render has no
+    // sessionStorage, so a synchronous set would either mismatch hydration
+    // (lazy init) or trip react-hooks/set-state-in-effect (direct set).
+    const frame = requestAnimationFrame(() => {
+      try {
+        const raw = sessionStorage.getItem("kagu-debug-brainstorm");
+        if (raw) {
+          const ids = JSON.parse(raw) as string[];
+          if (Array.isArray(ids) && ids.length > 0) setSessionIds(new Set(ids));
+        }
+      } catch {
+        // Malformed storage — just no trail.
+      }
     });
-    setSessionIds((prev) => new Set([...prev, ...rows.map((r) => r.id)]));
+    return () => cancelAnimationFrame(frame);
   }, []);
-
-  function closeBatch() {
-    setBatchOpen(false);
-    // One collapsed ping for whatever landed since the last notify. Fire-and-
-    // forget: the tasks are already on everyone's board via realtime — the
-    // bell is best-effort.
-    const delta = sessionIds.size - notifiedCount.current;
-    if (delta > 0) {
-      notifiedCount.current = sessionIds.size;
-      const sessionTasks = tasks.filter((t) => sessionIds.has(t.id));
-      const projectIds = new Set(sessionTasks.map((t) => t.project_id ?? ""));
-      const soleProject =
-        projectIds.size === 1 ? [...projectIds][0] : "";
-      notifyDebugBatch(
-        delta,
-        soleProject ? (projectNames[soleProject] ?? null) : null
-      ).catch(() => {});
-    }
-  }
 
   function clearTrail() {
     setSessionIds(new Set());
-    notifiedCount.current = 0;
+    try {
+      sessionStorage.removeItem("kagu-debug-brainstorm");
+    } catch {}
   }
 
   // Realtime: reflect everyone else's changes without reloading.
@@ -409,20 +402,13 @@ export function DebugBoard({
           ))}
         </div>
         <div className="flex items-center gap-3">
-          <button
-            type="button"
-            onClick={() => (batchOpen ? closeBatch() : setBatchOpen(true))}
-            aria-pressed={batchOpen}
-            className={cn(
-              "inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-[13px] transition-colors duration-150",
-              batchOpen
-                ? "border-primary/40 bg-primary/10 text-primary-dim"
-                : "border-line text-muted hover:border-line-strong hover:bg-raised hover:text-ink"
-            )}
+          <Link
+            href="/debug/brainstorm"
+            className="inline-flex items-center gap-1.5 rounded-md border border-line px-2.5 py-1 text-[13px] text-muted transition-colors duration-150 hover:border-line-strong hover:bg-raised hover:text-ink"
           >
             <ListPlus className="size-3.5" aria-hidden />
-            Batch add
-          </button>
+            Brainstorm
+          </Link>
           <p className="flex items-center gap-2 text-xs text-faint">
             <span
               className={cn(
@@ -486,19 +472,9 @@ export function DebugBoard({
         )}
       </div>
 
-      {batchOpen && (
-        <BatchAddBar
-          projects={projects}
-          initialProject={board !== "all" && board !== "general" ? board : ""}
-          count={sessionIds.size}
-          onAdded={addSessionTasks}
-          onClose={closeBatch}
-        />
-      )}
-
-      {/* The session trail lives on after the bar closes — the brainstorm's
-          tasks stay marked and pinned for triage until someone clears it. */}
-      {!batchOpen && sessionIds.size > 0 && (
+      {/* The brainstorm session's tasks stay marked and pinned for triage
+          until someone clears the trail. */}
+      {sessionIds.size > 0 && (
         <div className="flex flex-wrap items-center gap-2 rounded-lg border border-primary/20 bg-primary/5 px-3 py-1.5">
           <ListPlus className="size-3.5 shrink-0 text-primary-dim" aria-hidden />
           <p className="text-[13px] text-muted">
@@ -547,6 +523,7 @@ export function DebugBoard({
                 meId={meId}
                 isAdmin={isAdmin}
                 projects={projects}
+                suggestOptions={suggestOptions}
                 highlight={sessionIds.has(task.id)}
                 projectName={
                   board === "all" && task.project_id
