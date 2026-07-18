@@ -59,6 +59,62 @@ Contracts w/ PDFs), **Debug** (everyone: per-project boards, self-claim-only, re
 - Chart colors are validated (dataviz skill): income `oklch(0.62 0.13 160)`, expense
   `oklch(0.55 0.16 25)` — L band 0.48–0.67 on dark; re-validate any new chart palette.
 
+## Current status (2026-07-18)
+
+### 🧩 DEBUG QoL + TEAM PRESENCE + ⌘K LEAK FIX (2026-07-18) — BUILT + STATICALLY VERIFIED, live-drive by Parsa pending
+Four asks from Parsa (two via debug-board screenshots). Green: `tsc`, lint (back to only the 2
+pre-existing errors — this batch also FIXED the third one that had crept into admin/user-row.tsx,
+`Date.now()` in render → `new Date().getTime()`, task-row's accepted pattern), `check:demo`
+(77 reads, all filtered), `npm run build`. **Migration 0027 APPLIED to prod via the Management API
+helper + schema/grant-verified.** Not runtime-driven by Claude (same prod reasons). What shipped:
+
+- **Debug task Copy button** (task-row.tsx, expanded row next to Edit): copies a plain-text
+  snapshot — title, meta line (board · priority · due · author), blank line, description — via
+  `navigator.clipboard`, toasts "Task copied."
+- **Debug task edit can now move the task to another project** ("editing in debug tab" bug):
+  a board Dropdown (General + all projects) in the inline edit form; `updateTask` gained
+  `project_id` (same only-touch-when-provided shape as `due_on`, "" → null). TaskRow now
+  receives `projects` from the board.
+- **⌘K showcase leak FIXED** ("Showcase mode bug" from Kemal): `searchContent()` was always
+  showcase-filtered server-side, but the palette caches hits client-side per session — enter
+  showcase and the cached REAL rows kept answering searches. Fix: layout passes `showcase` into
+  CommandPalette; a showcase flip drops the cache during render (anti-flash pattern), next open
+  refetches the right world. Works in both directions (real→demo and demo→real).
+- **Team presence widget** (dashboard top-right, `shell/team-presence.tsx` + **migration 0027**:
+  `profiles.status_kind/status_text/available_to_call` + per-column GRANTs — 0015 lesson).
+  Work members only (admins ∪ `work` memberships — same denominator as the ideas pipeline),
+  **hidden in showcase mode** (real names/last-seen must not show in a client demo). Trigger =
+  avatar stack (initials in identity colors) + "N on"; popover (frosted, pop-in) lists everyone:
+  status line, green online dot (<6 min, same window as admin rows), "call ok" chip, last-seen.
+  Top section = your own editor: status Dropdown (Working / Deep focus / In a meeting / On a
+  break / Unavailable / Off today / Custom…) — custom shows a text input (80 chars, saves on
+  Enter/blur), non-custom kinds save on pick — + an "Available to call" Checkbox. Optimistic via
+  `useAction`; new action `updateMyStatus` in account.ts (kind whitelist, custom-with-empty-text
+  collapses to none). `StatusKind`/`STATUS_LABELS` live in types.ts.
+- ⚠️ `.env.local` had REGRESSED to `SUPABASE_ACCESS_TOKEN = "…"` (space + quotes — the exact
+  0716 parse bug, back again). Fixed in place. If `apply-migration.mjs` says "token not found",
+  check this first.
+- 📝 **0026_debug_grant_with_work.sql** (untracked file from a prior session — work⊆debug
+  auto-grant + backfill) was **verified already applied to prod** this session (function body
+  includes the debug grant). It just needs committing.
+- 💬 **Debug batch-add ("brainstorm sessions") — DESIGNED WITH PARSA, then BUILT same session.**
+  Agreed shape: rapid-add bar + session trail, NOT a fullscreen mode (capture is already solved
+  by realtime; the win is triage right after). What shipped (`debug/batch-add.tsx` + board.tsx):
+  - **"Batch add" toggle** on the board (next to the live indicator) → slim capture bar above the
+    list: one input (autofocus), **Enter posts + clears + keeps focus**, Esc/X closes. Board
+    Dropdown pre-selected from the current board tab. Tasks land medium-priority/open — details
+    are for triage via the existing inline edit.
+  - **Paste-a-list**: a multi-line paste offers "Add N tasks?" (one confirm, one insert).
+  - **Session trail**: everything added while the bar's open is tinted (`bg-primary/5`, TaskRow
+    `highlight` prop) and **pinned above the rest of the list** until cleared. After the bar
+    closes a slim header ("N added this session — set priorities, claim, clear the dupes." +
+    Clear) keeps the trail alive for triage.
+  - **One collapsed notification per session, not per task**: `quickAddTasks` (new action —
+    N titles in ONE insert trip, NO notify) + `notifyDebugBatch` ("14 new tasks on Pet App",
+    existing `debug_task_new` kind, no migration). Fired on bar close with the DELTA since the
+    last notify (`notifiedCount` ref), so reopen/close never double-pings. If the user navigates
+    away without closing the bar, no ping fires — accepted (realtime already showed the tasks).
+
 ## Current status (2026-07-17)
 
 ### 🧭 WORK/IDEAS PIPELINE + CROSS-SECTION POLISH (2026-07-17) — BUILT + STATICALLY VERIFIED, live-drive by Parsa pending
@@ -462,6 +518,12 @@ volume. They're insurance, not a speedup.
   (one active at a time). `src/components/shell/command-palette.tsx` — ⌘K nav+actions.
 - `supabase/migrations/0001–0010` — full schema history (0008 reminders, 0009 notifications,
   0010 announcements; all applied to cloud).
+- `src/components/shell/team-presence.tsx` — dashboard top-right team widget (avatar stack →
+  frosted popover: everyone's status/last-seen/call-availability + your own status editor).
+  Work-gated, hidden in showcase. Types (`StatusKind`, `STATUS_LABELS`) in types.ts; action
+  `updateMyStatus` in account.ts; columns from migration 0027.
+- `supabase/migrations/0026` (work⊆debug auto-grant, applied to prod, file untracked in git) ·
+  **0027** presence status columns + grants (applied 2026-07-18).
 - `supabase/migrations/0020–0025` (all APPLIED to prod, 2026-07-17): **0020** idea pipeline (vote value,
   required_count/stage, work_access_count) · **0021** debug suggest_for/due_on + project due_on · **0022**
   contact_interactions · **0023** debug_suggested notify kind · **0024** debug auto-archive (done_at/archived_at
@@ -524,7 +586,8 @@ surface; run `/impeccable audit` after the batch (design hook was silenced after
 | Comms interactions | log per contact + last-interaction on list (done) | analytics / follow-up reminders | later |
 | Debug lifecycle | suggest-for + deadlines + auto-archive (7d, pg_cron) + admin batch-delete (done) | — | — |
 | ⌘K search | nav actions + content (tasks/projects/ideas/contacts/sprints), loaded-once client-filter (done) | live/fresh results, ranking, recents | later |
-| Presence | last_seen_at, throttled, admin "last seen" (done) | per-section activity, "who's on now" | later |
+| Presence | last_seen_at + dashboard team widget: self-set status (working/focus/meeting/break/unavailable/off/custom) + available-to-call + online dot (done 2026-07-18) | per-section activity, realtime presence updates | later |
+| Debug batch-add | rapid-add bar + paste-a-list + session trail + collapsed notify (done 2026-07-18) | — | — |
 | Comms/CRM | leads/clients + linked resources (done) | — | — |
 | Project creds | plaintext RLS-gated accounts store (done) | — | — |
 | Showcase mode | none | fake-data demo mode w/ re-auth exit | deferred, needs design (4) |

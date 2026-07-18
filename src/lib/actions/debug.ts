@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { blockIfShowcase, requireAdmin, requireSection } from "@/lib/data/session";
 import { notifySection, notifyUser } from "@/lib/actions/notify";
 import type { ActionResult } from "@/lib/actions/account";
-import type { DebugPriority, DebugState } from "@/lib/types";
+import type { DebugPriority, DebugState, DebugTask } from "@/lib/types";
 
 const STATES: DebugState[] = ["open", "in_progress", "done"];
 const PRIORITIES: DebugPriority[] = ["low", "medium", "high", "urgent"];
@@ -61,6 +61,72 @@ export async function createTask(
   return { ok: true, message: "Task posted." };
 }
 
+/**
+ * Rapid batch insert for brainstorm dumps — N titles in ONE trip, default
+ * priority, no per-task notifications. The batch-add bar fires a single
+ * collapsed notification on session close via notifyDebugBatch, so a
+ * 15-task brainstorm pings the team once, not 15 times.
+ */
+export async function quickAddTasks(
+  titles: string[],
+  projectId: string | null
+): Promise<{ ok: boolean; message: string; tasks?: DebugTask[] }> {
+  const showcaseStop = await blockIfShowcase();
+  if (showcaseStop) return showcaseStop;
+  const ctx = await requireSection("debug");
+
+  const clean = titles
+    .map((t) => t.trim().slice(0, 200))
+    .filter(Boolean)
+    .slice(0, 50); // sanity cap per call — a paste, not an import pipeline
+  if (clean.length === 0) return { ok: false, message: "Nothing to add." };
+
+  const { data, error } = await ctx.supabase
+    .from("debug_tasks")
+    .insert(
+      clean.map((title) => ({
+        title,
+        project_id: projectId || null,
+        created_by: ctx.userId,
+      }))
+    )
+    .select("*");
+  if (error) return { ok: false, message: error.message };
+
+  revalidatePath("/debug");
+  return {
+    ok: true,
+    message: `Added ${clean.length}.`,
+    tasks: (data ?? []) as DebugTask[],
+  };
+}
+
+/**
+ * The one collapsed notification for a batch-add session ("14 new tasks on
+ * Pet App"). Called by the bar when it closes, with however many landed since
+ * the last notify — never per task.
+ */
+export async function notifyDebugBatch(
+  count: number,
+  projectName?: string | null
+): Promise<ActionResult> {
+  const showcaseStop = await blockIfShowcase();
+  if (showcaseStop) return showcaseStop;
+  const ctx = await requireSection("debug");
+
+  const n = Math.floor(count);
+  if (!Number.isFinite(n) || n < 1) return null;
+
+  notifySection(ctx, "debug", {
+    kind: "debug_task_new",
+    title: `${Math.min(n, 500)} new task${n === 1 ? "" : "s"}${
+      projectName ? ` on ${projectName}` : ""
+    }`,
+    href: "/debug",
+  });
+  return null;
+}
+
 export async function setTaskState(
   taskId: string,
   state: DebugState
@@ -80,7 +146,7 @@ export async function setTaskState(
   return { ok: true, message: "State updated." };
 }
 
-/** Edit a task's title / description / priority (RLS restricts who can). */
+/** Edit a task's title / description / priority / board (RLS restricts who can). */
 export async function updateTask(
   taskId: string,
   fields: {
@@ -88,6 +154,7 @@ export async function updateTask(
     description: string;
     priority: DebugPriority;
     due_on?: string | null;
+    project_id?: string | null;
   }
 ): Promise<ActionResult> {
   const showcaseStop = await blockIfShowcase();
@@ -103,8 +170,12 @@ export async function updateTask(
       title,
       description: fields.description.trim() || null,
       priority,
-      // Only touch due_on when the caller included it — undefined leaves it as is.
+      // Only touch due_on / project_id when the caller included them —
+      // undefined leaves them as they are ("" means clear → null).
       ...(fields.due_on !== undefined ? { due_on: fields.due_on || null } : {}),
+      ...(fields.project_id !== undefined
+        ? { project_id: fields.project_id || null }
+        : {}),
     })
     .eq("id", taskId);
   if (error) return { ok: false, message: error.message };

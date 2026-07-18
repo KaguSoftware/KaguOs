@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Hand, Loader2, Pencil, Trash2, Undo2 } from "lucide-react";
+import { Copy, Hand, Loader2, Pencil, Trash2, Undo2 } from "lucide-react";
 import {
   claimTask,
   deleteTask,
@@ -15,6 +15,7 @@ import { Input, Textarea } from "@/components/ui/input";
 import { Dropdown } from "@/components/ui/dropdown";
 import { DatePicker } from "@/components/ui/date-picker";
 import { useAction } from "@/lib/use-action";
+import { useToast } from "@/components/ui/toast";
 import { cn, formatDate } from "@/lib/utils";
 import type { DebugPriority, DebugState, DebugTask, MembersMap } from "@/lib/types";
 
@@ -43,7 +44,9 @@ export function TaskRow({
   members,
   meId,
   isAdmin,
+  projects,
   projectName,
+  highlight,
   onPatch,
   onRemove,
   onRestore,
@@ -52,12 +55,16 @@ export function TaskRow({
   members: MembersMap;
   meId: string;
   isAdmin: boolean;
+  projects: { id: string; name: string }[];
   projectName?: string | null;
+  /** Part of the batch-add session trail — tinted until the trail is cleared. */
+  highlight?: boolean;
   onPatch: (id: string, patch: Partial<DebugTask>) => void;
   onRemove: (id: string) => void;
   onRestore: (task: DebugTask) => void;
 }) {
   const { pending, run } = useAction();
+  const { success: toastSuccess, error: toastError } = useToast();
   const [expanded, setExpanded] = useState(false);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState({
@@ -65,6 +72,7 @@ export function TaskRow({
     description: task.description ?? "",
     priority: task.priority as DebugPriority,
     due_on: task.due_on ?? "",
+    project_id: task.project_id ?? "",
   });
 
   const mine = task.assignee_id === meId;
@@ -83,12 +91,39 @@ export function TaskRow({
       ? members[task.suggested_for]
       : null;
 
+  /** Plain-text snapshot for pasting into a chat or a commit message. */
+  function copyTask() {
+    const boardName = task.project_id
+      ? (projects.find((p) => p.id === task.project_id)?.name ?? null)
+      : null;
+    const author =
+      task.created_by && members[task.created_by]
+        ? members[task.created_by].name
+        : null;
+    const meta = [
+      boardName ?? "General",
+      `${task.priority} priority`,
+      task.due_on ? `due ${formatDate(task.due_on)}` : null,
+      author ? `by ${author}` : null,
+    ]
+      .filter(Boolean)
+      .join(" · ");
+    const text = `${task.title}\n${meta}${
+      task.description ? `\n\n${task.description}` : ""
+    }`;
+    navigator.clipboard.writeText(text).then(
+      () => toastSuccess("Task copied."),
+      () => toastError("Couldn't copy — clipboard blocked.")
+    );
+  }
+
   function saveEdit() {
     const patch = {
       title: draft.title.trim() || task.title,
       description: draft.description.trim() || null,
       priority: draft.priority,
       due_on: draft.due_on || null,
+      project_id: draft.project_id || null,
     };
     const before = { ...task };
     run(() => updateTask(task.id, draft), {
@@ -117,7 +152,8 @@ export function TaskRow({
     <li
       className={cn(
         "px-4 py-3 transition-colors duration-150",
-        task.state === "done" && "opacity-60"
+        task.state === "done" && "opacity-60",
+        highlight && "bg-primary/5"
       )}
     >
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
@@ -238,6 +274,10 @@ export function TaskRow({
             {task.description || "No details."}
           </p>
           <div className="flex shrink-0 items-center gap-1.5">
+            <Button variant="ghost" size="sm" onClick={copyTask}>
+              <Copy className="size-3.5" aria-hidden />
+              Copy
+            </Button>
             <Button
               variant="ghost"
               size="sm"
@@ -247,6 +287,7 @@ export function TaskRow({
                   description: task.description ?? "",
                   priority: task.priority,
                   due_on: task.due_on ?? "",
+                  project_id: task.project_id ?? "",
                 });
                 setEditing(true);
               }}
@@ -292,6 +333,15 @@ export function TaskRow({
             aria-label="Task description"
           />
           <div className="flex flex-wrap items-center gap-2">
+            <Dropdown
+              className="w-44"
+              value={draft.project_id}
+              options={[
+                { value: "", label: "General" },
+                ...projects.map((p) => ({ value: p.id, label: p.name })),
+              ]}
+              onChange={(v) => setDraft((d) => ({ ...d, project_id: v }))}
+            />
             <Dropdown
               className="w-32"
               value={draft.priority}

@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getUserId } from "@/lib/data/session";
 import { isValidColorKey } from "@/lib/colors";
+import { STATUS_KINDS, type StatusKind } from "@/lib/types";
 
 export type ActionResult = { ok: boolean; message: string } | null;
 
@@ -52,6 +53,37 @@ export async function updateMyColor(colorKey: string): Promise<ActionResult> {
 
   revalidatePath("/", "layout");
   return { ok: true, message: "Color updated." };
+}
+
+/** Set your own presence status + call availability (team widget). */
+export async function updateMyStatus(fields: {
+  kind: StatusKind;
+  text: string;
+  availableToCall: boolean;
+}): Promise<ActionResult> {
+  let kind: StatusKind = STATUS_KINDS.includes(fields.kind)
+    ? fields.kind
+    : "none";
+  const text = fields.text.trim().slice(0, 80);
+  // A custom status with nothing written is no status at all.
+  if (kind === "custom" && !text) kind = "none";
+
+  const supabase = await createClient();
+  const userId = await getUserId(supabase);
+  if (!userId) return { ok: false, message: "Not signed in." };
+
+  const { error } = await supabase
+    .from("profiles")
+    .update({
+      status_kind: kind,
+      status_text: kind === "custom" ? text : null,
+      available_to_call: Boolean(fields.availableToCall),
+    })
+    .eq("id", userId);
+  if (error) return { ok: false, message: error.message };
+
+  revalidatePath("/", "layout");
+  return { ok: true, message: "Status updated." };
 }
 
 export async function updatePassword(

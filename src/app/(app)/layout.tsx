@@ -48,7 +48,11 @@ export default async function AppLayout({
       >
         Skip to content
       </a>
-      <CommandPalette sections={[...ctx.sections]} isAdmin={ctx.isAdmin} />
+      <CommandPalette
+        sections={[...ctx.sections]}
+        isAdmin={ctx.isAdmin}
+        showcase={ctx.showcase}
+      />
       <div className="flex min-h-dvh flex-col md:flex-row">
         <Sidebar
           sections={[...ctx.sections]}

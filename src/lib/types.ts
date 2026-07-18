@@ -18,6 +18,39 @@ export const SECTION_LABELS: Record<Section, string> = {
   comms: "Kagu Comms",
 };
 
+/** Self-set presence status, shown in the dashboard team widget. */
+export type StatusKind =
+  | "none"
+  | "working"
+  | "focus"
+  | "meeting"
+  | "break"
+  | "unavailable"
+  | "off"
+  | "custom";
+
+export const STATUS_KINDS: StatusKind[] = [
+  "none",
+  "working",
+  "focus",
+  "meeting",
+  "break",
+  "unavailable",
+  "off",
+  "custom",
+];
+
+export const STATUS_LABELS: Record<StatusKind, string> = {
+  none: "No status",
+  working: "Working",
+  focus: "Deep focus",
+  meeting: "In a meeting",
+  break: "On a break",
+  unavailable: "Unavailable",
+  off: "Off today",
+  custom: "Custom…",
+};
+
 export type Profile = {
   id: string;
   email: string;
@@ -27,6 +60,12 @@ export type Profile = {
   showcase_mode: boolean;
   /** When this user was last active (throttled to ~5 min). Null = never seen. */
   last_seen_at: string | null;
+  /** Self-set presence status (team widget). */
+  status_kind: StatusKind;
+  /** Free-text status; shown when status_kind is 'custom'. */
+  status_text: string | null;
+  /** "I'm reachable for a quick call right now." */
+  available_to_call: boolean;
   created_at: string;
 };
 

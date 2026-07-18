@@ -81,9 +81,11 @@ const ALL: Command[] = [
 export function CommandPalette({
   sections,
   isAdmin,
+  showcase,
 }: {
   sections: Section[];
   isAdmin: boolean;
+  showcase: boolean;
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -92,6 +94,17 @@ export function CommandPalette({
   const [content, setContent] = useState<SearchHit[] | null>(null);
   const [loadingContent, setLoadingContent] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  // The cached content belongs to exactly one data world (real vs showcase).
+  // When showcase mode flips, drop the cache DURING RENDER so real rows loaded
+  // before entering showcase can never surface in a client demo (and demo rows
+  // never linger after exiting). The next open refetches, and searchContent is
+  // showcase-filtered server-side.
+  const [seenShowcase, setSeenShowcase] = useState(showcase);
+  if (seenShowcase !== showcase) {
+    setSeenShowcase(showcase);
+    setContent(null);
+  }
 
   const available = useMemo(
     () =>

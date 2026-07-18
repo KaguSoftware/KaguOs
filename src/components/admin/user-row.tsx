@@ -34,7 +34,7 @@ function shortLabel(section: Section) {
 /** "Last seen" line. Within ~5 min counts as online (the bump throttle window). */
 function LastSeen({ at }: { at: string | null }) {
   if (!at) return <p className="text-xs text-faint">Never signed in</p>;
-  const online = Date.now() - Date.parse(at) < 6 * 60 * 1000;
+  const online = new Date().getTime() - Date.parse(at) < 6 * 60 * 1000;
   return (
     <p className="flex items-center gap-1.5 text-xs text-faint">
       <span
