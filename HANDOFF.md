@@ -59,6 +59,57 @@ Contracts w/ PDFs), **Debug** (everyone: per-project boards, self-claim-only, re
 - Chart colors are validated (dataviz skill): income `oklch(0.62 0.13 160)`, expense
   `oklch(0.55 0.16 25)` — L band 0.48–0.67 on dark; re-validate any new chart palette.
 
+## Current status (2026-07-19)
+
+### 🟢 PRESENCE→SIDEBAR + REALTIME EVERYWHERE + SHOWCASE LEAK (full) + STATUS TIMERS (2026-07-19) — BUILT + STATICALLY VERIFIED (tsc/lint/check:demo/build all green), live-drive by Parsa pending
+One long session off the debug-board task list. **Migrations 0028 + 0029 APPLIED to prod** via the
+Management API helper. NOT runtime-driven by Claude (dev server → prod; presence/notify writes reach
+real teammates). Green: `tsc`, lint (only the same pre-existing errors in create.tsx / command-palette.tsx /
+comms/bits / marketing/bits / contract-bits / admin — NONE in this batch's files), `check:demo` (78 reads,
+all filtered), `npm run build`. What shipped:
+
+- **Status-change notifications** (Parsa's URGENT ask): `updateMyStatus` now diffs old→new and fires a
+  `status_change` notification **only on a MEANINGFUL change** (different status kind, or newly
+  available-to-call) — never on clearing / custom-text edits / expiry-only. Recipients = **work team**
+  (admins ∪ `work` members, the presence denominator) via new `notifyWorkTeam` in notify.ts. New kind
+  `status_change` added to `NotifyKind`, the `Notification.kind` union (which had drifted — also added the
+  missing `debug_suggested`/`learn_question`/`learn_answer`), and the DB CHECK (**migration 0028**).
+- **Timed status — "till HH:MM"** (Parsa ask): **migration 0028** adds `profiles.status_until timestamptz`
+  (per-column grant, 0027 pattern). Set a time and the status auto-expires — an elapsed `status_until`
+  reads as "no status" client-side with no write. Shows "Working · till 15:00". "HH:MM" resolves to today
+  or rolls to tomorrow if already past. **NOTE: "from" was explicitly dropped by Parsa — till-only.**
+- **Status moved to the SIDEBAR, always-open** (Parsa ask, mid-session pivot from the old dashboard
+  popover): new `shell/sidebar-presence.tsx` — my editor (status Dropdown + custom "till" TimePicker +
+  Available-to-call Checkbox + **dirty-aware Save button**, NO more auto-save) **plus** a compact
+  read-only team list, visible on every page. Loaded via new `lib/data/presence.ts` `getPresence(ctx)`
+  (cache()-deduped, showcase/Work-gated) in the **layout**, passed to Sidebar. **Old dashboard top-right
+  `TeamPresence` widget + its inline loader REMOVED from page.tsx; `team-presence.tsx` DELETED**;
+  `PresencePerson` type moved to `lib/types.ts`.
+- **Custom TimePicker** (`ui/time-picker.tsx`): hour/minute column popover matching Dropdown/DatePicker.
+  Replaces the native `<input type=time>` I'd first used (Parsa: "fully custom dropdowns everywhere").
+  Also **removed the dead native `<select>` export from `ui/input.tsx`** (was exported, never imported).
+- **Showcase leak — FULL fix** (the 2026-07-18 ⌘K fix only closed the palette-cache path; an audit found
+  **10 surfaces**). Class A (no is_demo column, always-on): `getMembersMap` now returns synthetic
+  "Team member ####" + NO real email in showcase (was leaking real names/emails app-wide via the layout);
+  notifications hidden in showcase (layout); reminders + announcements skipped in showcase (dashboard).
+  Class B (detail pages fetching children by parent-id, leaked to a real section member in showcase):
+  added `.eq("is_demo", ctx.showcase)` to project (+**secrets**), idea (+comments/votes), contact
+  (+links/interactions), sprint (+all child tables + roster anonymized). `demoName(id)` shared from members.ts.
+- **Live updates on EVERY tab** (Parsa ask): new `lib/use-realtime-refresh.ts` hook + `shell/live-refresh.tsx`
+  mount — subscribes to a table's postgres_changes and calls `router.refresh()` (coalesced 150ms), so the
+  server re-renders already-filtered. Mounted on comms/work/management-finance/marketing/learn/dashboard +
+  app-wide notifications+profiles via layout (showcase-gated). **Migration 0029** (idempotent) confirms every
+  user-facing table is in `supabase_realtime` + `replica identity full` (they already were in prod; 0029
+  bumped only `debug_tasks` from default→full).
+- **Debug board realtime FIX** ("only my own changes show", diagnosed with Parsa: channel SUBSCRIBED but no
+  teammate events). Root cause = realtime socket authorized as anon, so `debug_tasks` RLS streamed nothing.
+  Fix: `supabase.realtime.setAuth(session.access_token)` before `.subscribe()`, in BOTH the board and the
+  shared hook. **⚠️ NEEDS TWO-BROWSER live verification — can't be tested headlessly.**
+- **Logo → dashboard**: both desktop + mobile "KaguOs" wordmarks are now `<Link href="/">`.
+- **Resend email integration**: scoped with Parsa (announcements→everyone, task-assign→assignee, digests)
+  then **explicitly dropped by Parsa this session ("forget abt resend for now")**. Not started. `resend`
+  is NOT installed. See scope ledger.
+
 ## Current status (2026-07-18)
 
 ### 🧩 DEBUG QoL + TEAM PRESENCE + ⌘K LEAK FIX (2026-07-18) — BUILT + STATICALLY VERIFIED, live-drive by Parsa pending
@@ -517,21 +568,35 @@ volume. They're insurance, not a speedup.
   reminders (Share button posts a team one; RLS in migration 0008). `Reminder` type in types.ts.
 - `src/components/shell/logo.tsx` — the brand mark (`/kagu-mark.png`, 0.4KB, downscaled from
   `/brand/kagu-logo-source.png`). App icons: `src/app/icon.png` + `apple-icon.png`.
-- `src/lib/actions/notify.ts` (helper: notifySection/notifyEveryone/notifyUser, best-effort, actor
-  excluded) + `notifications.ts` (markAllRead/clearAll). `shell/notification-bell.tsx` renders the
-  bell; layout fetches the feed. Events fire from debug/work/reminders actions. **The three notify
-  helpers are FIRE-AND-FORGET (return void, run inside `after()`) — call them WITHOUT `await`; the
-  SELECT+INSERT happens after the response ships. Don't re-add `await` or they'll block the save.**
+- `src/lib/actions/notify.ts` (helpers: notifySection/notifyEveryone/notifyAdmins/**notifyWorkTeam**/
+  notifyUser, best-effort, actor excluded) + `notifications.ts` (markAllRead/clearAll).
+  `shell/notification-bell.tsx` renders the bell; layout fetches the feed. Events fire from
+  debug/work/reminders/**account (status_change)** actions. **The notify helpers are FIRE-AND-FORGET
+  (return void, run inside `after()`) — call them WITHOUT `await`; the SELECT+INSERT happens after the
+  response ships. Don't re-add `await` or they'll block the save.** `notifyWorkTeam` = admins ∪ `work`
+  members (the presence denominator).
 - `src/components/shell/announcement-hero.tsx` + `lib/actions/announcements.ts` — admin banner
   (one active at a time). `src/components/shell/command-palette.tsx` — ⌘K nav+actions.
 - `supabase/migrations/0001–0010` — full schema history (0008 reminders, 0009 notifications,
   0010 announcements; all applied to cloud).
-- `src/components/shell/team-presence.tsx` — dashboard top-right team widget (avatar stack →
-  frosted popover: everyone's status/last-seen/call-availability + your own status editor).
-  Work-gated, hidden in showcase. Types (`StatusKind`, `STATUS_LABELS`) in types.ts; action
-  `updateMyStatus` in account.ts; columns from migration 0027.
+- **Presence (relocated to sidebar 2026-07-19)**: `src/components/shell/sidebar-presence.tsx` — the
+  ALWAYS-OPEN sidebar panel (my status editor w/ dirty-aware Save + `ui/time-picker.tsx` "till" +
+  Available-to-call, plus a compact read-only team list). `src/lib/data/presence.ts` `getPresence(ctx)`
+  loads it (cache()-deduped, Work-gated, null in showcase); the layout passes it to `shell/sidebar.tsx`.
+  Types (`StatusKind`/`STATUS_LABELS`/**`PresencePerson`**) in types.ts; action `updateMyStatus` in
+  account.ts (accepts `until`, fires `status_change` notify on meaningful change); columns from
+  migrations 0027 (`status_kind/text/available_to_call`) + **0028** (`status_until`). The old
+  dashboard `team-presence.tsx` popover was DELETED — presence is sidebar-only now.
+- `src/components/ui/time-picker.tsx` — custom hour/minute popover; the ONLY time control (no native
+  `<input type=time>`). `ui/input.tsx` no longer exports a native `<select>` (use `ui/dropdown.tsx`).
+- **Realtime**: `src/lib/use-realtime-refresh.ts` (`useRealtimeRefresh(tables)` → coalesced
+  `router.refresh()` on any change; sets `realtime.setAuth` first so RLS lets events through) +
+  `src/components/shell/live-refresh.tsx` (`<LiveRefresh tables={…}/>` mount, one per page). The debug
+  board keeps its own in-place `setTasks` subscription (also now setAuth-fixed).
 - `supabase/migrations/0026` (work⊆debug auto-grant, applied to prod, file untracked in git) ·
-  **0027** presence status columns + grants (applied 2026-07-18).
+  **0027** presence status columns + grants (applied 2026-07-18) · **0028** `status_until` + `status_change`
+  notify kind (applied 2026-07-19) · **0029** realtime publication + replica-identity-full, idempotent
+  (applied 2026-07-19).
 - `supabase/migrations/0020–0025` (all APPLIED to prod, 2026-07-17): **0020** idea pipeline (vote value,
   required_count/stage, work_access_count) · **0021** debug suggest_for/due_on + project due_on · **0022**
   contact_interactions · **0023** debug_suggested notify kind · **0024** debug auto-archive (done_at/archived_at
@@ -594,11 +659,13 @@ surface; run `/impeccable audit` after the batch (design hook was silenced after
 | Comms interactions | log per contact + last-interaction on list (done) | analytics / follow-up reminders | later |
 | Debug lifecycle | suggest-for + deadlines + auto-archive (7d, pg_cron) + admin batch-delete (done) | — | — |
 | ⌘K search | nav actions + content (tasks/projects/ideas/contacts/sprints), loaded-once client-filter (done) | live/fresh results, ranking, recents | later |
-| Presence | last_seen_at + dashboard team widget: self-set status (working/focus/meeting/break/unavailable/off/custom) + available-to-call + online dot (done 2026-07-18) | per-section activity, realtime presence updates | later |
+| Presence | **sidebar always-open panel (moved off dashboard 2026-07-19)**: self-set status + available-to-call + online dot + **"till HH:MM" auto-expiry** + **status-change notifications to the work team** + dirty-aware Save + compact team list (done) | "from" time (Parsa dropped it), per-section activity | later |
+| Realtime | **live updates on every tab via `useRealtimeRefresh`→router.refresh(); debug board in-place (done 2026-07-19)** | in-place patching on more tabs (currently only debug patches; others refresh) | later |
+| Email (Resend) | **NONE — scoped then dropped by Parsa 2026-07-19 ("forget resend for now")**. `resend` not installed | announcements→everyone, task-assign→assignee, admin digests, role-polarized | when Parsa revives it |
 | Debug brainstorm | /debug/brainstorm: capture → one-trip post → per-task details pass + board trail + collapsed notify (done 2026-07-18, v2 after Parsa rejected the inline-bar v1) | — | — |
 | Comms/CRM | leads/clients + linked resources (done) | — | — |
 | Project creds | plaintext RLS-gated accounts store (done) | — | — |
-| Showcase mode | none | fake-data demo mode w/ re-auth exit | deferred, needs design (4) |
+| Showcase mode | fake-data demo mode w/ re-auth exit + **all 10 real-data leak surfaces closed (2026-07-19 audit: members map, notifications, reminders, announcements + all detail pages incl. project secrets)** (done) | — | — |
 | Invites | admin sets temp password | email invites via SMTP | when SMTP exists |
 | Roles | membership + global admin | per-section roles (Learn owner) | when needed |
 | Finance reports | 12-mo chart + tiles + recurring breakdown | exports, budgets, per-client P&L | roadmap 5 |
@@ -628,8 +695,16 @@ surface; run `/impeccable audit` after the batch (design hook was silenced after
 - Secrets only in `.env.local` + Vercel env. Access token + service key were pasted in chat —
   rotate anytime in dashboard.
 - `db push` needs `$env:SUPABASE_ACCESS_TOKEN` set and pipes `"Y"`; Docker warning is harmless.
-- Realtime respects RLS; if the debug board shows "connecting…" forever, check Realtime is
-  enabled for the project and `debug_tasks` is in the publication (it is, migration 0001).
+- ⚠️ **Realtime RLS needs an authenticated socket (2026-07-19).** `postgres_changes` on an RLS table
+  streams NOTHING if the realtime socket is authorized as anon — the channel still reports SUBSCRIBED,
+  so the symptom is "connected but only my own optimistic edits show, nothing from teammates." Every
+  subscription MUST call `await supabase.realtime.setAuth(session.access_token)` before `.subscribe()`
+  (done in the debug board + `useRealtimeRefresh`). If a new realtime surface shows no teammate events,
+  this is the first thing to check. **The debug-board fix still needs TWO-BROWSER live verification.**
+- ⚠️ **Migrations 0028 + 0029 applied via `apply-migration.mjs` but NOT yet `migration repair`'d**
+  (2026-07-19). Per the standing rule below, run
+  `npx supabase migration repair --status applied 0028 0029 --linked` before the next `db push`, or it'll
+  try to re-run them (0029 is idempotent; 0028 would error harmlessly on the first statement).
 - Deleting a user cascades cleanly (created_by set-null everywhere).
 - `staleTimes` is experimental — if a Next upgrade breaks it, drop it from next.config.ts.
 

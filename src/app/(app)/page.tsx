@@ -10,8 +10,6 @@ import { ActivityFeed } from "@/components/shell/activity-feed";
 import { AnnouncementHero } from "@/components/shell/announcement-hero";
 import { PrefetchHeavy } from "@/components/shell/prefetch-heavy";
 import { ShowcaseToggle } from "@/components/shell/showcase";
-import { TeamPresence, type PresencePerson } from "@/components/shell/team-presence";
-import { memberColorCss } from "@/lib/colors";
 import { formatTRY, isActiveRecurring, monthlyAmount, toTRY, type FxRates } from "@/lib/finance";
 import { SECTION_LABELS, type Announcement, type Reminder, type Section } from "@/lib/types";
 
@@ -91,24 +89,6 @@ export default async function DashboardPage() {
         .eq("status", "running")
     : null;
 
-  // Team presence (top-right widget): Work members' status + last-seen. Real
-  // operational data, so it's hidden in showcase mode — a client demo must not
-  // show who's actually online. Gated to Work access, per Parsa's rule.
-  const presenceData =
-    canAccess(ctx, "work") && !ctx.showcase
-      ? Promise.all([
-          ctx.supabase
-            .from("profiles")
-            .select(
-              "id, full_name, email, color, is_admin, last_seen_at, status_kind, status_text, available_to_call, status_until"
-            ),
-          ctx.supabase
-            .from("section_memberships")
-            .select("user_id")
-            .eq("section", "work"),
-        ])
-      : null;
-
   const commsStats = canAccess(ctx, "comms")
     ? Promise.all([
         ctx.supabase
@@ -131,7 +111,6 @@ export default async function DashboardPage() {
     managementRes,
     marketingRes,
     commsRes,
-    presenceRes,
     activity,
     members,
     remindersRes,
@@ -143,7 +122,6 @@ export default async function DashboardPage() {
     managementStats,
     marketingStats,
     commsStats,
-    presenceData,
     getActivity(ctx),
     getMembersMap(ctx.supabase),
     // Reminders + announcements have no demo equivalent (no is_demo column) and
@@ -265,26 +243,6 @@ export default async function DashboardPage() {
   const reminders = ((remindersRes?.data ?? []) as Reminder[]);
   const announcement = ((annRes?.data ?? []) as Announcement[])[0] ?? null;
 
-  // Work members = admins ∪ explicit `work` memberships (the same denominator
-  // the ideas pipeline uses). Everyone in that set sees everyone in that set.
-  let presence: PresencePerson[] | null = null;
-  if (presenceRes) {
-    const [{ data: profileRows }, { data: workRows }] = presenceRes;
-    const workIds = new Set((workRows ?? []).map((r) => r.user_id));
-    presence = (profileRows ?? [])
-      .filter((p) => p.is_admin || workIds.has(p.id))
-      .map((p) => ({
-        id: p.id,
-        name: p.full_name || p.email,
-        color: memberColorCss(p.id, p.color),
-        last_seen_at: p.last_seen_at,
-        status_kind: p.status_kind,
-        status_text: p.status_text,
-        available_to_call: p.available_to_call,
-        status_until: p.status_until,
-      }));
-  }
-
   return (
     <>
       {/* Live dashboard: team reminders + the announcement banner update in
@@ -298,11 +256,6 @@ export default async function DashboardPage() {
           canAccess(ctx, "debug") && myTasks > 0
             ? `You have ${myTasks} debug ${myTasks === 1 ? "task" : "tasks"} on your plate.`
             : "Everything Kagu runs on, in one quiet place."
-        }
-        action={
-          presence && presence.length > 0 ? (
-            <TeamPresence people={presence} meId={ctx.userId} />
-          ) : undefined
         }
       />
       <AnnouncementHero announcement={announcement} isAdmin={ctx.isAdmin} />

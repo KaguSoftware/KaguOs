@@ -71,6 +71,19 @@ export type Profile = {
   created_at: string;
 };
 
+/** One teammate as the presence panel needs them (sidebar + team list). */
+export type PresencePerson = {
+  id: string;
+  name: string;
+  color: string;
+  last_seen_at: string | null;
+  status_kind: StatusKind;
+  status_text: string | null;
+  available_to_call: boolean;
+  /** Optional expiry — "unavailable till 15:00". Null = open-ended. */
+  status_until: string | null;
+};
+
 /** id → display name + identity color (css), used wherever names render. */
 export type MembersMap = Record<string, { name: string; color: string }>;
 

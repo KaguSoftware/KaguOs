@@ -26,11 +26,5 @@ export const Textarea = forwardRef<
   );
 });
 
-export const Select = forwardRef<
-  HTMLSelectElement,
-  React.SelectHTMLAttributes<HTMLSelectElement>
->(function Select({ className, ...props }, ref) {
-  return (
-    <select ref={ref} className={cn(controlClasses, "h-9 px-2.5", className)} {...props} />
-  );
-});
+// No native <select> export by design (Parsa rule: every control is custom +
+// typed). Use <Dropdown> from ./dropdown for all option pickers.

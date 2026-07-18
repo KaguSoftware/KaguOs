@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getSessionContext, getUserId } from "@/lib/data/session";
 import { getMembersMap } from "@/lib/data/members";
+import { getPresence } from "@/lib/data/presence";
 import { LiveRefresh } from "@/components/shell/live-refresh";
 import { Sidebar } from "@/components/shell/sidebar";
 import { CommandPalette } from "@/components/shell/command-palette";
@@ -34,6 +35,10 @@ export default async function AppLayout({
       .limit(30),
     getMembersMap(supabase),
   ]);
+
+  // Presence for the always-open sidebar panel (needs ctx for access/showcase
+  // gating). cache()-deduped, so a page that also reads it pays nothing.
+  const presence = await getPresence(ctx);
 
   return (
     <ToastProvider>
@@ -70,6 +75,8 @@ export default async function AppLayout({
           // a client demo must never surface the team's real activity.
           notifications={ctx.showcase ? [] : ((notifRows ?? []) as Notification[])}
           members={members}
+          presence={presence}
+          meId={ctx.userId}
         />
         <main id="main" tabIndex={-1} className="min-w-0 flex-1 focus:outline-none">
           {ctx.showcase && <ShowcaseBanner />}

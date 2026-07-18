@@ -20,7 +20,8 @@ import type { Section } from "@/lib/types";
 import { signOut } from "@/lib/actions/account";
 import { Logo } from "@/components/shell/logo";
 import { NotificationBell } from "@/components/shell/notification-bell";
-import type { MembersMap, Notification } from "@/lib/types";
+import { SidebarPresence } from "@/components/shell/sidebar-presence";
+import type { MembersMap, Notification, PresencePerson } from "@/lib/types";
 
 type NavItem = {
   href: string;
@@ -79,6 +80,8 @@ export function Sidebar({
   email,
   notifications,
   members,
+  presence,
+  meId,
 }: {
   sections: Section[];
   isAdmin: boolean;
@@ -87,6 +90,9 @@ export function Sidebar({
   email: string;
   notifications: Notification[];
   members: MembersMap;
+  /** Team presence for the always-open panel; null when unavailable (showcase / no Work access). */
+  presence: PresencePerson[] | null;
+  meId: string;
 }) {
   const pathname = usePathname();
   const visible = NAV.filter(
@@ -98,10 +104,14 @@ export function Sidebar({
       {/* Desktop sidebar */}
       <aside className="sticky top-0 z-30 hidden h-dvh w-56 shrink-0 flex-col border-r border-line bg-surface md:flex">
         <div className="flex items-center justify-between px-4 pb-5 pt-5">
-          <div className="flex items-center gap-2.5">
+          <Link
+            href="/"
+            aria-label="KaguOs — go to dashboard"
+            className="flex items-center gap-2.5 rounded-md transition-opacity duration-150 hover:opacity-80"
+          >
             <Logo size={24} />
             <span className="text-[15px] font-semibold tracking-tight">KaguOs</span>
-          </div>
+          </Link>
           <NotificationBell
             notifications={notifications}
             members={members}
@@ -135,6 +145,9 @@ export function Sidebar({
             </>
           )}
         </nav>
+        {presence && presence.length > 0 && (
+          <SidebarPresence people={presence} meId={meId} />
+        )}
         <div className="flex items-center gap-2 border-t border-line p-3">
           <Link
             href="/account"
@@ -161,10 +174,14 @@ export function Sidebar({
       {/* Mobile top bar */}
       <header className="sticky top-0 z-20 flex flex-col border-b border-line bg-surface md:hidden">
         <div className="flex items-center justify-between px-4 py-3">
-          <div className="flex items-center gap-2.5">
+          <Link
+            href="/"
+            aria-label="KaguOs — go to dashboard"
+            className="flex items-center gap-2.5 rounded-md transition-opacity duration-150 hover:opacity-80"
+          >
             <Logo size={22} />
             <span className="text-[15px] font-semibold tracking-tight">KaguOs</span>
-          </div>
+          </Link>
           <div className="flex items-center gap-1">
             <NotificationBell notifications={notifications} members={members} />
             <Link
