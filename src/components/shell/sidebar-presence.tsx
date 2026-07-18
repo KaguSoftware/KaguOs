@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Phone } from "lucide-react";
+import { Pencil, Phone } from "lucide-react";
 import { updateMyStatus } from "@/lib/actions/account";
 import { Dropdown } from "@/components/ui/dropdown";
 import { Input } from "@/components/ui/input";
@@ -9,7 +9,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { TimePicker } from "@/components/ui/time-picker";
 import { Button } from "@/components/ui/button";
 import { useAction } from "@/lib/use-action";
-import { cn } from "@/lib/utils";
+import { cn, formatRelative } from "@/lib/utils";
 import { STATUS_LABELS, type StatusKind, type PresencePerson } from "@/lib/types";
 
 /** Seen within this window = "online now" (last_seen writes are ~5-min throttled). */
@@ -51,6 +51,91 @@ function statusLine(p: PresencePerson, now: number) {
         : null;
   if (!base) return null;
   return p.status_until ? `${base} · till ${tillLabel(p.status_until)}` : base;
+}
+
+function lastSeenLabel(lastSeen: string | null, online: boolean) {
+  if (online) return "now";
+  return lastSeen ? formatRelative(lastSeen) : "never";
+}
+
+/**
+ * One presence row — avatar (with online dot), name, status line, last-seen,
+ * and a call icon. Shared by my row and every teammate's; `me` gets a subtle
+ * "click to edit" affordance (pencil) via `interactive`.
+ */
+function PresenceRow({
+  person,
+  now,
+  interactive,
+  onClick,
+  label,
+}: {
+  person: PresencePerson;
+  now: number;
+  interactive?: boolean;
+  onClick?: () => void;
+  /** Overrides the name line (e.g. "You"). */
+  label?: string;
+}) {
+  const online = isOnline(person.last_seen_at, now);
+  const status = statusLine(person, now);
+  const Tag = interactive ? "button" : "div";
+
+  return (
+    <Tag
+      type={interactive ? "button" : undefined}
+      onClick={onClick}
+      className={cn(
+        "flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-left",
+        interactive &&
+          "group transition-colors duration-150 hover:bg-raised"
+      )}
+    >
+      <span className="relative shrink-0" aria-hidden>
+        <span
+          style={{ color: person.color }}
+          className="flex size-8 items-center justify-center rounded-full border border-line-strong bg-raised text-[11px] font-semibold"
+        >
+          {initials(person.name)}
+        </span>
+        <span
+          className={cn(
+            "absolute -bottom-0.5 -right-0.5 size-2.5 rounded-full border-2 border-surface",
+            online ? "bg-primary" : "bg-line-strong"
+          )}
+        />
+      </span>
+
+      <span className="min-w-0 flex-1">
+        <span className="flex items-center gap-1.5">
+          <span
+            style={{ color: person.color }}
+            className="truncate text-[13px] font-medium"
+          >
+            {label ?? person.name}
+          </span>
+          {interactive && (
+            <Pencil
+              className="size-3 shrink-0 text-faint opacity-0 transition-opacity duration-150 group-hover:opacity-100"
+              aria-hidden
+            />
+          )}
+        </span>
+        <span className="block truncate text-xs text-faint">
+          {status ?? (online ? "Online" : "No status")}
+        </span>
+      </span>
+
+      <span className="flex shrink-0 flex-col items-end gap-1">
+        <span className="font-mono text-[10px] text-faint">
+          {lastSeenLabel(person.last_seen_at, online)}
+        </span>
+        {person.available_to_call && (
+          <Phone className="size-3 text-primary-dim" aria-label="Available to call" />
+        )}
+      </span>
+    </Tag>
+  );
 }
 
 /** ISO expiry → "HH:MM" for the TimePicker; "" if none or already elapsed. */
@@ -102,6 +187,9 @@ export function SidebarPresence({
   };
 
   const [draft, setDraft] = useState<Draft>(serverDraft);
+  // My row is collapsed by default (reads like a teammate's); clicking it opens
+  // the editor. Auto-save is gone — you change, then Save.
+  const [editing, setEditing] = useState(false);
   // Adopt server changes during render (app-wide anti-flash pattern), but only
   // when the user has NO unsaved edits — never clobber what they're typing.
   const [seenMe, setSeenMe] = useState(me);
@@ -112,6 +200,16 @@ export function SidebarPresence({
 
   const isDirty = dirty(draft, me, now);
 
+  function openEditor() {
+    setDraft(serverDraft); // start from the saved value each time
+    setEditing(true);
+  }
+
+  function cancel() {
+    setDraft(serverDraft);
+    setEditing(false);
+  }
+
   function save() {
     run(
       () =>
@@ -121,7 +219,7 @@ export function SidebarPresence({
           availableToCall: draft.call,
           until: draft.kind === "none" ? null : fromTimeInput(draft.until, now),
         }),
-      { success: "Status updated." }
+      { success: "Status updated.", onSuccess: () => setEditing(false) }
     );
   }
 
@@ -135,108 +233,95 @@ export function SidebarPresence({
     );
 
   return (
-    <div className="space-y-2 border-t border-line px-3 py-3">
-      <p className="text-[11px] font-medium uppercase tracking-wide text-faint">
-        Your status
+    <div className="space-y-0.5 border-t border-line px-2 py-2">
+      <p className="px-2 pb-1 pt-1 text-[11px] font-medium uppercase tracking-wide text-faint">
+        Team
       </p>
 
+      {/* My row — reads like a teammate's; click to open the editor. */}
       {me && (
-        <div className="space-y-1.5">
-          <Dropdown
-            className="w-full"
-            value={draft.kind}
-            options={STATUS_OPTIONS}
-            searchThreshold={0}
-            onChange={(v) => {
-              const kind = v as StatusKind;
-              setDraft((d) => ({
-                ...d,
-                kind,
-                // Leaving custom drops the free text; clearing drops the expiry.
-                text: kind === "custom" ? d.text : "",
-                until: kind === "none" ? "" : d.until,
-              }));
-            }}
+        <>
+          <PresenceRow
+            person={me}
+            now={now}
+            interactive
+            label="You"
+            onClick={openEditor}
           />
 
-          {draft.kind === "custom" && (
-            <Input
-              value={draft.text}
-              maxLength={80}
-              placeholder="What's up?"
-              aria-label="Custom status"
-              onChange={(e) => setDraft((d) => ({ ...d, text: e.target.value }))}
-            />
-          )}
-
-          {draft.kind !== "none" && (
-            <div className="flex items-center gap-2">
-              <span className="shrink-0 text-xs text-muted">Till</span>
-              <TimePicker
-                className="flex-1"
-                value={draft.until}
-                ariaLabel="Status expires at"
-                placeholder="Open-ended"
-                onChange={(v) => setDraft((d) => ({ ...d, until: v }))}
+          {editing && (
+            <div className="space-y-1.5 rounded-md border border-line bg-raised/40 p-2">
+              <Dropdown
+                className="w-full"
+                value={draft.kind}
+                options={STATUS_OPTIONS}
+                searchThreshold={0}
+                onChange={(v) => {
+                  const kind = v as StatusKind;
+                  setDraft((d) => ({
+                    ...d,
+                    kind,
+                    // Leaving custom drops the free text; clearing drops the expiry.
+                    text: kind === "custom" ? d.text : "",
+                    until: kind === "none" ? "" : d.until,
+                  }));
+                }}
               />
+
+              {draft.kind === "custom" && (
+                <Input
+                  value={draft.text}
+                  maxLength={80}
+                  placeholder="What's up?"
+                  aria-label="Custom status"
+                  autoFocus
+                  onChange={(e) => setDraft((d) => ({ ...d, text: e.target.value }))}
+                />
+              )}
+
+              {draft.kind !== "none" && (
+                <div className="flex items-center gap-2">
+                  <span className="shrink-0 text-xs text-muted">Till</span>
+                  <TimePicker
+                    className="flex-1"
+                    value={draft.until}
+                    ariaLabel="Status expires at"
+                    placeholder="Open-ended"
+                    onChange={(v) => setDraft((d) => ({ ...d, until: v }))}
+                  />
+                </div>
+              )}
+
+              <Checkbox
+                checked={draft.call}
+                disabled={pending}
+                onChange={() => setDraft((d) => ({ ...d, call: !d.call }))}
+                label="Available to call"
+              />
+
+              <div className="flex items-center gap-2 pt-0.5">
+                <Button
+                  variant="primary"
+                  size="sm"
+                  className="flex-1"
+                  disabled={pending || !isDirty}
+                  onClick={save}
+                >
+                  Save
+                </Button>
+                <Button variant="ghost" size="sm" disabled={pending} onClick={cancel}>
+                  Cancel
+                </Button>
+              </div>
             </div>
           )}
-
-          <Checkbox
-            checked={draft.call}
-            disabled={pending}
-            onChange={() => setDraft((d) => ({ ...d, call: !d.call }))}
-            label="Available to call"
-          />
-
-          <Button
-            variant="primary"
-            size="sm"
-            className="w-full"
-            disabled={pending || !isDirty}
-            onClick={save}
-          >
-            {isDirty ? "Save status" : "Saved"}
-          </Button>
-        </div>
+        </>
       )}
 
-      {/* Compact team list — read-only, everyone else's current status. */}
-      {others.length > 0 && (
-        <ul className="space-y-1 pt-1">
-          {others.map((p) => {
-            const online = isOnline(p.last_seen_at, now);
-            const status = statusLine(p, now);
-            return (
-              <li key={p.id} className="flex items-center gap-2">
-                <span className="relative shrink-0" aria-hidden>
-                  <span
-                    style={{ color: p.color }}
-                    className="flex size-5 items-center justify-center rounded-full border border-line-strong bg-raised text-[9px] font-semibold"
-                  >
-                    {initials(p.name)}
-                  </span>
-                  <span
-                    className={cn(
-                      "absolute -bottom-px -right-px size-1.5 rounded-full border border-surface",
-                      online ? "bg-primary" : "bg-line-strong"
-                    )}
-                  />
-                </span>
-                <span className="min-w-0 flex-1 truncate text-xs text-muted">
-                  {status ?? (online ? "Online" : p.name)}
-                </span>
-                {p.available_to_call && (
-                  <Phone
-                    className="size-3 shrink-0 text-primary-dim"
-                    aria-label="Available to call"
-                  />
-                )}
-              </li>
-            );
-          })}
-        </ul>
-      )}
+      {/* Everyone else — read-only. */}
+      {others.map((p) => (
+        <PresenceRow key={p.id} person={p} now={now} />
+      ))}
     </div>
   );
 }
