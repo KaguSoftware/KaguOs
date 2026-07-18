@@ -31,17 +31,27 @@ export default async function ProjectPage({
   // inside a wave that's already in flight costs ~3ms, while a second wave
   // costs ~305ms.
   const [{ data: project }, { data: sourceIdea }, secretRows] = await Promise.all([
-    ctx.supabase.from("projects").select("*").eq("id", id).maybeSingle(),
+    // Gate the project itself on the demo/real split: in showcase mode a real
+    // project id resolves to nothing (→ notFound below), so no real project —
+    // and none of its real secrets — can ever render in a client demo.
+    ctx.supabase
+      .from("projects")
+      .select("*")
+      .eq("id", id)
+      .eq("is_demo", ctx.showcase)
+      .maybeSingle(),
     ctx.supabase
       .from("ideas")
       .select("id, title")
       .eq("promoted_project_id", id)
+      .eq("is_demo", ctx.showcase)
       .maybeSingle(),
     canSeeSecrets
       ? ctx.supabase
           .from("project_secrets")
           .select("*")
           .eq("project_id", id)
+          .eq("is_demo", ctx.showcase)
           .order("created_at", { ascending: true })
       : null,
   ]);

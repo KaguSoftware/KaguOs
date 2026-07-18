@@ -3,6 +3,7 @@ import { Suspense } from "react";
 import { requireSection } from "@/lib/data/session";
 import { getMembersMap } from "@/lib/data/members";
 import { MarketingWorkspace } from "@/components/marketing/workspace";
+import { LiveRefresh } from "@/components/shell/live-refresh";
 import type {
   MarketingCampaign,
   MarketingItem,
@@ -46,6 +47,7 @@ export default async function MarketingPage() {
 
   return (
     <Suspense>
+      <LiveRefresh tables={["marketing_campaigns", "marketing_posts", "marketing_items"]} />
       <MarketingWorkspace
         campaigns={campaignRows}
         posts={(posts ?? []) as MarketingPost[]}

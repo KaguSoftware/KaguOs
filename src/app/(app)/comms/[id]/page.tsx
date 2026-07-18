@@ -30,16 +30,25 @@ export default async function ContactPage({
 
   const [{ data: contact }, { data: links }, { data: interactions }, members] =
     await Promise.all([
-      ctx.supabase.from("contacts").select("*").eq("id", id).maybeSingle(),
+      // Gate the contact on the demo/real split — a real contact id is notFound
+      // in showcase, so its real links/interactions never render in a demo.
+      ctx.supabase
+        .from("contacts")
+        .select("*")
+        .eq("id", id)
+        .eq("is_demo", ctx.showcase)
+        .maybeSingle(),
       ctx.supabase
         .from("contact_links")
         .select("*")
         .eq("contact_id", id)
+        .eq("is_demo", ctx.showcase)
         .order("created_at", { ascending: true }),
       ctx.supabase
         .from("contact_interactions")
         .select("*")
         .eq("contact_id", id)
+        .eq("is_demo", ctx.showcase)
         .order("happened_on", { ascending: false })
         .order("created_at", { ascending: false }),
       getMembersMap(ctx.supabase),

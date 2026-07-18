@@ -11,7 +11,8 @@ type NotifyKind =
   | "idea_comment"
   | "reminder_shared"
   | "learn_question"
-  | "learn_answer";
+  | "learn_answer"
+  | "status_change";
 
 type NotifyInput = {
   kind: NotifyKind;
@@ -84,6 +85,29 @@ export function notifyAdmins(ctx: SessionContext, input: NotifyInput) {
       .select("id")
       .eq("is_admin", true);
     await insertFor(ctx, (data ?? []).map((p) => p.id), input);
+  });
+}
+
+/**
+ * Notify the "work team" (minus the actor): admins ∪ explicit work-section
+ * members. This is the same denominator the dashboard presence widget uses
+ * (see app/(app)/page.tsx) — everyone who can see presence, so status-change
+ * pings reach exactly that audience and no wider.
+ */
+export function notifyWorkTeam(ctx: SessionContext, input: NotifyInput) {
+  after(async () => {
+    const [{ data: admins }, { data: work }] = await Promise.all([
+      ctx.supabase.from("profiles").select("id").eq("is_admin", true),
+      ctx.supabase
+        .from("section_memberships")
+        .select("user_id")
+        .eq("section", "work"),
+    ]);
+    const ids = [
+      ...(admins ?? []).map((p) => p.id),
+      ...(work ?? []).map((m) => m.user_id),
+    ];
+    await insertFor(ctx, ids, input);
   });
 }
 

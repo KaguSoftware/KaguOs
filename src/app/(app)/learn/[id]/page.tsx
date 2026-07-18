@@ -10,6 +10,7 @@ import { LinkButton } from "@/components/ui/link-button";
 import { SprintProgress } from "@/components/learn/sprint-progress";
 import { SprintQuestions } from "@/components/learn/sprint-questions";
 import { memberColorCss } from "@/lib/colors";
+import { demoName } from "@/lib/data/members";
 import { formatDate } from "@/lib/utils";
 import type {
   Sprint,
@@ -46,17 +47,31 @@ export default async function SprintPage({
     { data: learnMembers },
     { data: questions },
   ] = await Promise.all([
-    ctx.supabase.from("sprints").select("*").eq("id", id).maybeSingle(),
+    // Gate the sprint on the demo/real split — a real sprint id is notFound in
+    // showcase, so its real resources/goals/questions/files never render in a
+    // client demo. Child tables carry the same filter as defence in depth.
+    ctx.supabase
+      .from("sprints")
+      .select("*")
+      .eq("id", id)
+      .eq("is_demo", ctx.showcase)
+      .maybeSingle(),
     ctx.supabase
       .from("sprint_resources")
       .select("*")
       .eq("sprint_id", id)
+      .eq("is_demo", ctx.showcase)
       .order("created_at"),
-    ctx.supabase.from("sprint_participants").select("user_id").eq("sprint_id", id),
+    ctx.supabase
+      .from("sprint_participants")
+      .select("user_id")
+      .eq("sprint_id", id)
+      .eq("is_demo", ctx.showcase),
     ctx.supabase
       .from("sprint_goals")
       .select("*")
       .eq("sprint_id", id)
+      .eq("is_demo", ctx.showcase)
       .order("sort_order")
       .order("created_at"),
     ctx.supabase
@@ -67,6 +82,7 @@ export default async function SprintPage({
       .from("sprint_questions")
       .select("*")
       .eq("sprint_id", id)
+      .eq("is_demo", ctx.showcase)
       .order("created_at", { ascending: false }),
   ]);
   if (!sprint) notFound();
@@ -99,10 +115,14 @@ export default async function SprintPage({
         email: string;
         color: string | null;
       } | null;
+      // In showcase, the learn roster is anonymized just like the app-wide
+      // members map — real names/emails must not reach a client demo.
       return profile
         ? {
             id: profile.id,
-            name: profile.full_name || profile.email,
+            name: ctx.showcase
+              ? demoName(profile.id)
+              : profile.full_name || profile.email,
             color: memberColorCss(profile.id, profile.color),
           }
         : null;

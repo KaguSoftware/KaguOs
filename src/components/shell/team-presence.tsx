@@ -22,6 +22,8 @@ export type PresencePerson = {
   status_kind: StatusKind;
   status_text: string | null;
   available_to_call: boolean;
+  /** Optional expiry — "unavailable till 15:00". Null = open-ended. */
+  status_until: string | null;
 };
 
 /** Seen within this window = "online now" (last_seen writes are ~5-min throttled). */
@@ -44,10 +46,52 @@ function initials(name: string) {
     .join("");
 }
 
-function statusLine(p: PresencePerson) {
-  if (p.status_kind === "custom" && p.status_text) return p.status_text;
-  if (p.status_kind !== "none") return STATUS_LABELS[p.status_kind];
-  return null;
+/** A status whose expiry has passed reads as no status — no write needed. */
+function isExpired(until: string | null, now: number) {
+  return until !== null && Date.parse(until) <= now;
+}
+
+/** "15:00" — the local wall-clock time of an expiry, for the "till …" suffix. */
+function tillLabel(until: string) {
+  return new Date(until).toLocaleTimeString([], {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function statusLine(p: PresencePerson, now: number) {
+  if (isExpired(p.status_until, now)) return null;
+  const base =
+    p.status_kind === "custom" && p.status_text
+      ? p.status_text
+      : p.status_kind !== "none"
+        ? STATUS_LABELS[p.status_kind]
+        : null;
+  if (!base) return null;
+  return p.status_until ? `${base} · till ${tillLabel(p.status_until)}` : base;
+}
+
+/** ISO "…T15:00" → the "HH:MM" the <input type=time> wants; "" if none/elapsed. */
+function toTimeInput(until: string | null, now: number) {
+  if (!until || Date.parse(until) <= now) return "";
+  const d = new Date(until);
+  return `${String(d.getHours()).padStart(2, "0")}:${String(
+    d.getMinutes()
+  ).padStart(2, "0")}`;
+}
+
+/**
+ * "HH:MM" (local) → an ISO timestamp for today, rolled to tomorrow if that
+ * clock time has already passed — so "till 09:00" set at 22:00 means tomorrow
+ * morning, not a time in the past. Empty input → null (open-ended).
+ */
+function fromTimeInput(hhmm: string, now: number): string | null {
+  const m = /^(\d{2}):(\d{2})$/.exec(hhmm);
+  if (!m) return null;
+  const d = new Date(now);
+  d.setHours(Number(m[1]), Number(m[2]), 0, 0);
+  if (d.getTime() <= now) d.setDate(d.getDate() + 1);
+  return d.toISOString();
 }
 
 /**
@@ -77,6 +121,7 @@ export function TeamPresence({
     kind: me?.status_kind ?? "none",
     text: me?.status_text ?? "",
     call: me?.available_to_call ?? false,
+    until: toTimeInput(me?.status_until ?? null, now),
   }));
   const [seenMe, setSeenMe] = useState(me);
   if (seenMe !== me) {
@@ -86,11 +131,17 @@ export function TeamPresence({
         kind: me.status_kind,
         text: me.status_text ?? "",
         call: me.available_to_call,
+        until: toTimeInput(me.status_until, now),
       });
     }
   }
 
-  function save(next: { kind: StatusKind; text: string; call: boolean }) {
+  function save(next: {
+    kind: StatusKind;
+    text: string;
+    call: boolean;
+    until: string;
+  }) {
     setDraft(next);
     run(
       () =>
@@ -98,6 +149,8 @@ export function TeamPresence({
           kind: next.kind,
           text: next.text,
           availableToCall: next.call,
+          // Clearing the status drops any expiry with it.
+          until: next.kind === "none" ? null : fromTimeInput(next.until, now),
         }),
       { success: "Status updated." }
     );
@@ -213,6 +266,33 @@ export function TeamPresence({
                     }}
                   />
                 )}
+                {/* Optional expiry — "till HH:MM". Only meaningful with a status
+                    set; a bare time with no status has nothing to expire. */}
+                {draft.kind !== "none" && (
+                  <label className="flex items-center gap-2 text-xs text-muted">
+                    <span className="shrink-0">Till</span>
+                    <input
+                      type="time"
+                      value={draft.until}
+                      aria-label="Status expires at"
+                      onChange={(e) =>
+                        setDraft((d) => ({ ...d, until: e.target.value }))
+                      }
+                      onBlur={() => save(draft)}
+                      className="h-8 flex-1 rounded-md border border-line bg-surface px-2 text-sm text-ink transition-colors duration-150 hover:border-line-strong focus-visible:border-line-strong scheme-dark"
+                    />
+                    {draft.until && (
+                      <button
+                        type="button"
+                        onClick={() => save({ ...draft, until: "" })}
+                        className="shrink-0 text-faint transition-colors duration-150 hover:text-ink"
+                        aria-label="Clear expiry"
+                      >
+                        clear
+                      </button>
+                    )}
+                  </label>
+                )}
                 <Checkbox
                   checked={draft.call}
                   disabled={pending}
@@ -226,7 +306,7 @@ export function TeamPresence({
             <ul className="max-h-80 overflow-y-auto py-1.5">
               {others.map((p) => {
                 const online = isOnline(p.last_seen_at, now);
-                const status = statusLine(p);
+                const status = statusLine(p, now);
                 return (
                   <li key={p.id} className="flex items-center gap-2.5 px-3 py-2">
                     <span className="relative shrink-0" aria-hidden>

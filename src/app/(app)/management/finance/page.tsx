@@ -3,6 +3,7 @@ import { Suspense } from "react";
 import { Plus, RefreshCcw } from "lucide-react";
 import { requireSection } from "@/lib/data/session";
 import { LinkButton } from "@/components/ui/link-button";
+import { LiveRefresh } from "@/components/shell/live-refresh";
 import { TabbedPanels } from "@/components/shell/tabbed-panels";
 import { ContractsPanel, FinancePanel } from "@/components/management/panels";
 import type { Contract, FxRate, RecurringItem, Transaction } from "@/lib/types";
@@ -39,6 +40,7 @@ export default async function ManagementPage() {
 
   return (
     <Suspense>
+      <LiveRefresh tables={["transactions", "recurring_items", "contracts"]} />
       <TabbedPanels
         title="Kagu Management"
         description="The company ledger — everything in TL."

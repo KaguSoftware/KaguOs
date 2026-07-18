@@ -3,6 +3,7 @@ import Link from "next/link";
 import { GraduationCap, Plus, Users } from "lucide-react";
 import { requireSection } from "@/lib/data/session";
 import { PageHeader } from "@/components/shell/page-header";
+import { LiveRefresh } from "@/components/shell/live-refresh";
 import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import { LinkButton } from "@/components/ui/link-button";
@@ -86,6 +87,7 @@ export default async function LearnPage() {
 
   return (
     <>
+      <LiveRefresh tables={["sprints", "sprint_goal_progress"]} />
       <PageHeader
         title="Kagu Learn"
         description="Learning sprints — planned for the people who need them."

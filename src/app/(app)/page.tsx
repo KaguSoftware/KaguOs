@@ -5,6 +5,7 @@ import { getMembersMap } from "@/lib/data/members";
 import { getActivity } from "@/lib/data/activity";
 import { PageHeader } from "@/components/shell/page-header";
 import { Reminders } from "@/components/shell/reminders";
+import { LiveRefresh } from "@/components/shell/live-refresh";
 import { ActivityFeed } from "@/components/shell/activity-feed";
 import { AnnouncementHero } from "@/components/shell/announcement-hero";
 import { PrefetchHeavy } from "@/components/shell/prefetch-heavy";
@@ -99,7 +100,7 @@ export default async function DashboardPage() {
           ctx.supabase
             .from("profiles")
             .select(
-              "id, full_name, email, color, is_admin, last_seen_at, status_kind, status_text, available_to_call"
+              "id, full_name, email, color, is_admin, last_seen_at, status_kind, status_text, available_to_call, status_until"
             ),
           ctx.supabase
             .from("section_memberships")
@@ -133,8 +134,8 @@ export default async function DashboardPage() {
     presenceRes,
     activity,
     members,
-    { data: reminderRows },
-    { data: annRows },
+    remindersRes,
+    annRes,
   ] = await Promise.all([
     debugStats,
     workStats,
@@ -145,17 +146,24 @@ export default async function DashboardPage() {
     presenceData,
     getActivity(ctx),
     getMembersMap(ctx.supabase),
-    ctx.supabase
-      .from("reminders")
-      .select("*")
-      .order("done", { ascending: true })
-      .order("created_at", { ascending: false }),
-    ctx.supabase
-      .from("announcements")
-      .select("*")
-      .eq("active", true)
-      .order("created_at", { ascending: false })
-      .limit(1),
+    // Reminders + announcements have no demo equivalent (no is_demo column) and
+    // hold real personal notes / real company announcements, so both are
+    // skipped in showcase mode — nothing real reaches a client being demoed.
+    ctx.showcase
+      ? null
+      : ctx.supabase
+          .from("reminders")
+          .select("*")
+          .order("done", { ascending: true })
+          .order("created_at", { ascending: false }),
+    ctx.showcase
+      ? null
+      : ctx.supabase
+          .from("announcements")
+          .select("*")
+          .eq("active", true)
+          .order("created_at", { ascending: false })
+          .limit(1),
   ]);
 
   // Assemble cards in a stable, deliberate order once the data has landed.
@@ -254,8 +262,8 @@ export default async function DashboardPage() {
   if (canAccess(ctx, "management")) heavyRoutes.push("/management/finance");
   if (canAccess(ctx, "debug")) heavyRoutes.push("/debug");
 
-  const reminders = (reminderRows ?? []) as Reminder[];
-  const announcement = ((annRows ?? []) as Announcement[])[0] ?? null;
+  const reminders = ((remindersRes?.data ?? []) as Reminder[]);
+  const announcement = ((annRes?.data ?? []) as Announcement[])[0] ?? null;
 
   // Work members = admins ∪ explicit `work` memberships (the same denominator
   // the ideas pipeline uses). Everyone in that set sees everyone in that set.
@@ -273,11 +281,17 @@ export default async function DashboardPage() {
         status_kind: p.status_kind,
         status_text: p.status_text,
         available_to_call: p.available_to_call,
+        status_until: p.status_until,
       }));
   }
 
   return (
     <>
+      {/* Live dashboard: team reminders + the announcement banner update in
+          place. Skipped in showcase (both are hidden there). */}
+      {!ctx.showcase && (
+        <LiveRefresh tables={["reminders", "announcements"]} />
+      )}
       <PageHeader
         title={`Hey, ${firstName}`}
         description={

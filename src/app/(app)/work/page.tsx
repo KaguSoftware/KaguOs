@@ -4,6 +4,7 @@ import { Plus } from "lucide-react";
 import { requireSection } from "@/lib/data/session";
 import { getMembersMap } from "@/lib/data/members";
 import { LinkButton } from "@/components/ui/link-button";
+import { LiveRefresh } from "@/components/shell/live-refresh";
 import { TabbedPanels } from "@/components/shell/tabbed-panels";
 import { IdeasPanel, ProjectsPanel, type IdeaRow } from "@/components/work/panels";
 import type { Project } from "@/lib/types";
@@ -40,6 +41,7 @@ export default async function WorkPage() {
 
   return (
     <Suspense>
+      <LiveRefresh tables={["projects", "ideas"]} />
       <TabbedPanels
         title="Kagu Work"
         description="Projects and new ideas."

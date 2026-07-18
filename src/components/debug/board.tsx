@@ -55,6 +55,15 @@ const PRIORITY_FILTER_OPTIONS = [
   { value: "low", label: "Low" },
 ];
 
+// Explicit per-state filter — finer than the Active/Done tabs, which fold
+// open + in_progress together under "Active". Refines within the active tab.
+const STATE_FILTER_OPTIONS = [
+  { value: "", label: "Any state" },
+  { value: "open", label: "Open" },
+  { value: "in_progress", label: "In progress" },
+  { value: "done", label: "Done" },
+];
+
 const STATE_ORDER: Record<DebugState, number> = { open: 0, in_progress: 1, done: 2 };
 const PRIORITY_ORDER: Record<DebugTask["priority"], number> = {
   urgent: 0,
@@ -119,6 +128,7 @@ export function DebugBoard({
   const [boardQuery, setBoardQuery] = useState("");
   const [assignee, setAssignee] = useState(""); // "" any · "unassigned" · a user id
   const [priority, setPriority] = useState(""); // "" any · a priority
+  const [stateFilter, setStateFilter] = useState(""); // "" any · a DebugState
   const [taskQuery, setTaskQuery] = useState("");
   const [sort, setSort] = useState<Sort>("smart");
   const [live, setLive] = useState(false);
@@ -205,9 +215,31 @@ export function DebugBoard({
   }
 
   // Realtime: reflect everyone else's changes without reloading.
+  //
+  // debug_tasks has RLS, so postgres_changes only delivers events if the
+  // realtime socket carries the user's JWT. The channel can report SUBSCRIBED
+  // while still authorized as anon (which the SELECT policy rejects) — the
+  // symptom being "connected, but only my own optimistic edits ever show and
+  // nothing from teammates arrives". So set the auth token explicitly before
+  // subscribing, and refresh it whenever the session token rotates.
   useEffect(() => {
     const supabase = createClient();
-    const channel = supabase
+    let channel: ReturnType<typeof supabase.channel> | null = null;
+    let cancelled = false;
+
+    (async () => {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      if (cancelled) return;
+      // Authorize the realtime connection as this user so RLS lets their events
+      // through. Without this, an RLS table silently streams nothing.
+      if (session?.access_token) {
+        await supabase.realtime.setAuth(session.access_token);
+      }
+      if (cancelled) return;
+
+      channel = supabase
       .channel("debug-board")
       .on(
         "postgres_changes",
@@ -236,9 +268,11 @@ export function DebugBoard({
         }
       )
       .subscribe((status) => setLive(status === "SUBSCRIBED"));
+    })();
 
     return () => {
-      supabase.removeChannel(channel);
+      cancelled = true;
+      if (channel) supabase.removeChannel(channel);
     };
   }, []);
 
@@ -272,6 +306,8 @@ export function DebugBoard({
 
     if (priority) list = list.filter((t) => t.priority === priority);
 
+    if (stateFilter) list = list.filter((t) => t.state === stateFilter);
+
     const q = taskQuery.trim().toLowerCase();
     if (q) {
       list = list.filter(
@@ -290,7 +326,7 @@ export function DebugBoard({
       }
     }
     return list;
-  }, [liveTasks, filter, board, meId, assignee, priority, taskQuery, sort, sessionIds]);
+  }, [liveTasks, filter, board, meId, assignee, priority, stateFilter, taskQuery, sort, sessionIds]);
 
   const openCount = liveTasks.filter((t) => t.state === "open").length;
 
@@ -361,7 +397,7 @@ export function DebugBoard({
     ];
   }, [liveTasks, members]);
 
-  const secondaryActive = Boolean(assignee || priority || taskQuery);
+  const secondaryActive = Boolean(assignee || priority || stateFilter || taskQuery);
 
   const countFor = (key: string) =>
     liveTasks.filter(
@@ -539,6 +575,12 @@ export function DebugBoard({
         />
         <Dropdown
           className="w-36"
+          value={stateFilter}
+          onChange={setStateFilter}
+          options={STATE_FILTER_OPTIONS}
+        />
+        <Dropdown
+          className="w-36"
           value={priority}
           onChange={setPriority}
           options={PRIORITY_FILTER_OPTIONS}
@@ -555,6 +597,7 @@ export function DebugBoard({
             onClick={() => {
               setAssignee("");
               setPriority("");
+              setStateFilter("");
               setTaskQuery("");
             }}
             className="inline-flex items-center gap-1 text-[11px] text-muted transition-colors duration-150 hover:text-ink"

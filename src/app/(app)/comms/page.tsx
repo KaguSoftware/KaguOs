@@ -4,6 +4,7 @@ import { Plus, Users } from "lucide-react";
 import { requireSection } from "@/lib/data/session";
 import { getMembersMap } from "@/lib/data/members";
 import { PageHeader } from "@/components/shell/page-header";
+import { LiveRefresh } from "@/components/shell/live-refresh";
 import { EmptyState } from "@/components/ui/empty-state";
 import { LinkButton } from "@/components/ui/link-button";
 import { Badge } from "@/components/ui/badge";
@@ -51,6 +52,7 @@ export default async function CommsPage() {
 
   return (
     <>
+      <LiveRefresh tables={["contacts", "contact_interactions"]} />
       <PageHeader
         title="Kagu Comms"
         description="Leads, clients, and everything tied to them."

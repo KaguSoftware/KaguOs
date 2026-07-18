@@ -66,6 +66,8 @@ export type Profile = {
   status_text: string | null;
   /** "I'm reachable for a quick call right now." */
   available_to_call: boolean;
+  /** Optional expiry on the status — "unavailable till 15:00". Null = open-ended. */
+  status_until: string | null;
   created_at: string;
 };
 
@@ -317,10 +319,14 @@ export type Notification = {
   actor_id: string | null;
   kind:
     | "debug_task_new"
+    | "debug_suggested"
     | "idea_new"
     | "idea_promoted"
     | "idea_comment"
-    | "reminder_shared";
+    | "reminder_shared"
+    | "learn_question"
+    | "learn_answer"
+    | "status_change";
   title: string;
   href: string | null;
   read_at: string | null;

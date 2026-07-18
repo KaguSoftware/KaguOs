@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getSessionContext, getUserId } from "@/lib/data/session";
 import { getMembersMap } from "@/lib/data/members";
+import { LiveRefresh } from "@/components/shell/live-refresh";
 import { Sidebar } from "@/components/shell/sidebar";
 import { CommandPalette } from "@/components/shell/command-palette";
 import { ShowcaseBanner } from "@/components/shell/showcase";
@@ -53,6 +54,10 @@ export default async function AppLayout({
         isAdmin={ctx.isAdmin}
         showcase={ctx.showcase}
       />
+      {/* App-wide live updates: the notification bell and team presence refresh
+          the moment a notification lands or someone changes status. Skipped in
+          showcase — notifications are hidden and presence is demo-irrelevant. */}
+      {!ctx.showcase && <LiveRefresh tables={["notifications", "profiles"]} />}
       <div className="flex min-h-dvh flex-col md:flex-row">
         <Sidebar
           sections={[...ctx.sections]}
@@ -60,7 +65,10 @@ export default async function AppLayout({
           showcase={ctx.showcase}
           name={ctx.profile.full_name}
           email={ctx.profile.email}
-          notifications={(notifRows ?? []) as Notification[]}
+          // Notifications have no demo equivalent (no is_demo column) and carry
+          // real titles/actors, so they're hidden entirely while showcasing —
+          // a client demo must never surface the team's real activity.
+          notifications={ctx.showcase ? [] : ((notifRows ?? []) as Notification[])}
           members={members}
         />
         <main id="main" tabIndex={-1} className="min-w-0 flex-1 focus:outline-none">

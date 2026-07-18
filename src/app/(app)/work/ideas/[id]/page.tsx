@@ -37,13 +37,25 @@ export default async function IdeaPage({
 
   const [{ data: idea }, { data: comments }, { data: votes }, members] =
     await Promise.all([
-      ctx.supabase.from("ideas").select("*").eq("id", id).maybeSingle(),
+      // Gate the idea on the demo/real split — a real idea id is notFound in
+      // showcase, so its real comments/votes never render in a client demo.
+      ctx.supabase
+        .from("ideas")
+        .select("*")
+        .eq("id", id)
+        .eq("is_demo", ctx.showcase)
+        .maybeSingle(),
       ctx.supabase
         .from("idea_comments")
         .select("*")
         .eq("idea_id", id)
+        .eq("is_demo", ctx.showcase)
         .order("created_at"),
-      ctx.supabase.from("idea_votes").select("user_id, value").eq("idea_id", id),
+      ctx.supabase
+        .from("idea_votes")
+        .select("user_id, value")
+        .eq("idea_id", id)
+        .eq("is_demo", ctx.showcase),
       getMembersMap(ctx.supabase),
     ]);
   if (!idea) notFound();
