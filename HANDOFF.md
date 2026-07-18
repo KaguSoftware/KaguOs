@@ -611,10 +611,12 @@ surface; run `/impeccable audit` after the batch (design hook was silenced after
   that completes the set WILL notify everyone and mint a project. Don't trigger it from a dev test drive
   against prod — that's a real fan-out. The `required_count` is a snapshot from post time (not live), so a
   roster change doesn't move the bar retroactively.
-- ⚠️ **Migrations 0020/0021/0022 applied via the Management API helper** (`scripts/apply-migration.mjs` —
-  parses `SUPABASE_ACCESS_TOKEN` from `.env.local`, no dotenv dep; `scripts/verify-0020.sql` checks all
-  three landed). CLI `db push` history does NOT know about them unless repaired — same situation as 0017/0018.
-  If you `db push` later and it complains, `migration repair --status applied 0020 0021 0022`.
+- ✅ **CLI migration history is fully reconciled (2026-07-18).** Parsa ran `migration repair --status
+  applied 0020…0026`; Claude repaired 0027 the same day after `db push` tried to re-run it (harmless —
+  it errored on the first statement, nothing partial). `migration list --linked` confirms local ==
+  remote for 0001–0027. **Standing rule: any migration applied via `scripts/apply-migration.mjs` must
+  be followed by `npx supabase migration repair --status applied <n> --linked`** so the next `db push`
+  doesn't try to re-run it.
 - Secrets only in `.env.local` + Vercel env. Access token + service key were pasted in chat —
   rotate anytime in dashboard.
 - `db push` needs `$env:SUPABASE_ACCESS_TOKEN` set and pipes `"Y"`; Docker warning is harmless.
