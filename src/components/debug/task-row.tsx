@@ -11,11 +11,13 @@ import {
 } from "@/lib/actions/debug";
 import { Badge, type BadgeTone } from "@/components/ui/badge";
 import { Button, ConfirmButton } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input, Textarea } from "@/components/ui/input";
 import { Dropdown } from "@/components/ui/dropdown";
 import { DatePicker } from "@/components/ui/date-picker";
 import { useAction } from "@/lib/use-action";
 import { useToast } from "@/components/ui/toast";
+import { taskToText } from "@/lib/debug-export";
 import { cn, formatDate } from "@/lib/utils";
 import type { DebugPriority, DebugState, DebugTask, MembersMap } from "@/lib/types";
 
@@ -48,6 +50,9 @@ export function TaskRow({
   suggestOptions,
   projectName,
   highlight,
+  selectable,
+  selected,
+  onToggleSelect,
   onPatch,
   onRemove,
   onRestore,
@@ -62,6 +67,10 @@ export function TaskRow({
   projectName?: string | null;
   /** Part of the brainstorm session trail — tinted until the trail is cleared. */
   highlight?: boolean;
+  /** In batch-select mode: show a leading checkbox. */
+  selectable?: boolean;
+  selected?: boolean;
+  onToggleSelect?: (id: string) => void;
   onPatch: (id: string, patch: Partial<DebugTask>) => void;
   onRemove: (id: string) => void;
   onRestore: (task: DebugTask) => void;
@@ -97,25 +106,7 @@ export function TaskRow({
 
   /** Plain-text snapshot for pasting into a chat or a commit message. */
   function copyTask() {
-    const boardName = task.project_id
-      ? (projects.find((p) => p.id === task.project_id)?.name ?? null)
-      : null;
-    const author =
-      task.created_by && members[task.created_by]
-        ? members[task.created_by].name
-        : null;
-    const meta = [
-      boardName ?? "General",
-      `${task.priority} priority`,
-      task.due_on ? `due ${formatDate(task.due_on)}` : null,
-      author ? `by ${author}` : null,
-    ]
-      .filter(Boolean)
-      .join(" · ");
-    const text = `${task.title}\n${meta}${
-      task.description ? `\n\n${task.description}` : ""
-    }`;
-    navigator.clipboard.writeText(text).then(
+    navigator.clipboard.writeText(taskToText(task, { members, projects })).then(
       () => toastSuccess("Task copied."),
       () => toastError("Couldn't copy — clipboard blocked.")
     );
@@ -162,6 +153,13 @@ export function TaskRow({
       )}
     >
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+        {selectable && (
+          <Checkbox
+            checked={selected ?? false}
+            onChange={() => onToggleSelect?.(task.id)}
+            aria-label={`Select ${task.title}`}
+          />
+        )}
         <button
           type="button"
           onClick={() => setExpanded((v) => !v)}

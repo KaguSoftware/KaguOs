@@ -2,15 +2,28 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { Archive, Bug, ChevronDown, ListPlus, Search, Trash2, X } from "lucide-react";
+import {
+  Archive,
+  Bug,
+  CheckSquare,
+  ChevronDown,
+  Copy,
+  Download,
+  ListPlus,
+  Search,
+  Trash2,
+  X,
+} from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { deleteTasks } from "@/lib/actions/debug";
 import { TaskRow } from "@/components/debug/task-row";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Dropdown } from "@/components/ui/dropdown";
-import { ConfirmButton } from "@/components/ui/button";
+import { Button, ConfirmButton } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { useToast } from "@/components/ui/toast";
 import { useAction } from "@/lib/use-action";
+import { tasksToText } from "@/lib/debug-export";
 import { cn, formatDate } from "@/lib/utils";
 import type { DebugState, DebugTask, MembersMap } from "@/lib/types";
 
@@ -111,6 +124,11 @@ export function DebugBoard({
   const [live, setLive] = useState(false);
   const [showArchived, setShowArchived] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  // Batch select on the main board (distinct from the archived cleanup set):
+  // pick tasks to copy or download as a plain-text file.
+  const [selectMode, setSelectMode] = useState(false);
+  const [picked, setPicked] = useState<Set<string>>(new Set());
+  const { success: toastSuccess, error: toastError } = useToast();
   // Brainstorm session trail: ids of tasks made in /debug/brainstorm, handed
   // over via sessionStorage. Highlighted + pinned to the top until cleared.
   const [sessionIds, setSessionIds] = useState<Set<string>>(new Set());
@@ -147,6 +165,15 @@ export function DebugBoard({
         ? prev.map((t) => (t.id === task.id ? task : t))
         : [...prev, task]
     );
+  }, []);
+
+  const togglePicked = useCallback((id: string) => {
+    setPicked((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
   }, []);
 
   // Pick up the trail a brainstorm session left behind. It persists across
@@ -266,6 +293,58 @@ export function DebugBoard({
   }, [liveTasks, filter, board, meId, assignee, priority, taskQuery, sort, sessionIds]);
 
   const openCount = liveTasks.filter((t) => t.state === "open").length;
+
+  // Batch select operates over the currently-visible rows only — what you see
+  // is what you pick. Only visible-and-picked tasks count toward the actions,
+  // so leaving select mode or changing filters can't act on hidden rows.
+  const pickedVisible = useMemo(
+    () => visible.filter((t) => picked.has(t.id)),
+    [visible, picked]
+  );
+  const allVisibleSelected =
+    visible.length > 0 && pickedVisible.length === visible.length;
+
+  function toggleSelectMode() {
+    setSelectMode((on) => {
+      if (on) setPicked(new Set());
+      return !on;
+    });
+  }
+
+  function toggleSelectAllVisible() {
+    setPicked(
+      allVisibleSelected ? new Set() : new Set(visible.map((t) => t.id))
+    );
+  }
+
+  function copyPicked() {
+    if (pickedVisible.length === 0) return;
+    const text = tasksToText(pickedVisible, { members, projects });
+    navigator.clipboard.writeText(text).then(
+      () =>
+        toastSuccess(
+          `Copied ${pickedVisible.length} task${pickedVisible.length === 1 ? "" : "s"}.`
+        ),
+      () => toastError("Couldn't copy — clipboard blocked.")
+    );
+  }
+
+  function downloadPicked() {
+    if (pickedVisible.length === 0) return;
+    const text = tasksToText(pickedVisible, { members, projects });
+    const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `debug-tasks-${new Date().toISOString().slice(0, 10)}.txt`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+    toastSuccess(
+      `Downloaded ${pickedVisible.length} task${pickedVisible.length === 1 ? "" : "s"}.`
+    );
+  }
 
   // Assignee filter options: only people who actually hold a task, so the list
   // stays short and relevant. "Anyone" and "Unassigned" are always offered.
@@ -402,6 +481,20 @@ export function DebugBoard({
           ))}
         </div>
         <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={toggleSelectMode}
+            aria-pressed={selectMode}
+            className={cn(
+              "inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-[13px] transition-colors duration-150",
+              selectMode
+                ? "border-primary-dim bg-primary/10 text-ink"
+                : "border-line text-muted hover:border-line-strong hover:bg-raised hover:text-ink"
+            )}
+          >
+            <CheckSquare className="size-3.5" aria-hidden />
+            {selectMode ? "Done" : "Select"}
+          </button>
           <Link
             href="/debug/brainstorm"
             className="inline-flex items-center gap-1.5 rounded-md border border-line px-2.5 py-1 text-[13px] text-muted transition-colors duration-150 hover:border-line-strong hover:bg-raised hover:text-ink"
@@ -492,6 +585,52 @@ export function DebugBoard({
         </div>
       )}
 
+      {/* Batch actions — copy or download the picked rows as a .txt file. */}
+      {selectMode && (
+        <div className="flex flex-wrap items-center gap-2 rounded-lg border border-primary/20 bg-primary/5 px-3 py-2">
+          <Checkbox
+            checked={allVisibleSelected}
+            onChange={toggleSelectAllVisible}
+            disabled={visible.length === 0}
+            label={
+              pickedVisible.length > 0
+                ? `${pickedVisible.length} selected`
+                : `Select all (${visible.length})`
+            }
+          />
+          <div className="ml-auto flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={pickedVisible.length === 0}
+              onClick={copyPicked}
+            >
+              <Copy className="size-3.5" aria-hidden />
+              Copy
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={pickedVisible.length === 0}
+              onClick={downloadPicked}
+            >
+              <Download className="size-3.5" aria-hidden />
+              Download .txt
+            </Button>
+            {pickedVisible.length > 0 && (
+              <button
+                type="button"
+                onClick={() => setPicked(new Set())}
+                className="inline-flex items-center gap-1 text-[11px] text-muted transition-colors duration-150 hover:text-ink"
+              >
+                <X className="size-3" aria-hidden />
+                Clear
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
       <div className="rounded-lg border border-line bg-surface">
         {visible.length === 0 ? (
           secondaryActive ? (
@@ -525,6 +664,9 @@ export function DebugBoard({
                 projects={projects}
                 suggestOptions={suggestOptions}
                 highlight={sessionIds.has(task.id)}
+                selectable={selectMode}
+                selected={picked.has(task.id)}
+                onToggleSelect={togglePicked}
                 projectName={
                   board === "all" && task.project_id
                     ? (projectNames[task.project_id] ?? null)
