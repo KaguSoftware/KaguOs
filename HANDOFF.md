@@ -61,7 +61,55 @@ Contracts w/ PDFs), **Debug** (everyone: per-project boards, self-claim-only, re
 
 ## Current status (2026-07-19)
 
+### 🟢 STATUS REDESIGN — three-signal model, live presence channels, modal editor, hover cards (2026-07-19) — BUILT + STATICALLY VERIFIED (tsc/lint/build green), committed `a26ff0f`, live two-browser drive by Parsa pending
+Parsa: "redo the entire status thing — it can be a lot better." Full rebuild agreed via Q&A, built in
+one session. **Migration 0030 APPLIED to prod by Parsa.** Committed as `a26ff0f "status update"`.
+Green: `tsc`, lint (only the same pre-existing errors elsewhere — none in these files), `npm run build`.
+**NOT two-browser-driven by Claude** (auth-gated panel, no Playwright/test-login here — the ONE thing
+needing Parsa's eyes: does the live dot flip + status propagate between two real sessions). The model:
+
+- **Three honest signals, no longer one overloaded status string** (this was the whole point):
+  1. **Live online/away/offline dot** — AUTOMATIC, from real Supabase **presence channels**
+     (`src/lib/use-live-presence.ts`, new). Each client joins `presence:team`, `track()`s
+     `{userId, away}`; away is self-reported (tab hidden or >3min idle). Replaces the old faked
+     "online = last_seen <6min" guess — the dot now flips the instant a tab opens/closes, no DB write.
+     `last_seen_at` stays ONLY for the "Seen 3h ago" text on offline people.
+  2. **Status = emoji + optional note** — MANUAL. Presets are just SHORTCUTS that pre-fill
+     emoji+label+call-default; there's no special "custom mode" anymore — ANY status is emoji + text.
+  3. **Available-for-call** — the ONE availability signal (Parsa collapsed "can I interrupt?" into it:
+     "it feels like too many things"). A preset sets a sensible default (overridable).
+- **New preset set** (`STATUS_PRESETS` in types.ts, `{emoji,label,callDefault}`): 🛠️ Working (call on),
+  🧠 Deep focus, 📅 In a meeting, ☕ On a break, 🌙 Off today, 💬 Custom. **`unavailable` was DROPPED**
+  (redundant now call-off = unavailable; the phantom empty chip Parsa saw between Break/Off was this).
+- **Timed status → simple DURATIONS, not "till HH:MM"** (Parsa: "simpler durations"): Open / 30m / 1h /
+  2h / 12h. The client sends a `durationMs` choice; the SERVER computes the absolute `status_until`
+  (no wall-clock from client, nothing to tamper). A ticking 30s "now" clears expired statuses on their
+  own + counts down ("58m left"). **The old `ui/time-picker.tsx` is no longer used by presence.**
+- **Editor = spacious CENTERED MODAL** (Parsa picked modal over anchored-popover "for now; if we don't
+  like it we go anchored"). Frosted `bg-raised/90 backdrop-blur-md`, `animate-pop-in`, portaled out of
+  the sidebar's stacking context, Esc/backdrop close, body-scroll lock. **DRAFT + Save** (Parsa: "add a
+  Save button rather than auto save") — presets/emoji/note/duration/call all mutate LOCAL draft, a
+  **live preview row** at the top shows how you'll read to the team, Save commits once (disabled until
+  dirty), Cancel/Clear. Instant-save was the first build; Parsa reverted it to Save-button for the modal.
+- **Teammate HOVER CARDS** (Parsa: long custom status "gets cut off … open a lil something on hover"):
+  hovering/focusing a teammate row portals a frosted detail card showing the FULL (wrapped, untruncated)
+  status + emoji, Call state, and last-seen. Positioned to the right of the row, clamped to stay fully
+  on-screen with an 8px y-margin (measured card height via `useLayoutEffect`).
+- **Row layout fixes**: emoji rides on the avatar (bottom-left badge) + live dot (top-right) — two
+  distinct signals, and emoji no longer eats text width. **Last-seen moved to its own right-aligned
+  mono column, ALWAYS shown** (Parsa: "wanna see last seen all the time") — never fights the status text.
+- **`updateMyStatus` rewritten** (account.ts): takes `{kind, emoji, text, availableToCall, durationMs}`;
+  emoji preset-seeded when blank; note allowed with ANY kind (was custom-only); duration→absolute expiry
+  server-side (validated against a known ms set). Meaningful-change notify logic kept (fires on kind
+  change or newly-callable; quiet on note/duration/clear); label now includes the emoji.
+- **DB (migration 0030)**: adds `profiles.status_emoji` (+per-column grant, 0027 pattern), drops
+  `unavailable` from the kind CHECK (migrates stray rows→none first), backfills preset emojis.
+
 ### 🟢 PRESENCE→SIDEBAR + REALTIME EVERYWHERE + SHOWCASE LEAK (full) + STATUS TIMERS (2026-07-19) — BUILT + STATICALLY VERIFIED (tsc/lint/check:demo/build all green), live-drive by Parsa pending
+> ⚠️ **Superseded in part by the STATUS REDESIGN above (same day).** The presence FEATURE below (sidebar
+> panel, work-gating, notify-on-change) still stands, but its EDITOR (status Dropdown + `TimePicker`
+> "till HH:MM" + dirty-Save inline) and the `unavailable`/`focus`/`meeting` kind set were REPLACED by the
+> modal + emoji + durations model. Read the redesign entry as the current truth for the status UI.
 One long session off the debug-board task list. **Migrations 0028 + 0029 APPLIED to prod** via the
 Management API helper. NOT runtime-driven by Claude (dev server → prod; presence/notify writes reach
 real teammates). Green: `tsc`, lint (only the same pre-existing errors in create.tsx / command-palette.tsx /
@@ -579,16 +627,22 @@ volume. They're insurance, not a speedup.
   (one active at a time). `src/components/shell/command-palette.tsx` — ⌘K nav+actions.
 - `supabase/migrations/0001–0010` — full schema history (0008 reminders, 0009 notifications,
   0010 announcements; all applied to cloud).
-- **Presence (relocated to sidebar 2026-07-19)**: `src/components/shell/sidebar-presence.tsx` — the
-  ALWAYS-OPEN sidebar panel (my status editor w/ dirty-aware Save + `ui/time-picker.tsx` "till" +
-  Available-to-call, plus a compact read-only team list). `src/lib/data/presence.ts` `getPresence(ctx)`
-  loads it (cache()-deduped, Work-gated, null in showcase); the layout passes it to `shell/sidebar.tsx`.
-  Types (`StatusKind`/`STATUS_LABELS`/**`PresencePerson`**) in types.ts; action `updateMyStatus` in
-  account.ts (accepts `until`, fires `status_change` notify on meaningful change); columns from
-  migrations 0027 (`status_kind/text/available_to_call`) + **0028** (`status_until`). The old
-  dashboard `team-presence.tsx` popover was DELETED — presence is sidebar-only now.
-- `src/components/ui/time-picker.tsx` — custom hour/minute popover; the ONLY time control (no native
-  `<input type=time>`). `ui/input.tsx` no longer exports a native `<select>` (use `ui/dropdown.tsx`).
+- **Presence (REDESIGNED 2026-07-19, `a26ff0f`)**: `src/components/shell/sidebar-presence.tsx` — the
+  ALWAYS-OPEN sidebar panel. Three components inside: `PresenceRow` (avatar w/ emoji badge + live dot,
+  name, status sub-line, always-on last-seen meta column), `TeammateRow` (wraps a row + a portaled
+  hover detail card, clamped on-screen), and `StatusModal` (centered frosted draft editor: preset tiles
+  + emoji/note + duration chips + call toggle + live preview + Save/Cancel/Clear). Live dot comes from
+  **`src/lib/use-live-presence.ts`** (new — `useLivePresence(meId)` joins the `presence:team` channel,
+  returns userId→online/away/offline). `src/lib/data/presence.ts` `getPresence(ctx)` loads the roster
+  (now selects `status_emoji` too; cache()-deduped, Work-gated, null in showcase). Types
+  (`StatusKind`/`STATUS_PRESETS`/**`PresencePerson`** with `status_emoji`) in types.ts; action
+  `updateMyStatus` in account.ts takes `{kind,emoji,text,availableToCall,durationMs}`. Columns from
+  migrations 0027 + 0028 (`status_until`) + **0030** (`status_emoji`; drops `unavailable`). `STATUS_LABELS`
+  was removed (superseded by `STATUS_PRESETS`). The dashboard `team-presence.tsx` popover was DELETED
+  earlier; presence is sidebar-only.
+- `src/components/ui/time-picker.tsx` — custom hour/minute popover. **No longer used by presence** (the
+  redesign uses duration chips); still the ONLY time control if any surface needs one. `ui/input.tsx`
+  has no native `<select>` (use `ui/dropdown.tsx`).
 - **Realtime**: `src/lib/use-realtime-refresh.ts` (`useRealtimeRefresh(tables)` → coalesced
   `router.refresh()` on any change; sets `realtime.setAuth` first so RLS lets events through) +
   `src/components/shell/live-refresh.tsx` (`<LiveRefresh tables={…}/>` mount, one per page). The debug
@@ -596,7 +650,8 @@ volume. They're insurance, not a speedup.
 - `supabase/migrations/0026` (work⊆debug auto-grant, applied to prod, file untracked in git) ·
   **0027** presence status columns + grants (applied 2026-07-18) · **0028** `status_until` + `status_change`
   notify kind (applied 2026-07-19) · **0029** realtime publication + replica-identity-full, idempotent
-  (applied 2026-07-19).
+  (applied 2026-07-19) · **0030** `profiles.status_emoji` + grant, drops `unavailable` from kind CHECK,
+  backfills preset emojis (applied by Parsa 2026-07-19).
 - `supabase/migrations/0020–0025` (all APPLIED to prod, 2026-07-17): **0020** idea pipeline (vote value,
   required_count/stage, work_access_count) · **0021** debug suggest_for/due_on + project due_on · **0022**
   contact_interactions · **0023** debug_suggested notify kind · **0024** debug auto-archive (done_at/archived_at
@@ -659,7 +714,7 @@ surface; run `/impeccable audit` after the batch (design hook was silenced after
 | Comms interactions | log per contact + last-interaction on list (done) | analytics / follow-up reminders | later |
 | Debug lifecycle | suggest-for + deadlines + auto-archive (7d, pg_cron) + admin batch-delete (done) | — | — |
 | ⌘K search | nav actions + content (tasks/projects/ideas/contacts/sprints), loaded-once client-filter (done) | live/fresh results, ranking, recents | later |
-| Presence | **sidebar always-open panel (moved off dashboard 2026-07-19)**: self-set status + available-to-call + online dot + **"till HH:MM" auto-expiry** + **status-change notifications to the work team** + dirty-aware Save + compact team list (done) | "from" time (Parsa dropped it), per-section activity | later |
+| Presence | **REDESIGNED 2026-07-19 (`a26ff0f`)**: three signals — LIVE online/away/offline dot via presence channels + status (emoji+note, presets are shortcuts) + available-to-call; **simple durations (30m/1h/2h/12h)** auto-expiry; **centered modal editor** w/ live preview + **Save button** (draft, not auto-save); **teammate hover cards** (full status); always-on last-seen column; status-change notify to work team kept (done) | real emoji picker (currently a text field); open/close delay on hover cards; per-section activity | later |
 | Realtime | **live updates on every tab via `useRealtimeRefresh`→router.refresh(); debug board in-place (done 2026-07-19)** | in-place patching on more tabs (currently only debug patches; others refresh) | later |
 | Email (Resend) | **NONE — scoped then dropped by Parsa 2026-07-19 ("forget resend for now")**. `resend` not installed | announcements→everyone, task-assign→assignee, admin digests, role-polarized | when Parsa revives it |
 | Debug brainstorm | /debug/brainstorm: capture → one-trip post → per-task details pass + board trail + collapsed notify (done 2026-07-18, v2 after Parsa rejected the inline-bar v1) | — | — |
@@ -701,10 +756,12 @@ surface; run `/impeccable audit` after the batch (design hook was silenced after
   subscription MUST call `await supabase.realtime.setAuth(session.access_token)` before `.subscribe()`
   (done in the debug board + `useRealtimeRefresh`). If a new realtime surface shows no teammate events,
   this is the first thing to check. **The debug-board fix still needs TWO-BROWSER live verification.**
-- ⚠️ **Migrations 0028 + 0029 applied via `apply-migration.mjs` but NOT yet `migration repair`'d**
-  (2026-07-19). Per the standing rule below, run
-  `npx supabase migration repair --status applied 0028 0029 --linked` before the next `db push`, or it'll
-  try to re-run them (0029 is idempotent; 0028 would error harmlessly on the first statement).
+- ⚠️ **Migrations 0028 + 0029 + 0030 applied to prod but `migration repair` status unconfirmed**
+  (2026-07-19). 0028/0029 went via `apply-migration.mjs`; **0030 was applied by Parsa** (method not
+  confirmed to Claude). Per the standing rule, run
+  `npx supabase migration repair --status applied 0028 0029 0030 --linked` before the next `db push` if
+  `migration list --linked` shows any as remote-only, or `db push` will try to re-run them (0029 is
+  idempotent; 0028/0030 would error harmlessly on their first statement — no partial state).
 - Deleting a user cascades cleanly (created_by set-null everywhere).
 - `staleTimes` is experimental — if a Next upgrade breaks it, drop it from next.config.ts.
 
