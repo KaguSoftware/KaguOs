@@ -26,7 +26,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/components/ui/toast";
 import { useAction } from "@/lib/use-action";
 import { tasksToText } from "@/lib/debug-export";
-import { cn, formatDate, todayLocal } from "@/lib/utils";
+import { cn, formatDate, todayInIstanbul, todayLocal } from "@/lib/utils";
 import type { DebugFocus, DebugState, DebugTask, MembersMap } from "@/lib/types";
 
 /** Above this many project boards, the tab strip gets a filter box. */
@@ -118,7 +118,10 @@ const PRIORITY_ORDER: Record<DebugTask["priority"], number> = {
  * which made deadlines decorative — the board knew the date and still buried it.
  */
 function smartSort(tasks: DebugTask[]) {
-  const today = todayLocal();
+  // Istanbul, not the device — the sort order of a shared board shouldn't
+  // depend on whose laptop is looking at it. (The download filename below
+  // stays viewer-local: that one really is about your own clock.)
+  const today = todayInIstanbul();
   const isOverdue = (t: DebugTask) =>
     t.due_on != null && t.state !== "done" && t.due_on < today;
 
@@ -796,7 +799,9 @@ export function DebugBoard({
           />
         </div>
         <MultiDropdown
-          className="w-40"
+          // Full-width on a phone (where a 10rem control leaves a stranded gap
+          // beside it), fixed from `sm` up so the row stays aligned.
+          className="w-full sm:w-40"
           label="Assignee"
           placeholder="Anyone"
           summaryNoun="people"
@@ -814,7 +819,7 @@ export function DebugBoard({
           setPriority={setPriority}
         />
         <Dropdown
-          className="w-36"
+          className="w-full sm:w-36"
           id="debug-sort"
           value={sort}
           onChange={(v) => setSort(v as Sort)}
@@ -1060,7 +1065,7 @@ function FiltersPopover({
       </button>
 
       {open && (
-        <div className="absolute right-0 z-20 mt-1 w-64 origin-top animate-pop-in rounded-md border border-line bg-raised/90 p-3 shadow-lg shadow-black/40 backdrop-blur-md">
+        <div className="absolute right-0 z-20 mt-1 w-[min(16rem,calc(100vw-2rem))] origin-top animate-pop-in rounded-md border border-line bg-raised/90 p-3 shadow-lg shadow-black/40 backdrop-blur-md">
           <div className="space-y-3">
             {GROUPS.map((group) => (
               <div key={group.label}>

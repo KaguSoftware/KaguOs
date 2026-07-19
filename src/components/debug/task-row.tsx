@@ -30,7 +30,7 @@ import { DatePicker } from "@/components/ui/date-picker";
 import { useAction } from "@/lib/use-action";
 import { useToast } from "@/components/ui/toast";
 import { taskToText } from "@/lib/debug-export";
-import { addDays, cn, formatDate, todayLocal } from "@/lib/utils";
+import { addDays, cn, formatDate, todayInIstanbul } from "@/lib/utils";
 import type {
   DebugKind,
   DebugPriority,
@@ -202,10 +202,11 @@ export function TaskRow({
   const mine = task.assignee_id === meId;
   const canDelete = isAdmin || task.created_by === meId;
 
-  // A deadline is "overdue" only while the task is still open. Compare on the
-  // date string (YYYY-MM-DD) so it's timezone-agnostic — matches how due_on is
-  // stored (a plain date, no time).
-  const today = todayLocal();
+  // A deadline is "overdue" only while the task is still open. Compared as
+  // plain YYYY-MM-DD strings, both sides date-only, so no time-of-day math.
+  // Istanbul rather than the device: two people looking at the same board must
+  // agree on whether a task is late.
+  const today = todayInIstanbul();
   const overdue =
     task.due_on != null && task.state !== "done" && task.due_on < today;
   // A deadline three months out is data, not a signal — it belongs in the
@@ -421,8 +422,9 @@ export function TaskRow({
           ))}
         </div>
 
-        {/* Assignee / claim */}
-        <div className="flex w-40 items-center justify-end gap-1.5">
+        {/* Assignee / claim. Fixed 10rem from `md` up so the column aligns down
+            the list; fluid below that, where 160px is nearly half the screen. */}
+        <div className="flex items-center justify-end gap-1.5 md:w-40">
           {pending && (
             <Loader2 className="size-3.5 animate-spin text-faint" aria-hidden />
           )}
@@ -584,7 +586,7 @@ export function TaskRow({
           />
           <div className="flex flex-wrap items-center gap-2">
             <Dropdown
-              className="w-44"
+              className="w-full sm:w-44"
               value={draft.project_id}
               options={[
                 { value: "", label: "General" },
@@ -593,13 +595,13 @@ export function TaskRow({
               onChange={(v) => setDraft((d) => ({ ...d, project_id: v }))}
             />
             <Dropdown
-              className="w-32"
+              className="w-full sm:w-32"
               value={draft.kind}
               options={KIND_OPTIONS}
               onChange={(v) => setDraft((d) => ({ ...d, kind: v as DebugKind }))}
             />
             <Dropdown
-              className="w-32"
+              className="w-full sm:w-32"
               value={draft.priority}
               options={PRIORITY_OPTIONS}
               onChange={(v) => setDraft((d) => ({ ...d, priority: v as DebugPriority }))}
@@ -614,7 +616,7 @@ export function TaskRow({
             />
             {suggestOptions.length > 0 && (
               <Dropdown
-                className="w-44"
+                className="w-full sm:w-44"
                 value={draft.suggested_for}
                 placeholder="No suggestion"
                 options={[

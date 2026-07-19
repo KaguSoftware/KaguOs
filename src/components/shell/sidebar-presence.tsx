@@ -2,7 +2,7 @@
 
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Phone, X } from "lucide-react";
+import { Phone, Smile, X } from "lucide-react";
 import { updateMyStatus } from "@/lib/actions/account";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -775,5 +775,207 @@ export function SidebarPresence({
         <TeammateRow key={p.id} person={p} live={stateOf(p.id)} now={now} />
       ))}
     </div>
+  );
+}
+
+/**
+ * The whole team's status, as a sheet — for mobile.
+ *
+ * The desktop panel shows this inline with hover cards, which don't exist on
+ * touch, so on a phone there was no way to see who's around or what anyone is
+ * doing. Rows are expanded rather than hover-revealed: everything (status text,
+ * remaining time, call availability, last seen) is on the row itself.
+ */
+export function TeamSheet({
+  people,
+  meId,
+  onClose,
+}: {
+  people: PresencePerson[];
+  meId: string;
+  onClose: () => void;
+}) {
+  const live = useLivePresence(meId);
+  const [now] = useState(() => Date.now());
+
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") onClose();
+    }
+    document.addEventListener("keydown", onKey);
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.body.style.overflow = prev;
+    };
+  }, [onClose]);
+
+  const stateOf = (id: string): LiveState => live[id] ?? "offline";
+  const sorted = [...people].sort(
+    (a, b) =>
+      Number(stateOf(b.id) === "online") - Number(stateOf(a.id) === "online") ||
+      Number(b.available_to_call) - Number(a.available_to_call) ||
+      (a.id === meId ? -1 : b.id === meId ? 1 : a.name.localeCompare(b.name))
+  );
+  const onlineCount = people.filter((p) => stateOf(p.id) === "online").length;
+
+  return createPortal(
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="Team status"
+      className="fixed inset-0 z-60 flex items-end md:hidden"
+    >
+      <button
+        type="button"
+        aria-label="Close"
+        onClick={onClose}
+        className="absolute inset-0 cursor-default bg-bg/70 backdrop-blur-sm motion-safe:animate-[overlay-in_150ms_var(--ease-mac)_both]"
+      />
+      <div className="relative flex max-h-[85vh] w-full flex-col rounded-t-2xl border-t border-line-strong bg-raised/95 backdrop-blur-md motion-safe:animate-[sheet-up_260ms_var(--ease-mac)_both]">
+        {/* Grab handle — the affordance that says "this sheet is dismissible". */}
+        <span
+          className="mx-auto mt-2 h-1 w-9 shrink-0 rounded-full bg-line-strong"
+          aria-hidden
+        />
+        <div className="flex items-center justify-between px-5 pb-3 pt-3">
+          <h2 className="text-[15px] font-semibold tracking-tight text-ink">
+            Team
+          </h2>
+          <span className="flex items-center gap-2">
+            <span className="font-mono text-[11px] text-faint">
+              {onlineCount}/{people.length} online
+            </span>
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label="Close"
+              className="rounded-md p-1.5 text-muted transition-colors duration-150 hover:bg-surface hover:text-ink"
+            >
+              <X className="size-4" aria-hidden />
+            </button>
+          </span>
+        </div>
+
+        <ul className="min-h-0 flex-1 divide-y divide-line overflow-y-auto pb-[env(safe-area-inset-bottom)]">
+          {sorted.map((p) => {
+            const state = stateOf(p.id);
+            const text = statusText(p, now);
+            const emoji = statusEmoji(p, now);
+            const remaining = remainingLabel(p.status_until, now);
+            return (
+              <li key={p.id} className="flex items-start gap-3 px-5 py-3">
+                <span className="relative shrink-0" aria-hidden>
+                  <span
+                    style={{ backgroundColor: p.color }}
+                    className="grid size-9 place-items-center rounded-full text-[11px] font-semibold text-bg"
+                  >
+                    {initials(p.name)}
+                  </span>
+                  <span
+                    className={cn(
+                      "absolute -bottom-0.5 -right-0.5 size-3 rounded-full border-2 border-raised",
+                      state === "online"
+                        ? "bg-primary"
+                        : state === "away"
+                          ? "bg-amber"
+                          : "bg-line-strong"
+                    )}
+                  />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="flex items-center gap-1.5">
+                    <span className="truncate text-[14px] font-medium text-ink">
+                      {p.id === meId ? "You" : p.name}
+                    </span>
+                    {p.available_to_call && (
+                      <Phone className="size-3 shrink-0 text-primary-dim" aria-hidden />
+                    )}
+                  </span>
+                  <span className="mt-0.5 block truncate text-[12px] text-muted">
+                    {emoji && <span className="mr-1">{emoji}</span>}
+                    {text ?? (state === "online" ? "Online" : "No status")}
+                    {remaining && <span className="text-faint"> · {remaining}</span>}
+                  </span>
+                </span>
+              </li>
+            );
+          })}
+        </ul>
+      </div>
+    </div>,
+    document.body
+  );
+}
+
+/**
+ * Set-your-status, for the mobile top bar.
+ *
+ * The whole presence panel lives inside the desktop `<aside>`, which is
+ * `hidden md:flex` — so on a phone there was NO way to change your own status
+ * at all (reported by Sait, 2026-07-19). Rather than duplicate the editor, this
+ * is just a trigger that opens the same portaled `StatusModal`; teammates'
+ * presence stays desktop-only, since that's a browsing affordance and this is
+ * the one thing you cannot otherwise do.
+ */
+export function StatusButton({
+  people,
+  meId,
+}: {
+  people: PresencePerson[];
+  meId: string;
+}) {
+  const { pending, run } = useAction();
+  const [editing, setEditing] = useState(false);
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 30 * 1000);
+    return () => clearInterval(t);
+  }, []);
+
+  const me = people.find((p) => p.id === meId);
+  if (!me) return null;
+
+  const emoji = statusEmoji(me, now);
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => setEditing(true)}
+        aria-label="Set your status"
+        title="Set your status"
+        className="flex size-8 items-center justify-center rounded-md text-muted transition-colors duration-150 hover:bg-raised hover:text-ink"
+      >
+        {emoji ? (
+          <span className="text-base leading-none" aria-hidden>
+            {emoji}
+          </span>
+        ) : (
+          <Smile className="size-4" aria-hidden />
+        )}
+      </button>
+      {editing && (
+        <StatusModal
+          me={me}
+          now={now}
+          pending={pending}
+          onSet={(fields) =>
+            run(() =>
+              updateMyStatus({
+                kind: fields.kind,
+                emoji: fields.emoji,
+                text: fields.text,
+                availableToCall: fields.call,
+                durationMs: fields.durationMs,
+              })
+            )
+          }
+          onClose={() => setEditing(false)}
+        />
+      )}
+    </>
   );
 }

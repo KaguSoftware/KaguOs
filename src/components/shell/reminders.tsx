@@ -2,13 +2,15 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, Users, X } from "lucide-react";
+import { Plus, User, Users, X } from "lucide-react";
 import {
   addReminder,
   deleteReminder,
   toggleReminder,
 } from "@/lib/actions/reminders";
+import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
 import { useAction } from "@/lib/use-action";
 import { cn } from "@/lib/utils";
 import type { MembersMap, Reminder } from "@/lib/types";
@@ -48,7 +50,18 @@ export function Reminders({
   const pending = false;
   const openCount = items.filter((r) => !r.done).length;
 
-  function submit(scope: "personal" | "team") {
+  /**
+   * Who the next reminder is for, chosen BEFORE typing.
+   *
+   * It used to be inferred from which button you pressed — same input, two
+   * buttons, and Enter silently meant "personal". So the difference between a
+   * private note and pinging all 8 people was a button you might not have
+   * noticed, with no undo. Now the scope is a visible, deliberate state and the
+   * submit button says what it will do.
+   */
+  const [scope, setScope] = useState<"personal" | "team">("personal");
+
+  function submit() {
     const text = draft.trim();
     if (!text) return;
     setDraft("");
@@ -90,37 +103,71 @@ export function Reminders({
       <form
         onSubmit={(e) => {
           e.preventDefault();
-          submit("personal");
+          submit();
         }}
-        className="flex items-center gap-1.5 border-b border-line px-4 py-2.5"
+        className="flex flex-wrap items-center gap-2 border-b border-line px-4 py-2.5"
       >
-        <input
+        <Input
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
-          placeholder="Note to self…"
+          placeholder={scope === "team" ? "Tell the whole team…" : "Note to self…"}
           maxLength={300}
-          data-no-ring
-          className="min-w-0 flex-1 bg-transparent text-sm text-ink placeholder:text-faint focus:outline-none disabled:opacity-60"
+          aria-label="New reminder"
+          className="h-8 min-w-0 flex-1"
         />
-        <button
-          type="button"
-          onClick={() => submit("team")}
-          disabled={!draft.trim() || pending}
-          title="Share with the whole team"
-          className="inline-flex h-6 items-center gap-1 rounded-md border border-line-strong px-1.5 text-xs text-muted transition-colors duration-150 hover:border-primary hover:text-primary-dim disabled:opacity-40 disabled:hover:border-line-strong disabled:hover:text-muted"
+        {/* Scope is picked here, before submit — so Enter can't surprise you. */}
+        <div
+          className="flex shrink-0 overflow-hidden rounded-md border border-line"
+          role="group"
+          aria-label="Who this reminder is for"
         >
-          <Users className="size-3" aria-hidden />
-          Share
-        </button>
-        <button
+          {/* The icon renders on BOTH chips, selected or not — showing it only
+              on the active one changed the group's width on every toggle, and
+              the input beside it is flex-1, so the whole row shifted. */}
+          {(["personal", "team"] as const).map((s) => (
+            <button
+              key={s}
+              type="button"
+              aria-pressed={scope === s}
+              onClick={() => setScope(s)}
+              // Fixed width per chip: "Just me" and "Team" are different
+              // lengths, so letting them size to content moved the group (and
+              // with it the flex-1 input) on every toggle.
+              className={cn(
+                "inline-flex w-19 items-center justify-center gap-1 py-1 text-xs transition-colors duration-150",
+                scope === s
+                  ? "bg-raised text-ink"
+                  : "text-faint hover:bg-raised/60 hover:text-muted"
+              )}
+            >
+              {s === "team" ? (
+                <Users className="size-3 shrink-0" aria-hidden />
+              ) : (
+                <User className="size-3 shrink-0" aria-hidden />
+              )}
+              {s === "team" ? "Team" : "Just me"}
+            </button>
+          ))}
+        </div>
+        {/* Label stays "Add", and the variant stays `outline`, in both modes.
+            Swapping the label resized the button; swapping the variant to
+            `primary` ALSO resized it, because outline carries a 1px border and
+            primary doesn't — 2px of shift on every toggle, passed straight to
+            the flex-1 input. The chip beside it already says who it's for. */}
+        <Button
           type="submit"
+          size="sm"
+          variant="outline"
           disabled={!draft.trim() || pending}
-          title="Add a personal reminder"
-          aria-label="Add reminder"
-          className="inline-flex size-6 items-center justify-center rounded-md border border-line-strong text-muted transition-colors duration-150 hover:border-primary hover:text-primary-dim disabled:opacity-40 disabled:hover:border-line-strong disabled:hover:text-muted"
+          title={
+            scope === "team"
+              ? "Share with the whole team"
+              : "Add a private reminder"
+          }
         >
           <Plus className="size-3.5" aria-hidden />
-        </button>
+          Add
+        </Button>
       </form>
 
       {items.length === 0 ? (

@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getSessionContext, getUserId } from "@/lib/data/session";
 import { getMembersMap } from "@/lib/data/members";
 import { getPresence } from "@/lib/data/presence";
+import { getPulse } from "@/lib/data/pulse";
 import { LiveRefresh } from "@/components/shell/live-refresh";
 import { Sidebar } from "@/components/shell/sidebar";
 import { CommandPalette } from "@/components/shell/command-palette";
@@ -36,9 +37,10 @@ export default async function AppLayout({
     getMembersMap(supabase),
   ]);
 
-  // Presence for the always-open sidebar panel (needs ctx for access/showcase
-  // gating). cache()-deduped, so a page that also reads it pays nothing.
-  const presence = await getPresence(ctx);
+  // Presence for the always-open sidebar panel + the mobile menu's live tile
+  // counts. Both need ctx (access/showcase gating), both are cache()-deduped,
+  // and they fly TOGETHER — so the pulse costs no extra round-trip.
+  const [presence, pulse] = await Promise.all([getPresence(ctx), getPulse(ctx)]);
 
   return (
     <ToastProvider>
@@ -76,6 +78,7 @@ export default async function AppLayout({
           notifications={ctx.showcase ? [] : ((notifRows ?? []) as Notification[])}
           members={members}
           presence={presence}
+          pulse={pulse}
           meId={ctx.userId}
         />
         <main id="main" tabIndex={-1} className="min-w-0 flex-1 focus:outline-none">

@@ -16,7 +16,11 @@ export type ActivityItem = {
   actorId: string | null;
 };
 
-const PER_SOURCE = 6;
+// Per source, not per feed: each stream contributes this many rows and the
+// merge takes the newest `limit` overall. Raised from 6 so the feed can filter
+// by kind client-side and still have something to show — filtering 12 mixed
+// rows down to one kind used to leave two or three.
+const PER_SOURCE = 15;
 
 /**
  * A unified, membership-gated recent-activity stream. Each source is queried
@@ -26,7 +30,7 @@ const PER_SOURCE = 6;
  */
 export async function getActivity(
   ctx: SessionContext,
-  limit = 12
+  limit = 40
 ): Promise<ActivityItem[]> {
   const sb = ctx.supabase;
   const jobs: Promise<ActivityItem[]>[] = [];

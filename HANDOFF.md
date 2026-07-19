@@ -61,7 +61,124 @@ Contracts w/ PDFs), **Debug** (everyone: per-project boards, self-claim-only, re
 
 ## Current status (2026-07-19)
 
-### 🟢 DEBUG: fix/feature KIND + MULTI-SELECT FILTERS + FOCUS HERO (2026-07-19) — BUILT + STATICALLY VERIFIED (tsc/lint/build green), NOT committed, live-drive by Parsa pending
+### 🟢 DEBUG OVERHAUL + DASHBOARD RESHAPE + APP-WIDE DATE FIX (2026-07-19) — BUILT + STATICALLY VERIFIED, branch `debug-board-overhaul`, migration 0035 APPLIED to prod, preview deployed, live-drive by Parsa PARTLY done
+Two review passes ("go through the entire debug tab / dashboard tab, list me improvements") turned
+into two plans, both approved and built. Branch `debug-board-overhaul` (off `main`), commits
+`b4a7580` (debug) + `cff9f79` (dashboard/dates) + this one. Preview:
+`kagu-clpw786cd-bau-engs-projects.vercel.app`. **Not merged to main, not promoted to prod.**
+
+**⚠️ TIMEZONE — the important one.** `new Date().toISOString().slice(0,10)` was in **9 places**
+(dashboard, learn ×3, work, management ×2, debug). That's UTC; Istanbul is UTC+3, so from
+00:00–03:00 local every one answered *yesterday* — sprints not "active", tasks due today shown
+"Overdue". Fixed with **`todayInIstanbul()`** (`lib/utils.ts`, Intl pinned to `Europe/Istanbul`,
+DST-correct). **`todayLocal()` is NOT the fix and is now documented as narrow** — it reads the
+machine clock, which on the server is the Vercel runtime (no `TZ` env var, region `hnd1` ⇒ UTC),
+so it would have reintroduced the bug while looking like a fix. Use `todayInIstanbul()` for every
+domain date; `todayLocal()` only for viewer-local things (a download filename). `addDays()` no
+longer routes through either, so no timezone can leak in.
+
+**Debug board** (`b4a7580`): archived rows no longer counted in board tab counts · inline edit
+posts the same object it renders optimistically · realtime handlers now honour the page query's
+`is_demo` scope (a real task could stream onto the **showcase** board) and drop rows that leave
+scope · **`unclaimTask` had NO ownership check and neither did RLS** — anyone in Debug could
+release anyone's claim; guarded in the action **and** in `private.debug_guard_unclaim()`
+(**migration 0035, APPLIED**). RLS can't express it: `using` sees the old row, `with check` the
+new one, and "assignee_id changed from someone else's" needs both, so it's a before-update trigger.
+Row rebuilt as a **grid** with a declared `md` collapse (the flex-wrap reflowed below ~1100px).
+**Kind and priority swapped roles** (Parsa): priority is a 4-step *scale* so it stays a word-pill;
+kind is a 3-value *category* with existing icons, so it became the leading tinted mark — tints are
+slate/blue/violet, deliberately NOT green/amber/red, which are the state vocabulary. Due chip only
+when overdue or within 7d. Done/archived rows recede by colour, not `opacity-60` stacked on already
+-muted text (was under the AA floor). Kind/state/priority folded into one **Filters popover** with
+a count. **Active/Mine/Done/All are now PRESETS that write the real filters** — they used to be a
+second filter system that could contradict the multi-selects (Mine + another assignee = guaranteed
+empty board, nothing explaining why). Smart sort leads with **overdue**.
+
+**Dashboard** (`cff9f79` + this commit): debug counts now filter `archived_at`, so the dashboard
+and the board agree (the header says it out loud — "You have N tasks on your plate"). Announcement
+**"Edit" was a replace** — it retired the row and inserted a new one, resetting `created_at` and
+reassigning `created_by`; added `updateAnnouncement()`. **Six identical cards → one dense stat row**
+(the card grid is named in both DESIGN.md bans and PRODUCT.md anti-references, and it duplicated
+the sidebar); blurbs were filler, stats are now numbers not sentences. New **"Needs you"** strip
+(overdue + suggested-for-you) above everything, queried **inside the existing single wave** — the
+827ms number depends on that. Quick actions 7 → 3 (rest via ⌘K). Activity feed is full-width, and
+gained per-kind filters + "show more" (`PER_SOURCE` 6→15, limit 12→40). **Showcase toggle moved
+out of the "New …" row** — it's a mode switch that changes every number on screen and sat one
+mis-click from "New contact".
+
+**UI-shift fixes driven by Parsa live** (all the same root cause — a `flex-1` neighbour absorbs any
+width change): popovers now flip **above** the trigger when there's no room below
+(`lib/use-popover-side.ts`, applied to Dropdown/MultiDropdown/DatePicker — editing the last row in
+a list meant scrolling after every click) · expanding a debug row scrolls it into view · debug
+"Reset" moved out of the filter row (a reserved slot wasn't enough; the search box is `flex-1`) ·
+reminders scope chips are fixed-width with an icon on **both** states, and the submit button no
+longer swaps label *or* variant (outline has a 1px border, primary doesn't = 2px shift).
+
+**📱 MOBILE — real menu + status reachable (2026-07-19, from the board).** Sait filed *"Status not
+changable through mobile version"*. Root cause: the **entire presence panel lives inside the desktop
+`<aside>`, which is `hidden md:flex`**, and `/account` has no status UI — so on a phone there was
+literally no way to set your own status. Fixed by exporting **`StatusButton`** from
+`sidebar-presence.tsx` (a trigger only — it opens the *same* portaled `StatusModal`, no duplicated
+editor) and mounting it in the mobile bar.
+
+That bug was a symptom: the mobile bar was a logo + a **horizontally-scrolling nav strip**, so
+sections past the third were invisible unless you guessed to swipe, and account/search/sign-out had
+nowhere to live.
+
+**The mobile menu is now a FULL-SCREEN LIVE BOARD, not a drawer of links** (`MobileMenu` in
+`sidebar.tsx`). Parsa rejected two earlier passes — a right-anchored drawer, then the same drawer
+with more polish — with "I want something innovative that people open and say wow, but functional",
+and he's right that styling a row list can't get there: the *form* was the problem. A drawer only
+answers "where do you want to go?". This answers **"what's going on?"**:
+
+- Every section is a **tile carrying its live number** (9 open · 2 projects · 1 sprint), and **a
+  section with work in it spans the full width** — so the grid physically reshapes to the state of
+  the company and looks different on a Monday than a Friday. That's the part a nav list can't do.
+- Header is the one line that's about YOU: an Istanbul-clock greeting + your overdue count
+  (`text-danger` when non-zero, "Nothing overdue. Nice." otherwise).
+- Utility rail at the bottom: ⌘K search, **who's online right now as coloured avatar chips**
+  (5-minute `last_seen_at` window), account/status, sign out.
+- Motion: `tile-in` (scale-from-centre, staggered), two blurred brand glows so the screen has a
+  light source, `active:scale` press feedback. **Closing animation on EVERY path out** — backdrop,
+  X, Escape, and following a link all route through one `close()` that flips a `closing` flag,
+  plays `overlay-out`, then unmounts after `EXIT_MS` (kept in sync with the CSS by a comment).
+
+**`src/lib/data/pulse.ts` (NEW)** feeds those numbers: one parallel wave of head-only counts,
+`cache()`-wrapped, and it rides in the **same `Promise.all` as `getPresence`** in
+`(app)/layout.tsx` — which the layout already awaited after its main wave — so the tiles cost **no
+extra round-trip** on a navigation. Deliberately NOT the dashboard's numbers: that page also
+fetches recurring items, FX and activity, far too heavy to run on every page just to label a menu.
+
+**`TeamSheet`** (also new, in `sidebar-presence.tsx`): tapping the online avatars in the menu opens
+a bottom sheet with **everyone's status** — name, live dot, emoji + status text, remaining time,
+call availability. The desktop panel does this with hover cards, which don't exist on touch, so
+this is the touch equivalent: everything is on the row rather than hover-revealed. Grab handle,
+`sheet-up` entrance, same dismissal contract.
+
+⚠️ Two React-purity traps hit while building this, both caught by lint (`react-hooks/purity`), both
+worth remembering: `Date.now()` **and** `new Date()` in a render body are impure. The menu reads the
+clock once via `useState(() => Date.now())`; the debug row's due-soon window uses `addDays()` on a
+plain string instead of epoch arithmetic.
+
+**Mobile pass across the app** (fixes only, no redesigns): the debug task row's assignee column was
+a fixed `w-40` — 43% of a 375px screen — now fluid below `md`. Debug filter controls and the inline
+edit form's dropdowns go full-width under `sm` instead of leaving stranded gaps. The Filters popover
+is capped to `calc(100vw-2rem)` so it can't overflow. Checked and found already fine: layout padding
+(`px-4 md:px-8`), tables (each in its own `overflow-x-auto`), toasts, and the dashboard stat row
+(`grid-cols-2 sm:3 lg:6`).
+
+**Also caught during the pass — a follow-through miss on my own rule:** `task-row.tsx` and
+`board.tsx`'s `smartSort` were still on `todayLocal()` after the sweep. Both are domain dates (is
+this task overdue / where does it sort), so both now use `todayInIstanbul()`. Two people on the same
+board must agree on whether a task is late. The download filename in `board.tsx` correctly stays
+`todayLocal()` — that one really is about the viewer's own clock.
+
+**Two findings I reported and then WITHDREW after checking** — recorded so nobody re-chases them:
+*activity-feed "dead links"* (the feed queries live tables; worst case is the ≤30s client router
+cache, `staleTimes.dynamic`, which is app-wide by design) and *announcement "re-notifies everyone"*
+(announcements never notified anyone — the real bug was the lost `created_at`/`created_by`, fixed).
+
+### 🟢 DEBUG: fix/feature KIND + MULTI-SELECT FILTERS + FOCUS HERO (2026-07-19) — BUILT + STATICALLY VERIFIED (tsc/lint/build green), committed on `debug-board-overhaul`, live-drive by Parsa pending
 Parsa: "add a feature or fix tag to the things in the debug tab, with a filter for it" + "a hero
 section in debug tab that admins can write something, similar to the dashboard one, but with presets".
 Then, iteratively in the same session: narrow-and-deep presets → a composable sentence builder →
@@ -730,6 +847,13 @@ volume. They're insurance, not a speedup.
   save/clear/clearAll/reorder. Table `debug_focus` (0031 + **0032**: `project_id`, `parts` jsonb,
   `rank`, partial unique index = one active item per board). Type `DebugFocus`/`DebugFocusParts`
   in types.ts. **Several items are active at once — it's a list, not a single banner.**
+- `src/lib/utils.ts` — **`todayInIstanbul()` is the app's "today"** for every domain date (Intl
+  pinned to `Europe/Istanbul`). `todayLocal()` is viewer-local and NARROW — server-side it's the
+  Vercel runtime (UTC), so it silently reintroduces the off-by-3-hours bug; don't reach for it.
+  `addDays(date, n)` is pure string→string. Also `formatDate`/`formatRelative`/`formatMoney`.
+- `src/lib/use-popover-side.ts` — flips a popover above its trigger when there's no room below.
+  Used by `Dropdown`, `MultiDropdown`, `DatePicker`; fixes "editing the last row means scrolling
+  after every click" everywhere at once.
 - `src/components/ui/dropdown.tsx` — `Dropdown` (single) **and `MultiDropdown`** (multi-select:
   menu stays open on pick, `aria-multiselectable`, "Clear selection" footer, trigger collapses to
   "3 boards"; `placeholder` + `label` are REQUIRED so a control always names its field). The debug
@@ -834,7 +958,17 @@ surface; run `/impeccable audit` after the batch (design hook was silenced after
 | Debug kind tag | `fix`/`feature`/**`audit`** on every task + create/edit + multi-select filter + copy/export text (done 2026-07-19) | — | — |
 | Debug audits | `audit` kind + `found_by` link + "Log findings" one-per-line composer filing N tasks in one trip + "Found N" / "found by X" (done 2026-07-19) | audit templates (a reusable checklist per project); "close the audit when all findings are done"; audit yield on the dashboard | later |
 | Debug focus | **a LIST of items, each covering MANY boards** (`project_ids[]`; empty = whole board) with kind/priority/state/order qualifiers, hand-ranked, searchable chip composer in a status-style modal (done 2026-07-19) | **"Apply" — snap the board's filters to a focus item, making it a shared saved view instead of only words**; expiry/auto-clear; who set it + when on the banner | not scoped with Parsa yet |
-| Debug filters | assignee/kind/state/priority all MULTI-select; project boards ctrl/⌘-click multi (done 2026-07-19) | saved views, URL-backed filter state (currently resets on navigation) | later |
+| Debug filters | assignee/kind/state/priority all MULTI-select **behind one Filters popover w/ count**; Active/Mine/Done/All are **presets that write those filters** (no longer a rival system); project boards ctrl/⌘-click multi (done 2026-07-19) | saved views, **URL-backed filter state** (still resets on navigation — and it's the prerequisite for the dashboard "Needs you" counts deep-linking to a filtered board rather than plain `/debug`) | later |
+| Debug board keyboard | none — the board is mouse-only | **j/k row nav, `c` claim, 1/2/3 state, `/` search, `?` overlay.** PRODUCT.md promises "full keyboard operability for claim/tick flows"; that promise is currently unmet | not started |
+| Debug bulk actions | select mode copies / downloads .txt only (done) | bulk state / priority / board / claim via an `updateTasks(ids, patch)` action — the selection infrastructure already exists, it just has no write actions | not started |
+| Debug brainstorm | 2-phase capture → linear details wizard (done) | the details pass as an **inline-expandable list** (can't jump to item 7 of 14 today); `savedCount` double-counts on Back+re-save; the 50-item `quickAddTasks` cap is silent | not started |
+| Debug audits UI | "Found N" badge (done) | make the count **clickable** → filter the board to `found_by = <audit>`; today there's no way to see which N | not started |
+| Debug focus editor | modal composer (done) | de-modal it — DESIGN.md says modals are for destructive confirms only; also focus items lose board attribution once an admin types custom wording | not started |
+| Dashboard shape | **"Needs you" strip (overdue + suggested) + one dense stat row + full-width activity w/ per-kind filter and show-more** (done 2026-07-19) | strip currently covers **debug only** — sprint goals due, unticked reminders, and contracts expiring belong in it; counts should deep-link to filtered views once URL filters land | later |
+| Dashboard charts | numbers only (done) | **one** sparkline: net recurring over 12 months (`lastMonths()` + recharts both exist). Agreed with Parsa 2026-07-19 that the other five stats are single-state counts with nothing to plot — charting them would be decoration | next |
+| Reminder due dates | text + scope + done only | optional `due_on` via `DatePicker`, sort/dim by it. **Needs a migration** (`reminders` has no date column) — deferred rather than rushed at the end of a session | not started |
+| Mobile | **drawer menu + status reachable** (2026-07-19); layout padding and tables were already responsive | teammates' presence is still desktop-only (deliberate — browsing affordance); the rest of the app has NOT been driven on a real phone yet, only reasoned from the code + build. **Debug row, dashboard stat row and filter popover need a real-device pass** | needs a live pass |
+| Comms split (Kemal, 2026-07-19) | one flat Comms section (contacts + interactions) | **"divide comms into internal and external"** — internal = meeting notes, things to write down in case they come up later, general internal comms. External stays the current contacts/leads/clients. Needs its own plan: new tables + RLS, nav shape, and whether "internal" is per-person or shared | **not started — requested, not scoped** |
 | ⌘K search | nav actions + content (tasks/projects/ideas/contacts/sprints), loaded-once client-filter (done) | live/fresh results, ranking, recents | later |
 | Presence | **REDESIGNED 2026-07-19 (`a26ff0f`)**: three signals — LIVE online/away/offline dot via presence channels + status (emoji+note, presets are shortcuts) + available-to-call; **simple durations (30m/1h/2h/12h)** auto-expiry; **centered modal editor** w/ live preview + **Save button** (draft, not auto-save); **teammate hover cards** (full status); always-on last-seen column; status-change notify to work team kept (done) | real emoji picker (currently a text field); open/close delay on hover cards; per-section activity | later |
 | Realtime | **live updates on every tab via `useRealtimeRefresh`→router.refresh(); debug board in-place (done 2026-07-19)** | in-place patching on more tabs (currently only debug patches; others refresh) | later |
