@@ -20,7 +20,7 @@ import {
   toTRY,
   type FxRates,
 } from "@/lib/finance";
-import { cn, formatDate } from "@/lib/utils";
+import { cn, formatDate, todayInIstanbul } from "@/lib/utils";
 import type {
   Contract,
   ContractStatus,
@@ -81,7 +81,7 @@ export function FinancePanel({
   }
 
   // This month, in TL
-  const thisMonth = monthKey(new Date().toISOString().slice(0, 10));
+  const thisMonth = monthKey(todayInIstanbul());
   let monthIncome = 0;
   let monthExpense = 0;
   const skipped = new Set<string>();

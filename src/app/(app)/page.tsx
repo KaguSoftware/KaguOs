@@ -11,6 +11,7 @@ import { AnnouncementHero } from "@/components/shell/announcement-hero";
 import { PrefetchHeavy } from "@/components/shell/prefetch-heavy";
 import { ShowcaseToggle } from "@/components/shell/showcase";
 import { formatTRY, isActiveRecurring, monthlyAmount, toTRY, type FxRates } from "@/lib/finance";
+import { todayInIstanbul } from "@/lib/utils";
 import { SECTION_LABELS, type Announcement, type Reminder, type Section } from "@/lib/types";
 
 type Card = { section: Section; href: string; blurb: string; stat?: string };
@@ -27,17 +28,23 @@ export default async function DashboardPage() {
   // the Tokyo db) — serial, that's ~2s of dead air before anything renders.
   // Fired at once, the whole page costs about one round-trip. Keep it that way:
   // any new stat belongs INSIDE this wave, never in an await above it.
+  // `.is("archived_at", null)` on BOTH: the board hides archived tasks, so
+  // counting them here made the dashboard claim work that isn't on the board —
+  // and the header says it out loud ("You have 3 debug tasks on your plate").
+  // Filtering on state can't catch them, because an archived task IS done.
   const debugStats = canAccess(ctx, "debug")
     ? Promise.all([
         ctx.supabase
           .from("debug_tasks")
           .select("id", { count: "exact", head: true })
           .eq("is_demo", ctx.showcase)
+          .is("archived_at", null)
           .eq("state", "open"),
         ctx.supabase
           .from("debug_tasks")
           .select("id", { count: "exact", head: true })
           .eq("is_demo", ctx.showcase)
+          .is("archived_at", null)
           .eq("assignee_id", ctx.userId)
           .neq("state", "done"),
       ])
@@ -60,7 +67,7 @@ export default async function DashboardPage() {
 
   const learnStats = canAccess(ctx, "learn")
     ? (() => {
-        const today = new Date().toISOString().slice(0, 10);
+        const today = todayInIstanbul();
         return ctx.supabase
           .from("sprints")
           .select("id", { count: "exact", head: true })

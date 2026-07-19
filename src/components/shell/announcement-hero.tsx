@@ -6,7 +6,10 @@ import { Megaphone, Pencil, Plus, X } from "lucide-react";
 import {
   dismissAnnouncement,
   postAnnouncement,
+  updateAnnouncement,
 } from "@/lib/actions/announcements";
+import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/input";
 import { useAction } from "@/lib/use-action";
 import { cn } from "@/lib/utils";
 import type { Announcement } from "@/lib/types";
@@ -43,31 +46,42 @@ export function AnnouncementHero({
   const [composing, setComposing] = useState(false);
   const [body, setBody] = useState("");
   const [tone, setTone] = useState<Tone>("info");
+  // The id being edited, or null when composing a new one. This is what makes
+  // "edit" a real edit rather than a replace — see editingId use in save().
+  const [editingId, setEditingId] = useState<string | null>(null);
 
-  function post() {
+  function save() {
     const text = body.trim();
     if (!text) return;
-    run(() => postAnnouncement(text, tone), {
-      success: "Announcement posted.",
-      onSuccess: () => {
-        setBody("");
-        setComposing(false);
-        router.refresh();
-      },
-    });
+    run(
+      () =>
+        editingId
+          ? updateAnnouncement(editingId, text, tone)
+          : postAnnouncement(text, tone),
+      {
+        success: editingId ? "Announcement updated." : "Announcement posted.",
+        onSuccess: () => {
+          setBody("");
+          setEditingId(null);
+          setComposing(false);
+          router.refresh();
+        },
+      }
+    );
   }
 
-  // Open the composer pre-filled with the current announcement (edit), or blank
-  // (new). Posting replaces the active one either way — postAnnouncement retires
-  // the old on insert — so "edit" is just compose-with-a-head-start.
-  function openComposer(prefill: boolean) {
-    if (prefill && announcement) {
-      setBody(announcement.body);
-      setTone(announcement.tone);
-    } else {
-      setBody("");
-      setTone("info");
-    }
+  /**
+   * Open the composer on an existing announcement (edit) or blank (new).
+   *
+   * Editing used to be "compose with a head start": it posted, and posting
+   * retires the active row and inserts a new one. So correcting a typo reset
+   * created_at and reassigned created_by. Now the id is carried through and the
+   * row is updated in place.
+   */
+  function openComposer(target: Announcement | null) {
+    setEditingId(target?.id ?? null);
+    setBody(target?.body ?? "");
+    setTone(target?.tone ?? "info");
     setComposing(true);
   }
 
@@ -77,15 +91,14 @@ export function AnnouncementHero({
   if (composing) {
     return (
       <div className="mb-6 rounded-lg border border-line bg-surface p-3">
-        <textarea
+        <Textarea
           autoFocus
-          data-no-ring
           value={body}
           onChange={(e) => setBody(e.target.value)}
           placeholder="Announce something to the whole team…"
           maxLength={500}
           rows={2}
-          className="w-full resize-none bg-transparent text-sm text-ink placeholder:text-faint focus:outline-none"
+          aria-label={editingId ? "Edit announcement" : "New announcement"}
         />
         <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
           <div className="flex gap-1">
@@ -106,21 +119,26 @@ export function AnnouncementHero({
             ))}
           </div>
           <div className="flex gap-2">
-            <button
+            <Button
               type="button"
-              onClick={() => setComposing(false)}
-              className="rounded-md px-2.5 py-1 text-xs text-muted transition-colors hover:text-ink"
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                setComposing(false);
+                setEditingId(null);
+              }}
             >
               Cancel
-            </button>
-            <button
+            </Button>
+            <Button
               type="button"
-              onClick={post}
+              variant="primary"
+              size="sm"
+              onClick={save}
               disabled={!body.trim() || pending}
-              className="rounded-md bg-primary px-2.5 py-1 text-xs font-medium text-primary-ink transition-opacity hover:opacity-90 disabled:opacity-40"
             >
-              Post
-            </button>
+              {editingId ? "Save" : "Post"}
+            </Button>
           </div>
         </div>
       </div>
@@ -132,7 +150,7 @@ export function AnnouncementHero({
     return (
       <button
         type="button"
-        onClick={() => openComposer(false)}
+        onClick={() => openComposer(null)}
         className="mb-6 flex w-full items-center gap-2 rounded-lg border border-dashed border-line px-4 py-2.5 text-[13px] text-faint transition-colors duration-150 hover:border-line-strong hover:text-muted"
       >
         <Plus className="size-3.5" aria-hidden />
@@ -159,7 +177,7 @@ export function AnnouncementHero({
         <div className="flex shrink-0 items-center gap-1">
           <button
             type="button"
-            onClick={() => openComposer(true)}
+            onClick={() => openComposer(announcement)}
             title="Edit"
             aria-label="Edit announcement"
             className="rounded p-1 text-faint transition-colors hover:text-ink"
@@ -168,7 +186,7 @@ export function AnnouncementHero({
           </button>
           <button
             type="button"
-            onClick={() => openComposer(false)}
+            onClick={() => openComposer(null)}
             title="New announcement"
             aria-label="New announcement"
             className="rounded p-1 text-faint transition-colors hover:text-ink"

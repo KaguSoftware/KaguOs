@@ -34,6 +34,37 @@ export async function postAnnouncement(
   return { ok: true, message: "Announcement posted." };
 }
 
+/**
+ * Edit an announcement IN PLACE.
+ *
+ * The pencil in the hero used to call postAnnouncement, which retires every
+ * active row and inserts a fresh one — so fixing a typo silently replaced the
+ * announcement: `created_at` reset (it jumped back to the top as "new"),
+ * `created_by` was reassigned to whichever admin made the correction, and the
+ * original row was left retired in the table. An edit should change the words,
+ * not the authorship or the age.
+ */
+export async function updateAnnouncement(
+  id: string,
+  body: string,
+  tone: Tone
+): Promise<ActionResult> {
+  const showcaseStop = await blockIfShowcase();
+  if (showcaseStop) return showcaseStop;
+  const ctx = await requireAdmin();
+  const clean = body.trim().slice(0, 500);
+  if (!clean) return { ok: false, message: "Write something first." };
+
+  const { error } = await ctx.supabase
+    .from("announcements")
+    .update({ body: clean, tone: TONES.includes(tone) ? tone : "info" })
+    .eq("id", id);
+  if (error) return { ok: false, message: error.message };
+
+  revalidatePath("/");
+  return { ok: true, message: "Announcement updated." };
+}
+
 export async function dismissAnnouncement(id: string): Promise<ActionResult> {
   const showcaseStop = await blockIfShowcase();
   if (showcaseStop) return showcaseStop;

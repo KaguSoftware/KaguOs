@@ -8,7 +8,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { LinkButton } from "@/components/ui/link-button";
 import { PromoteProgress, VoteControl } from "@/components/work/idea-bits";
 import { FilterBar, useWorkFilters } from "@/components/work/work-filters";
-import { cn, formatDate } from "@/lib/utils";
+import { cn, formatDate, todayInIstanbul } from "@/lib/utils";
 import { optionLabel, PROJECT_TYPE_OPTIONS, SECTOR_OPTIONS } from "@/lib/options";
 import type { IdeaStatus, MembersMap, Project, ProjectStatus } from "@/lib/types";
 
@@ -62,7 +62,7 @@ function ProjectDeadline({
   status: ProjectStatus;
 }) {
   if (!dueOn) return <span className="text-faint">—</span>;
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayInIstanbul();
   const done = status === "done";
   const overdue = !done && dueOn < today;
   const emphasize = status === "active" && !overdue;

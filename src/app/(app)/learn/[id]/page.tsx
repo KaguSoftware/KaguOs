@@ -11,7 +11,7 @@ import { SprintProgress } from "@/components/learn/sprint-progress";
 import { SprintQuestions } from "@/components/learn/sprint-questions";
 import { memberColorCss } from "@/lib/colors";
 import { demoName } from "@/lib/data/members";
-import { formatDate } from "@/lib/utils";
+import { formatDate, todayInIstanbul } from "@/lib/utils";
 import type {
   Sprint,
   SprintGoal,
@@ -25,7 +25,7 @@ export const metadata: Metadata = { title: "Sprint" };
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 function phaseOf(sprint: Sprint): { label: string; tone: BadgeTone } {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayInIstanbul();
   if (today < sprint.starts_on) return { label: "upcoming", tone: "info" };
   if (today > sprint.ends_on) return { label: "past", tone: "faint" };
   return { label: "active", tone: "green" };
@@ -161,7 +161,7 @@ export default async function SprintPage({
   const phase = phaseOf(sprint as Sprint);
 
   // Timeline: where in the sprint are we? Dates are inclusive on both ends.
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayInIstanbul();
   const totalDays =
     Math.round((Date.parse(sprint.ends_on) - Date.parse(sprint.starts_on)) / DAY_MS) + 1;
   const dayOf = Math.min(

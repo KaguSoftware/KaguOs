@@ -7,7 +7,7 @@ import { LiveRefresh } from "@/components/shell/live-refresh";
 import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import { LinkButton } from "@/components/ui/link-button";
-import { formatDate } from "@/lib/utils";
+import { formatDate, todayInIstanbul } from "@/lib/utils";
 
 export const metadata: Metadata = { title: "Learn" };
 
@@ -68,7 +68,7 @@ export default async function LearnPage() {
     doneBySprint.set(sprintId, list);
   }
 
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayInIstanbul();
   const rows = (sprints ?? []) as SprintRow[];
   const groups = GROUPS.map((group) => ({
     ...group,

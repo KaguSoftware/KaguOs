@@ -49,13 +49,48 @@ export function formatDate(value: string | Date | null | undefined) {
 }
 
 /**
+ * The company's timezone. Kagu is one office in Istanbul, so "today" is one
+ * answer for everybody — it must NOT depend on where the code runs.
+ */
+const COMPANY_TZ = "Europe/Istanbul";
+
+// en-CA formats as YYYY-MM-DD, which is exactly the shape every date-only
+// column in this schema uses (`due_on`, `starts_on`, `ends_on`, `occurred_on`).
+const companyDateFmt = new Intl.DateTimeFormat("en-CA", {
+  timeZone: COMPANY_TZ,
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+});
+
+/**
+ * Today as a plain `YYYY-MM-DD` in ISTANBUL — the right "today" for anything
+ * compared against a date-only column.
+ *
+ * Use this, not `todayLocal()`, for domain dates (deadlines, sprint windows,
+ * "is this overdue"). Two failure modes it closes:
+ *
+ *   - `new Date().toISOString().slice(0, 10)` is UTC. Istanbul is UTC+3, so
+ *     between 00:00 and 03:00 local it returns YESTERDAY, and a task due today
+ *     renders "Overdue" every morning.
+ *   - `todayLocal()` reads the machine clock, which is only correct in a
+ *     browser. On the server that's the Vercel runtime — UTC, since there's no
+ *     TZ env var and the project deploys to hnd1 — so it reintroduces the exact
+ *     same bug while looking like the fix.
+ *
+ * Intl handles DST, so this stays right across the year.
+ */
+export function todayInIstanbul(now: Date = new Date()) {
+  return companyDateFmt.format(now);
+}
+
+/**
  * Today as a plain `YYYY-MM-DD` in the VIEWER'S timezone.
  *
- * Deliberately not `new Date().toISOString().slice(0, 10)` — that's UTC, and
- * Istanbul is UTC+3, so between 00:00 and 03:00 local it returns yesterday.
- * Anything comparing against a date-only column (`due_on`) would then call a
- * task due today "overdue" every morning. Compared as strings, both sides being
- * plain dates, so there's no time-of-day or offset arithmetic anywhere.
+ * Narrow by design: only for things that are genuinely about the person's own
+ * clock (a download filename, say). For anything the whole team compares —
+ * deadlines, sprint windows, overdue — use `todayInIstanbul()`, or two people
+ * in different timezones will disagree about the same task.
  */
 export function todayLocal(now: Date = new Date()) {
   const month = `${now.getMonth() + 1}`.padStart(2, "0");
@@ -63,10 +98,17 @@ export function todayLocal(now: Date = new Date()) {
   return `${now.getFullYear()}-${month}-${day}`;
 }
 
-/** `YYYY-MM-DD` N days after a plain date string. Calendar-correct (month/year roll). */
+/**
+ * `YYYY-MM-DD` N days after a plain date string. Calendar-correct (month/year
+ * roll). Pure string→string: the Date is only ever a calendar calculator built
+ * from and read back in the same local frame, so no timezone can leak in.
+ */
 export function addDays(date: string, days: number) {
   const [y, m, d] = date.split("-").map(Number);
-  return todayLocal(new Date(y, m - 1, d + days));
+  const shifted = new Date(y, m - 1, d + days);
+  const month = `${shifted.getMonth() + 1}`.padStart(2, "0");
+  const day = `${shifted.getDate()}`.padStart(2, "0");
+  return `${shifted.getFullYear()}-${month}-${day}`;
 }
 
 const relFmt = new Intl.RelativeTimeFormat("en", { numeric: "auto" });

@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { blockIfShowcase, requireAdmin, requireSection } from "@/lib/data/session";
 import { notifyAdmins, notifySection, notifyUser } from "@/lib/actions/notify";
 import { createServiceClient } from "@/lib/supabase/service";
+import { addDays, todayInIstanbul } from "@/lib/utils";
 import type { ActionResult } from "@/lib/actions/account";
 
 function normalizeSprintFields(raw: {
@@ -14,7 +15,7 @@ function normalizeSprintFields(raw: {
   ends_on?: string | null;
 }) {
   // No required fields (create-flow rule): sensible defaults keep dates valid.
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayInIstanbul();
   const starts = (raw.starts_on ?? "") || today;
   let ends = (raw.ends_on ?? "") || starts;
   if (ends < starts) ends = starts;
@@ -192,10 +193,8 @@ export async function duplicateSprint(sprintId: string): Promise<SprintResult> {
       (Date.parse(sprint.ends_on) - Date.parse(sprint.starts_on)) / dayMs
     )
   );
-  const today = new Date().toISOString().slice(0, 10);
-  const ends = new Date(Date.parse(today) + durationDays * dayMs)
-    .toISOString()
-    .slice(0, 10);
+  const today = todayInIstanbul();
+  const ends = addDays(today, durationDays);
 
   const { data: copy, error } = await ctx.supabase
     .from("sprints")

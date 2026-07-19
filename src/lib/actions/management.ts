@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { blockIfShowcase, requireSection } from "@/lib/data/session";
+import { todayInIstanbul } from "@/lib/utils";
 import type { ActionResult } from "@/lib/actions/account";
 import type {
   ContractStatus,
@@ -17,7 +18,7 @@ const CADENCES: RecurringCadence[] = ["monthly", "yearly"];
 const CONTRACT_STATUSES: ContractStatus[] = ["draft", "active", "expired", "terminated"];
 
 function today() {
-  return new Date().toISOString().slice(0, 10);
+  return todayInIstanbul();
 }
 
 function parseAmount(value: FormDataEntryValue | null): number | null {
