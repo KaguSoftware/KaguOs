@@ -1,27 +1,32 @@
 "use client";
 
-import { useState } from "react";
-import { Pencil, Phone } from "lucide-react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import { Phone, X } from "lucide-react";
 import { updateMyStatus } from "@/lib/actions/account";
-import { Dropdown } from "@/components/ui/dropdown";
 import { Input } from "@/components/ui/input";
-import { Checkbox } from "@/components/ui/checkbox";
-import { TimePicker } from "@/components/ui/time-picker";
 import { Button } from "@/components/ui/button";
 import { useAction } from "@/lib/use-action";
+import { useLivePresence, type LiveState } from "@/lib/use-live-presence";
 import { cn, formatRelative } from "@/lib/utils";
-import { STATUS_LABELS, type StatusKind, type PresencePerson } from "@/lib/types";
+import {
+  STATUS_KINDS,
+  STATUS_PRESETS,
+  type StatusKind,
+  type PresencePerson,
+} from "@/lib/types";
 
-/** Seen within this window = "online now" (last_seen writes are ~5-min throttled). */
-const ONLINE_WINDOW_MS = 6 * 60 * 1000;
+/** Preset chips, in editor order. `none` is the explicit "Clear" affordance. */
+const PRESET_CHIPS = STATUS_KINDS.filter((k) => k !== "none" && k !== "custom");
 
-const STATUS_OPTIONS = (
-  ["none", "working", "focus", "meeting", "break", "unavailable", "off", "custom"] as StatusKind[]
-).map((k) => ({ value: k, label: STATUS_LABELS[k] }));
-
-function isOnline(lastSeen: string | null, now: number) {
-  return lastSeen !== null && now - Date.parse(lastSeen) < ONLINE_WINDOW_MS;
-}
+/** Duration options: label + ms. 0 = open-ended. Mirrors the server's allowed set. */
+const DURATIONS: { label: string; ms: number }[] = [
+  { label: "Open", ms: 0 },
+  { label: "30m", ms: 30 * 60 * 1000 },
+  { label: "1h", ms: 60 * 60 * 1000 },
+  { label: "2h", ms: 2 * 60 * 60 * 1000 },
+  { label: "12h", ms: 12 * 60 * 60 * 1000 },
+];
 
 function initials(name: string) {
   return name
@@ -37,58 +42,88 @@ function isExpired(until: string | null, now: number) {
   return until !== null && Date.parse(until) <= now;
 }
 
-function tillLabel(until: string) {
-  return new Date(until).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+/** "· 40m left" / "· 2h left" — compact remaining time, or null past a day. */
+function remainingLabel(until: string | null, now: number): string | null {
+  if (!until) return null;
+  const ms = Date.parse(until) - now;
+  if (ms <= 0 || ms > 24 * 60 * 60 * 1000) return null;
+  const mins = Math.round(ms / 60000);
+  if (mins < 60) return `${mins}m left`;
+  return `${Math.round(mins / 60)}h left`;
 }
 
-function statusLine(p: PresencePerson, now: number) {
-  if (isExpired(p.status_until, now)) return null;
-  const base =
-    p.status_kind === "custom" && p.status_text
-      ? p.status_text
-      : p.status_kind !== "none"
-        ? STATUS_LABELS[p.status_kind]
-        : null;
-  if (!base) return null;
-  return p.status_until ? `${base} · till ${tillLabel(p.status_until)}` : base;
+/** The status label (note wins over preset label), or null if no status. */
+function statusText(p: PresencePerson, now: number): string | null {
+  if (p.status_kind === "none" || isExpired(p.status_until, now)) return null;
+  if (p.status_text) return p.status_text;
+  if (p.status_kind === "custom") return null; // custom with only an emoji
+  return STATUS_PRESETS[p.status_kind].label;
 }
 
-function lastSeenLabel(lastSeen: string | null, online: boolean) {
-  if (online) return "now";
-  return lastSeen ? formatRelative(lastSeen) : "never";
+/** The emoji for a live (non-expired) status, else null. */
+function statusEmoji(p: PresencePerson, now: number): string | null {
+  if (p.status_kind === "none" || isExpired(p.status_until, now)) return null;
+  return p.status_emoji || STATUS_PRESETS[p.status_kind]?.emoji || null;
 }
+
+const DOT: Record<LiveState, string> = {
+  online: "bg-primary",
+  away: "bg-amber",
+  offline: "bg-line-strong",
+};
 
 /**
- * One presence row — avatar (with online dot), name, status line, last-seen,
- * and a call icon. Shared by my row and every teammate's; `me` gets a subtle
- * "click to edit" affordance (pencil) via `interactive`.
+ * One teammate row — an avatar carrying two independent signals (a status emoji
+ * badge and a live presence dot), the name, a truncating status/last-seen line,
+ * and a quiet "reachable" phone glyph. `onClick` (my row only) opens the editor.
  */
 function PresenceRow({
   person,
+  live,
   now,
-  interactive,
   onClick,
   label,
+  active,
 }: {
   person: PresencePerson;
+  live: LiveState;
   now: number;
-  interactive?: boolean;
   onClick?: () => void;
   /** Overrides the name line (e.g. "You"). */
   label?: string;
+  /** My row, editor open — highlight it. */
+  active?: boolean;
 }) {
-  const online = isOnline(person.last_seen_at, now);
-  const status = statusLine(person, now);
+  const emoji = statusEmoji(person, now);
+  const text = statusText(person, now);
+  const remaining = remainingLabel(person.status_until, now);
+  const interactive = Boolean(onClick);
   const Tag = interactive ? "button" : "div";
+
+  // The sub-line carries the status (or a presence fallback when none is set).
+  const sub =
+    text ?? (live === "online" ? "Online" : live === "away" ? "Away" : "Offline");
+
+  // Last-seen is ALWAYS shown, in its own right-aligned meta column — so it
+  // never competes with the status text for width. "now" when live, else the
+  // relative time, else nothing to show.
+  const lastSeen =
+    live === "online"
+      ? "now"
+      : person.last_seen_at
+        ? formatRelative(person.last_seen_at, new Date(now))
+        : null;
 
   return (
     <Tag
       type={interactive ? "button" : undefined}
       onClick={onClick}
+      aria-label={interactive ? "Edit your status" : undefined}
       className={cn(
         "flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-left",
         interactive &&
-          "group transition-colors duration-150 hover:bg-raised"
+          "transition-colors duration-150 ease-mac hover:bg-raised focus-visible:bg-raised focus-visible:outline-none",
+        active && "bg-raised"
       )}
     >
       <span className="relative shrink-0" aria-hidden>
@@ -98,12 +133,19 @@ function PresenceRow({
         >
           {initials(person.name)}
         </span>
+        {/* Live presence dot — top-right. */}
         <span
           className={cn(
-            "absolute -bottom-0.5 -right-0.5 size-2.5 rounded-full border-2 border-surface",
-            online ? "bg-primary" : "bg-line-strong"
+            "absolute -right-0.5 -top-0.5 size-2.5 rounded-full border-2 border-surface transition-colors duration-300 ease-mac",
+            DOT[live]
           )}
         />
+        {/* Status emoji badge — bottom-left, only when a status is set. */}
+        {emoji && (
+          <span className="absolute -bottom-1 -left-1 grid size-4 place-items-center rounded-full border border-line bg-surface text-[9px] leading-none">
+            {emoji}
+          </span>
+        )}
       </span>
 
       <span className="min-w-0 flex-1">
@@ -114,57 +156,531 @@ function PresenceRow({
           >
             {label ?? person.name}
           </span>
-          {interactive && (
-            <Pencil
-              className="size-3 shrink-0 text-faint opacity-0 transition-opacity duration-150 group-hover:opacity-100"
-              aria-hidden
+          {person.available_to_call && (
+            <Phone
+              className="size-3 shrink-0 text-primary-dim"
+              aria-label="Available to call"
             />
           )}
         </span>
-        <span className="block truncate text-xs text-faint">
-          {status ?? (online ? "Online" : "No status")}
+        <span className="block truncate text-xs text-faint" title={text ?? undefined}>
+          {sub}
         </span>
       </span>
 
-      <span className="flex shrink-0 flex-col items-end gap-1">
-        <span className="font-mono text-[10px] text-faint">
-          {lastSeenLabel(person.last_seen_at, online)}
-        </span>
-        {person.available_to_call && (
-          <Phone className="size-3 text-primary-dim" aria-label="Available to call" />
+      {/* Meta column — always-on last-seen, plus a ticking "Xm left" when timed. */}
+      <span className="flex shrink-0 flex-col items-end gap-0.5 self-center">
+        {lastSeen && (
+          <span className="whitespace-nowrap font-mono text-[10px] text-faint">
+            {lastSeen}
+          </span>
+        )}
+        {remaining && (
+          <span className="whitespace-nowrap font-mono text-[10px] text-muted">
+            {remaining}
+          </span>
         )}
       </span>
     </Tag>
   );
 }
 
-/** ISO expiry → "HH:MM" for the TimePicker; "" if none or already elapsed. */
-function toTimeInput(until: string | null, now: number) {
-  if (!until || Date.parse(until) <= now) return "";
-  const d = new Date(until);
-  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+/** The editor's working draft — composed locally, committed on Save. */
+type Draft = {
+  kind: StatusKind;
+  emoji: string;
+  note: string;
+  call: boolean;
+  durationMs: number;
+};
+
+type SetFields = {
+  kind: StatusKind;
+  emoji?: string | null;
+  text?: string | null;
+  call: boolean;
+  durationMs: number;
+};
+
+type EditorProps = {
+  me: PresencePerson;
+  now: number;
+  pending: boolean;
+  onSet: (fields: SetFields) => void;
+  onClose: () => void;
+};
+
+/** The saved status, read back into a Draft — the baseline we diff for dirty. */
+function draftFromMe(me: PresencePerson, now: number): Draft {
+  const expired = isExpired(me.status_until, now);
+  const kind = expired ? "none" : me.status_kind;
+  const remainingMs = me.status_until && !expired ? Date.parse(me.status_until) - now : 0;
+  const durationMs =
+    remainingMs > 0
+      ? DURATIONS.reduce((best, d) =>
+          d.ms > 0 && Math.abs(d.ms - remainingMs) < Math.abs(best.ms - remainingMs)
+            ? d
+            : best
+        ).ms
+      : 0;
+  return {
+    kind,
+    emoji: kind === "none" ? "" : (me.status_emoji ?? ""),
+    note: kind === "none" ? "" : (me.status_text ?? ""),
+    call: me.available_to_call,
+    durationMs,
+  };
+}
+
+/** A PresencePerson synthesized from a draft, so the preview row reflects edits live. */
+function previewPerson(me: PresencePerson, draft: Draft, now: number): PresencePerson {
+  const hasStatus = draft.kind !== "none";
+  const emoji = hasStatus
+    ? draft.emoji.trim() || STATUS_PRESETS[draft.kind].emoji || null
+    : null;
+  return {
+    ...me,
+    status_kind: draft.kind,
+    status_emoji: emoji,
+    status_text: hasStatus ? draft.note.trim() || null : null,
+    available_to_call: draft.call,
+    status_until: hasStatus && draft.durationMs > 0
+      ? new Date(now + draft.durationMs).toISOString()
+      : null,
+  };
+}
+
+function draftsEqual(a: Draft, b: Draft): boolean {
+  return (
+    a.kind === b.kind &&
+    a.emoji.trim() === b.emoji.trim() &&
+    a.note.trim() === b.note.trim() &&
+    a.call === b.call &&
+    a.durationMs === b.durationMs
+  );
 }
 
 /**
- * "HH:MM" (local) → ISO for today, rolled to tomorrow if that clock time has
- * already passed — so "till 09:00" set at 22:00 means tomorrow morning.
+ * Centered modal editor. A DRAFT is composed locally — presets, emoji + note,
+ * duration, and call toggle all mutate draft state, and the live preview row
+ * reflects it instantly — then committed once with Save (not per-tap). Frosted,
+ * macOS pop-in, portaled out of the sidebar's stacking context, Esc / backdrop
+ * to dismiss. The body is intentionally shell-agnostic so an anchored-popover
+ * variant could reuse it later.
  */
-function fromTimeInput(hhmm: string, now: number): string | null {
-  const m = /^(\d{2}):(\d{2})$/.exec(hhmm);
-  if (!m) return null;
-  const d = new Date(now);
-  d.setHours(Number(m[1]), Number(m[2]), 0, 0);
-  if (d.getTime() <= now) d.setDate(d.getDate() + 1);
-  return d.toISOString();
+function StatusModal({ me, now, pending, onSet, onClose }: EditorProps) {
+  const baseline = draftFromMe(me, now);
+  const [draft, setDraft] = useState<Draft>(baseline);
+  const set = (patch: Partial<Draft>) => setDraft((d) => ({ ...d, ...patch }));
+
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") onClose();
+    }
+    document.addEventListener("keydown", onKey);
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.body.style.overflow = prev;
+    };
+  }, [onClose]);
+
+  const active = draft.kind !== "none";
+  const dirty = !draftsEqual(draft, baseline);
+
+  function pickPreset(kind: StatusKind) {
+    // Adopt the preset's call default only when switching INTO a new preset.
+    set({
+      kind,
+      emoji: "",
+      note: draft.kind === kind ? draft.note : "",
+      call: draft.kind === kind ? draft.call : STATUS_PRESETS[kind].callDefault,
+    });
+  }
+
+  function save() {
+    const e = draft.emoji.trim();
+    const n = draft.note.trim();
+    // A custom status (or any) with neither emoji nor note nor preset = clear.
+    const kind = draft.kind;
+    onSet({
+      kind,
+      emoji: kind === "none" ? null : e || null,
+      text: kind === "none" ? null : n || null,
+      call: draft.call,
+      durationMs: kind === "none" ? 0 : draft.durationMs,
+    });
+    onClose();
+  }
+
+  return createPortal(
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="Set your status"
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+    >
+      {/* Backdrop */}
+      <button
+        type="button"
+        aria-label="Close"
+        onClick={onClose}
+        className="absolute inset-0 cursor-default bg-bg/70 backdrop-blur-sm motion-safe:animate-[overlay-in_150ms_var(--ease-mac)_both]"
+      />
+
+      {/* Card */}
+      <div className="relative flex max-h-[90vh] w-full max-w-sm origin-center flex-col animate-pop-in rounded-xl border border-line-strong bg-raised/90 shadow-2xl backdrop-blur-md">
+        <div className="flex items-center justify-between px-5 pb-3 pt-5">
+          <h2 className="text-[15px] font-semibold tracking-tight text-ink">
+            Set your status
+          </h2>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close"
+            className="rounded-md p-1 text-muted transition-colors duration-150 hover:bg-raised hover:text-ink"
+          >
+            <X className="size-4" aria-hidden />
+          </button>
+        </div>
+
+        <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-5 py-1">
+          {/* Live preview — how your row will read to the team, updating as you edit. */}
+          <div className="rounded-lg border border-line bg-surface/60 p-1">
+            <PresenceRow person={previewPerson(me, draft, now)} live="online" now={now} label="You" />
+          </div>
+
+          {/* Presets. */}
+          <div>
+            <p className="mb-2 text-[11px] font-medium uppercase tracking-wide text-faint">
+              Status
+            </p>
+            <div className="grid grid-cols-3 gap-2">
+              {PRESET_CHIPS.map((kind) => {
+                const selected = draft.kind === kind;
+                return (
+                  <button
+                    key={kind}
+                    type="button"
+                    onClick={() => pickPreset(kind)}
+                    aria-pressed={selected}
+                    className={cn(
+                      "flex flex-col items-center gap-1.5 rounded-lg border px-2 py-3 text-center",
+                      "transition-[background-color,border-color,transform] duration-150 ease-mac",
+                      "active:scale-[0.97]",
+                      selected
+                        ? "border-primary/50 bg-primary/10 text-ink"
+                        : "border-line text-muted hover:border-line-strong hover:bg-raised/50 hover:text-ink"
+                    )}
+                  >
+                    <span className="text-xl leading-none" aria-hidden>
+                      {STATUS_PRESETS[kind].emoji}
+                    </span>
+                    <span className="text-[12px] font-medium">
+                      {STATUS_PRESETS[kind].label}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Custom emoji + note — typing here promotes the draft to a custom status. */}
+          <div>
+            <p className="mb-2 text-[11px] font-medium uppercase tracking-wide text-faint">
+              Or write your own
+            </p>
+            <div className="flex items-center gap-2">
+              <Input
+                value={draft.emoji}
+                onChange={(e) =>
+                  set({
+                    emoji: e.target.value.slice(0, 4),
+                    kind: draft.kind === "none" ? "custom" : draft.kind,
+                  })
+                }
+                placeholder="🙂"
+                aria-label="Status emoji"
+                className="w-12 shrink-0 px-0 text-center text-base"
+              />
+              <Input
+                value={draft.note}
+                maxLength={80}
+                placeholder="What's up?"
+                aria-label="Custom status note"
+                onChange={(e) =>
+                  set({
+                    note: e.target.value,
+                    kind: draft.kind === "none" ? "custom" : draft.kind,
+                  })
+                }
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && dirty) {
+                    e.preventDefault();
+                    save();
+                  }
+                }}
+              />
+            </div>
+          </div>
+
+          {/* Refinements — only meaningful once a status is set. */}
+          {active && (
+            <div className="space-y-3 border-t border-line pt-4">
+              <div className="flex items-center gap-3">
+                <span className="w-16 shrink-0 text-[13px] text-muted">Clear in</span>
+                <div className="flex flex-1 flex-wrap gap-1.5">
+                  {DURATIONS.map((d) => {
+                    const selected = d.ms === draft.durationMs;
+                    return (
+                      <button
+                        key={d.ms}
+                        type="button"
+                        onClick={() => set({ durationMs: d.ms })}
+                        aria-pressed={selected}
+                        className={cn(
+                          "rounded-md border px-2.5 py-1 font-mono text-[12px]",
+                          "transition-colors duration-150 ease-mac",
+                          selected
+                            ? "border-primary/50 bg-primary/10 text-ink"
+                            : "border-line text-muted hover:border-line-strong hover:text-ink"
+                        )}
+                      >
+                        {d.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => set({ call: !draft.call })}
+                aria-pressed={draft.call}
+                className={cn(
+                  "flex w-full items-center gap-2.5 rounded-lg border px-3 py-2.5 text-[13px]",
+                  "transition-colors duration-150 ease-mac",
+                  draft.call
+                    ? "border-primary/50 bg-primary/10 text-ink"
+                    : "border-line text-muted hover:border-line-strong hover:text-ink"
+                )}
+              >
+                <Phone className="size-4 shrink-0" aria-hidden />
+                <span className="font-medium">Available to call</span>
+                <span className="ml-auto text-[11px] text-faint">
+                  {draft.call ? "On" : "Off"}
+                </span>
+                <span
+                  className={cn(
+                    "relative h-5 w-9 rounded-full transition-colors duration-150 ease-mac",
+                    draft.call ? "bg-primary" : "bg-line-strong"
+                  )}
+                  aria-hidden
+                >
+                  <span
+                    className={cn(
+                      "absolute top-0.5 size-4 rounded-full bg-surface transition-[left] duration-150 ease-mac",
+                      draft.call ? "left-4.5" : "left-0.5"
+                    )}
+                  />
+                </span>
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* Footer — Clear (when a status exists) · Cancel · Save. */}
+        <div className="flex items-center gap-2 border-t border-line px-5 py-4">
+          {active && (
+            <button
+              type="button"
+              onClick={() => set({ kind: "none", emoji: "", note: "", durationMs: 0 })}
+              className="text-[13px] text-faint transition-colors duration-150 hover:text-danger"
+            >
+              Clear
+            </button>
+          )}
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="ml-auto"
+            onClick={onClose}
+          >
+            Cancel
+          </Button>
+          <Button
+            type="button"
+            variant="primary"
+            size="sm"
+            disabled={pending || !dirty}
+            onClick={save}
+          >
+            Save
+          </Button>
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
 }
 
-type Draft = { kind: StatusKind; text: string; call: boolean; until: string };
+const LIVE_LABEL: Record<LiveState, string> = {
+  online: "Online now",
+  away: "Away",
+  offline: "Offline",
+};
 
 /**
- * Always-open presence panel for the sidebar. Unlike the old top-right popover,
- * this is visible on every page: an editor for MY status (dirty-aware Save, not
- * auto-save) plus a compact read-only list of the team. Kept short enough to sit
- * above the account row without the sidebar scrolling.
+ * A teammate row that reveals a fuller detail card on hover/focus — so a long
+ * custom status that truncates in the row is readable in full, alongside call
+ * availability and last-seen. The card is portaled and fixed-positioned from the
+ * row's rect, so the sidebar's overflow never clips it; it opens to the right
+ * (the sidebar hugs the screen's left edge).
+ */
+function TeammateRow({
+  person,
+  live,
+  now,
+}: {
+  person: PresencePerson;
+  live: LiveState;
+  now: number;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  const cardRef = useRef<HTMLDivElement>(null);
+  const [rect, setRect] = useState<DOMRect | null>(null);
+  // Resolved top, clamped to keep the whole card on-screen with a margin.
+  // Null until measured, so the card doesn't flash at an unclamped position.
+  const [top, setTop] = useState<number | null>(null);
+
+  const fullText = statusText(person, now);
+  const emoji = statusEmoji(person, now);
+  const remaining = remainingLabel(person.status_until, now);
+  const lastSeen =
+    live === "online"
+      ? "Active now"
+      : person.last_seen_at
+        ? `Last seen ${formatRelative(person.last_seen_at, new Date(now))}`
+        : "Never signed in";
+
+  const open = () => {
+    if (ref.current) {
+      setTop(ref.current.getBoundingClientRect().top); // seed near the row
+      setRect(ref.current.getBoundingClientRect());
+    }
+  };
+  const close = () => setRect(null);
+
+  // Once the card has rendered we know its real height — clamp its top so it
+  // never runs off the top or bottom edge, keeping an 8px margin either side.
+  // Prefer aligning to the row; only shift up when the row sits too low.
+  useLayoutEffect(() => {
+    if (!rect || !cardRef.current) return;
+    const MARGIN = 8;
+    const h = cardRef.current.offsetHeight;
+    const maxTop = window.innerHeight - h - MARGIN;
+    setTop(Math.max(MARGIN, Math.min(rect.top, maxTop)));
+  }, [rect]);
+
+  return (
+    <div
+      ref={ref}
+      onMouseEnter={open}
+      onMouseLeave={close}
+      onFocus={open}
+      onBlur={close}
+      tabIndex={0}
+      className="rounded-md outline-none focus-visible:bg-raised"
+    >
+      <PresenceRow person={person} live={live} now={now} />
+
+      {rect &&
+        createPortal(
+          <div
+            ref={cardRef}
+            role="tooltip"
+            style={{
+              position: "fixed",
+              top: top ?? rect.top,
+              left: rect.right + 8,
+              zIndex: 60,
+            }}
+            className="w-60 animate-pop-in rounded-lg border border-line-strong bg-raised/95 p-3 shadow-2xl backdrop-blur-md"
+          >
+            <div className="flex items-center gap-2">
+              <span
+                style={{ color: person.color }}
+                className="relative flex size-9 shrink-0 items-center justify-center rounded-full border border-line-strong bg-surface text-xs font-semibold"
+              >
+                {initials(person.name)}
+                <span
+                  className={cn(
+                    "absolute -right-0.5 -top-0.5 size-2.5 rounded-full border-2 border-raised",
+                    DOT[live]
+                  )}
+                />
+              </span>
+              <div className="min-w-0">
+                <p
+                  style={{ color: person.color }}
+                  className="truncate text-[13px] font-semibold"
+                >
+                  {person.name}
+                </p>
+                <p className="text-[11px] text-faint">{LIVE_LABEL[live]}</p>
+              </div>
+            </div>
+
+            {fullText && (
+              <p className="mt-2.5 flex gap-1.5 text-[13px] leading-snug text-ink">
+                {emoji && (
+                  <span className="shrink-0" aria-hidden>
+                    {emoji}
+                  </span>
+                )}
+                {/* Full status — wraps, never truncated. */}
+                <span className="min-w-0 wrap-break-word">{fullText}</span>
+              </p>
+            )}
+
+            <div className="mt-2.5 space-y-1 border-t border-line pt-2 text-[11px] text-muted">
+              {remaining && (
+                <p className="flex items-center justify-between">
+                  <span>Clears in</span>
+                  <span className="font-mono text-faint">{remaining}</span>
+                </p>
+              )}
+              <p className="flex items-center justify-between">
+                <span>Call</span>
+                <span
+                  className={cn(
+                    "flex items-center gap-1",
+                    person.available_to_call ? "text-primary-dim" : "text-faint"
+                  )}
+                >
+                  <Phone className="size-3" aria-hidden />
+                  {person.available_to_call ? "Available" : "Not now"}
+                </span>
+              </p>
+              <p className="flex items-center justify-between">
+                <span>Presence</span>
+                <span className="text-faint">{lastSeen}</span>
+              </p>
+            </div>
+          </div>,
+          document.body
+        )}
+    </div>
+  );
+}
+
+/**
+ * Always-open team presence panel for the sidebar. Three honest signals per
+ * person: a LIVE online/away dot (presence channels), a manual status (emoji +
+ * label), and available-to-call. My status opens a modal editor; teammates are
+ * read-only with a hover card for detail, sorted online-first then callable.
  */
 export function SidebarPresence({
   people,
@@ -174,170 +690,90 @@ export function SidebarPresence({
   meId: string;
 }) {
   const { pending, run } = useAction();
-  const now = new Date().getTime();
+  const live = useLivePresence(meId);
+
+  // A ticking "now" so countdowns update and expired statuses fall away on their
+  // own, without waiting for an unrelated refresh. Coarse (30s) — presence timing
+  // needn't be to-the-second, and it keeps re-renders cheap.
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 30 * 1000);
+    return () => clearInterval(t);
+  }, []);
+
+  const [editing, setEditing] = useState(false);
 
   const me = people.find((p) => p.id === meId);
 
-  // The saved server value, as a Draft — the baseline we diff against for dirty.
-  const serverDraft: Draft = {
-    kind: me?.status_kind ?? "none",
-    text: me?.status_text ?? "",
-    call: me?.available_to_call ?? false,
-    until: toTimeInput(me?.status_until ?? null, now),
-  };
-
-  const [draft, setDraft] = useState<Draft>(serverDraft);
-  // My row is collapsed by default (reads like a teammate's); clicking it opens
-  // the editor. Auto-save is gone — you change, then Save.
-  const [editing, setEditing] = useState(false);
-  // Adopt server changes during render (app-wide anti-flash pattern), but only
-  // when the user has NO unsaved edits — never clobber what they're typing.
-  const [seenMe, setSeenMe] = useState(me);
-  if (seenMe !== me) {
-    setSeenMe(me);
-    if (!dirty(draft, seenMe, now)) setDraft(serverDraft);
+  function stateOf(id: string): LiveState {
+    return live[id] ?? "offline";
   }
 
-  const isDirty = dirty(draft, me, now);
-
-  function openEditor() {
-    setDraft(serverDraft); // start from the saved value each time
-    setEditing(true);
-  }
-
-  function cancel() {
-    setDraft(serverDraft);
-    setEditing(false);
-  }
-
-  function save() {
-    run(
-      () =>
-        updateMyStatus({
-          kind: draft.kind,
-          text: draft.text,
-          availableToCall: draft.call,
-          until: draft.kind === "none" ? null : fromTimeInput(draft.until, now),
-        }),
-      { success: "Status updated.", onSuccess: () => setEditing(false) }
+  function setStatus(fields: {
+    kind: StatusKind;
+    emoji?: string | null;
+    text?: string | null;
+    call: boolean;
+    durationMs: number;
+  }) {
+    run(() =>
+      updateMyStatus({
+        kind: fields.kind,
+        emoji: fields.emoji,
+        text: fields.text,
+        availableToCall: fields.call,
+        durationMs: fields.durationMs,
+      })
     );
   }
+
+  const onlineCount = people.filter((p) => stateOf(p.id) === "online").length;
 
   const others = [...people]
     .filter((p) => p.id !== meId)
     .sort(
       (a, b) =>
-        Number(isOnline(b.last_seen_at, now)) - Number(isOnline(a.last_seen_at, now)) ||
+        Number(stateOf(b.id) === "online") - Number(stateOf(a.id) === "online") ||
         Number(b.available_to_call) - Number(a.available_to_call) ||
         a.name.localeCompare(b.name)
     );
 
   return (
     <div className="space-y-0.5 border-t border-line px-2 py-2">
-      <p className="px-2 pb-1 pt-1 text-[11px] font-medium uppercase tracking-wide text-faint">
-        Team
+      <p className="flex items-baseline justify-between px-2 pb-1 pt-1">
+        <span className="text-[11px] font-medium uppercase tracking-wide text-faint">
+          Team
+        </span>
+        <span className="font-mono text-[10px] text-faint">
+          {onlineCount}/{people.length} online
+        </span>
       </p>
 
-      {/* My row — reads like a teammate's; click to open the editor. */}
       {me && (
         <>
           <PresenceRow
             person={me}
+            live={stateOf(me.id)}
             now={now}
-            interactive
             label="You"
-            onClick={openEditor}
+            active={editing}
+            onClick={() => setEditing((v) => !v)}
           />
-
           {editing && (
-            <div className="space-y-1.5 rounded-md border border-line bg-raised/40 p-2">
-              <Dropdown
-                className="w-full"
-                value={draft.kind}
-                options={STATUS_OPTIONS}
-                searchThreshold={0}
-                onChange={(v) => {
-                  const kind = v as StatusKind;
-                  setDraft((d) => ({
-                    ...d,
-                    kind,
-                    // Leaving custom drops the free text; clearing drops the expiry.
-                    text: kind === "custom" ? d.text : "",
-                    until: kind === "none" ? "" : d.until,
-                  }));
-                }}
-              />
-
-              {draft.kind === "custom" && (
-                <Input
-                  value={draft.text}
-                  maxLength={80}
-                  placeholder="What's up?"
-                  aria-label="Custom status"
-                  autoFocus
-                  onChange={(e) => setDraft((d) => ({ ...d, text: e.target.value }))}
-                />
-              )}
-
-              {draft.kind !== "none" && (
-                <div className="flex items-center gap-2">
-                  <span className="shrink-0 text-xs text-muted">Till</span>
-                  <TimePicker
-                    className="flex-1"
-                    value={draft.until}
-                    ariaLabel="Status expires at"
-                    placeholder="Open-ended"
-                    onChange={(v) => setDraft((d) => ({ ...d, until: v }))}
-                  />
-                </div>
-              )}
-
-              <Checkbox
-                checked={draft.call}
-                disabled={pending}
-                onChange={() => setDraft((d) => ({ ...d, call: !d.call }))}
-                label="Available to call"
-              />
-
-              <div className="flex items-center gap-2 pt-0.5">
-                <Button
-                  variant="primary"
-                  size="sm"
-                  className="flex-1"
-                  disabled={pending || !isDirty}
-                  onClick={save}
-                >
-                  Save
-                </Button>
-                <Button variant="ghost" size="sm" disabled={pending} onClick={cancel}>
-                  Cancel
-                </Button>
-              </div>
-            </div>
+            <StatusModal
+              me={me}
+              now={now}
+              pending={pending}
+              onSet={setStatus}
+              onClose={() => setEditing(false)}
+            />
           )}
         </>
       )}
 
-      {/* Everyone else — read-only. */}
       {others.map((p) => (
-        <PresenceRow key={p.id} person={p} now={now} />
+        <TeammateRow key={p.id} person={p} live={stateOf(p.id)} now={now} />
       ))}
     </div>
-  );
-}
-
-/** True when the local draft differs from the saved server row. */
-function dirty(draft: Draft, me: PresencePerson | undefined, now: number): boolean {
-  const server: Draft = {
-    kind: me?.status_kind ?? "none",
-    text: me?.status_text ?? "",
-    call: me?.available_to_call ?? false,
-    until: toTimeInput(me?.status_until ?? null, now),
-  };
-  return (
-    draft.kind !== server.kind ||
-    (draft.kind === "custom" && draft.text !== server.text) ||
-    draft.call !== server.call ||
-    (draft.kind !== "none" && draft.until !== server.until)
   );
 }

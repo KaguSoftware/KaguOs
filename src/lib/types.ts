@@ -18,14 +18,20 @@ export const SECTION_LABELS: Record<Section, string> = {
   comms: "Kagu Comms",
 };
 
-/** Self-set presence status, shown in the dashboard team widget. */
+/**
+ * Self-set presence status. The model is three honest signals that never speak
+ * for each other: a live online dot (automatic, from presence channels — not
+ * here), this manual status (emoji + label/note), and `available_to_call` (the
+ * one availability signal). Presets are just SHORTCUTS: picking "In a meeting"
+ * pre-fills an emoji + label + a sensible call default, all overridable. There
+ * is no separate "custom" kind anymore — every status is emoji + optional text.
+ */
 export type StatusKind =
   | "none"
   | "working"
   | "focus"
   | "meeting"
   | "break"
-  | "unavailable"
   | "off"
   | "custom";
 
@@ -35,20 +41,30 @@ export const STATUS_KINDS: StatusKind[] = [
   "focus",
   "meeting",
   "break",
-  "unavailable",
   "off",
   "custom",
 ];
 
-export const STATUS_LABELS: Record<StatusKind, string> = {
-  none: "No status",
-  working: "Working",
-  focus: "Deep focus",
-  meeting: "In a meeting",
-  break: "On a break",
-  unavailable: "Unavailable",
-  off: "Off today",
-  custom: "Custom…",
+export type StatusPreset = {
+  /** Emoji shown on the avatar badge. Empty for `none`; user-picked for `custom`. */
+  emoji: string;
+  label: string;
+  /** Sensible default for available_to_call when this preset is picked (overridable). */
+  callDefault: boolean;
+};
+
+/**
+ * The preset shortcuts. `custom` carries no fixed emoji/label — the user
+ * supplies both — so its entry here is just the picker's default seed.
+ */
+export const STATUS_PRESETS: Record<StatusKind, StatusPreset> = {
+  none: { emoji: "", label: "No status", callDefault: false },
+  working: { emoji: "🛠️", label: "Working", callDefault: true },
+  focus: { emoji: "🧠", label: "Deep focus", callDefault: false },
+  meeting: { emoji: "📅", label: "In a meeting", callDefault: false },
+  break: { emoji: "☕", label: "On a break", callDefault: false },
+  off: { emoji: "🌙", label: "Off today", callDefault: false },
+  custom: { emoji: "💬", label: "Custom…", callDefault: false },
 };
 
 export type Profile = {
@@ -62,11 +78,13 @@ export type Profile = {
   last_seen_at: string | null;
   /** Self-set presence status (team widget). */
   status_kind: StatusKind;
-  /** Free-text status; shown when status_kind is 'custom'. */
+  /** Emoji shown on the avatar badge — preset-seeded or user-picked. Null = none. */
+  status_emoji: string | null;
+  /** Optional free-text note, allowed alongside any status kind. */
   status_text: string | null;
   /** "I'm reachable for a quick call right now." */
   available_to_call: boolean;
-  /** Optional expiry on the status — "unavailable till 15:00". Null = open-ended. */
+  /** Optional expiry on the status — "on a break till 15:00". Null = open-ended. */
   status_until: string | null;
   created_at: string;
 };
@@ -78,9 +96,10 @@ export type PresencePerson = {
   color: string;
   last_seen_at: string | null;
   status_kind: StatusKind;
+  status_emoji: string | null;
   status_text: string | null;
   available_to_call: boolean;
-  /** Optional expiry — "unavailable till 15:00". Null = open-ended. */
+  /** Optional expiry — "on a break till 15:00". Null = open-ended. */
   status_until: string | null;
 };
 

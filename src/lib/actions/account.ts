@@ -6,7 +6,15 @@ import { createClient } from "@/lib/supabase/server";
 import { getUserId, getSessionContext } from "@/lib/data/session";
 import { notifyWorkTeam } from "@/lib/actions/notify";
 import { isValidColorKey } from "@/lib/colors";
-import { STATUS_KINDS, STATUS_LABELS, type StatusKind } from "@/lib/types";
+import { STATUS_KINDS, STATUS_PRESETS, type StatusKind } from "@/lib/types";
+
+/** Durations the picker offers, in ms. 0 = open-ended (clears any expiry). */
+const STATUS_DURATIONS_MS = new Set([
+  30 * 60 * 1000, // 30m
+  60 * 60 * 1000, // 1h
+  2 * 60 * 60 * 1000, // 2h
+  12 * 60 * 60 * 1000, // "until tomorrow"-ish; client labels it
+]);
 
 export type ActionResult = { ok: boolean; message: string } | null;
 
@@ -56,27 +64,34 @@ export async function updateMyColor(colorKey: string): Promise<ActionResult> {
   return { ok: true, message: "Color updated." };
 }
 
-/** Set your own presence status + call availability (team widget). */
+/**
+ * Set your own presence status. The status is emoji + optional note that any
+ * kind can carry; `durationMs` is a relative expiry the SERVER turns into an
+ * absolute timestamp (client sends a choice, not a wall-clock time — no drift,
+ * nothing to tamper with). available_to_call is the one availability signal.
+ */
 export async function updateMyStatus(fields: {
   kind: StatusKind;
-  text: string;
+  emoji?: string | null;
+  text?: string | null;
   availableToCall: boolean;
-  /** Optional ISO expiry ("unavailable till 15:00"); null/absent = open-ended. */
-  until?: string | null;
+  /** Relative expiry in ms from now; 0/absent = open-ended. */
+  durationMs?: number | null;
 }): Promise<ActionResult> {
-  let kind: StatusKind = STATUS_KINDS.includes(fields.kind)
-    ? fields.kind
-    : "none";
-  const text = fields.text.trim().slice(0, 80);
-  // A custom status with nothing written is no status at all.
-  if (kind === "custom" && !text) kind = "none";
+  let kind: StatusKind = STATUS_KINDS.includes(fields.kind) ? fields.kind : "none";
+  const text = (fields.text ?? "").trim().slice(0, 80);
+  const emojiRaw = (fields.emoji ?? "").trim().slice(0, 16);
+  // A custom status with neither emoji nor note written is no status at all.
+  if (kind === "custom" && !text && !emojiRaw) kind = "none";
 
-  // Parse + sanity-check the expiry: a valid, future timestamp or nothing. An
-  // expiry only makes sense while a status is set — clearing the status clears it.
+  // Clearing the status clears everything hanging off it.
+  const emoji = kind === "none" ? null : emojiRaw || STATUS_PRESETS[kind].emoji || null;
+
+  // Turn the relative duration into an absolute expiry. Only a value from the
+  // known set counts, and only while a status is set.
   let until: string | null = null;
-  if (kind !== "none" && fields.until) {
-    const t = Date.parse(fields.until);
-    if (!Number.isNaN(t) && t > Date.now()) until = new Date(t).toISOString();
+  if (kind !== "none" && fields.durationMs && STATUS_DURATIONS_MS.has(fields.durationMs)) {
+    until = new Date(Date.now() + fields.durationMs).toISOString();
   }
 
   // getSessionContext gives us the previous status (no extra query) for the
@@ -89,7 +104,8 @@ export async function updateMyStatus(fields: {
     .from("profiles")
     .update({
       status_kind: kind,
-      status_text: kind === "custom" ? text : null,
+      status_emoji: emoji,
+      status_text: kind === "none" ? null : text || null,
       available_to_call: availableToCall,
       status_until: until,
     })
@@ -97,17 +113,14 @@ export async function updateMyStatus(fields: {
   if (error) return { ok: false, message: error.message };
 
   // Notify the work team only on a MEANINGFUL change — a different status kind,
-  // or newly opening up to calls. Editing custom text, clearing a status, or
-  // just changing the expiry stays quiet (avoids pinging the team on churn).
+  // or newly opening up to calls. Editing the note, clearing a status, or just
+  // changing the expiry stays quiet (avoids pinging the team on churn).
   const kindChanged = kind !== "none" && kind !== prev.status_kind;
   const nowCallable = availableToCall && !prev.available_to_call;
   if (kindChanged || nowCallable) {
-    const label =
-      kind === "custom" && text
-        ? text
-        : kind !== "none"
-          ? STATUS_LABELS[kind]
-          : "available to call";
+    const base =
+      text || (kind !== "none" ? STATUS_PRESETS[kind].label : "available to call");
+    const label = emoji ? `${emoji} ${base}` : base;
     const name = prev.full_name || "A teammate";
     const tail = until
       ? ` — till ${new Date(until).toLocaleTimeString([], {

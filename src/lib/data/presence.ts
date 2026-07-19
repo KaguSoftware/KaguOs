@@ -22,7 +22,7 @@ export const getPresence = cache(async function getPresence(
     ctx.supabase
       .from("profiles")
       .select(
-        "id, full_name, email, color, is_admin, last_seen_at, status_kind, status_text, available_to_call, status_until"
+        "id, full_name, email, color, is_admin, last_seen_at, status_kind, status_emoji, status_text, available_to_call, status_until"
       ),
     ctx.supabase.from("section_memberships").select("user_id").eq("section", "work"),
   ]);
@@ -36,6 +36,7 @@ export const getPresence = cache(async function getPresence(
       color: memberColorCss(p.id, p.color),
       last_seen_at: p.last_seen_at,
       status_kind: p.status_kind,
+      status_emoji: p.status_emoji,
       status_text: p.status_text,
       available_to_call: p.available_to_call,
       status_until: p.status_until,
