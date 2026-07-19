@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { CalendarDays, ChevronLeft, ChevronRight, X } from "lucide-react";
+import { usePopoverSide } from "@/lib/use-popover-side";
 import { cn, formatDate } from "@/lib/utils";
 
 const WEEKDAYS = ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"];
@@ -49,6 +50,9 @@ export function DatePicker({
   const [viewYear, setViewYear] = useState(() => Number(initial.slice(0, 4)));
   const [viewMonth, setViewMonth] = useState(() => Number(initial.slice(5, 7)) - 1);
   const rootRef = useRef<HTMLDivElement>(null);
+  // The calendar is ~320px tall; flip it above the field when the field sits
+  // too close to the bottom of the window.
+  const side = usePopoverSide(rootRef, open, 320);
 
   useEffect(() => {
     if (!open) return;
@@ -140,7 +144,12 @@ export function DatePicker({
         <div
           role="dialog"
           aria-label="Calendar"
-          className="absolute z-10 mt-1 w-64 origin-top animate-pop-in rounded-md border border-line bg-raised/90 p-3 shadow-lg shadow-black/40 backdrop-blur-md"
+          className={cn(
+            "absolute z-10 w-64 animate-pop-in rounded-md border border-line bg-raised/90 p-3 shadow-lg shadow-black/40 backdrop-blur-md",
+            side === "top"
+              ? "bottom-full mb-1 origin-bottom"
+              : "top-full mt-1 origin-top"
+          )}
         >
           <div className="mb-2 flex items-center justify-between">
             <button

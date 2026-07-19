@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import {
   Copy,
   Hand,
@@ -30,7 +30,7 @@ import { DatePicker } from "@/components/ui/date-picker";
 import { useAction } from "@/lib/use-action";
 import { useToast } from "@/components/ui/toast";
 import { taskToText } from "@/lib/debug-export";
-import { cn, formatDate } from "@/lib/utils";
+import { addDays, cn, formatDate, todayLocal } from "@/lib/utils";
 import type {
   DebugKind,
   DebugPriority,
@@ -65,20 +65,39 @@ const KIND_ICON: Record<DebugKind, typeof Wrench> = {
 };
 
 /**
- * The kind marker. Every kind is NEUTRAL on purpose: colour on this board marks
- * state (green = done, amber = in progress, red = urgent), and a kind is not a
- * state — it never changes. A green "feature" pill would sit two inches from the
- * green "Done" button meaning something unrelated, and the row already carries
- * up to four coloured chips. Icon plus word separates the kinds without
- * spending a hue.
+ * The kind marker: a tinted icon at the head of the row, where the eye starts.
+ *
+ * Kind and priority swapped places (2026-07-19, Parsa). Priority is a SCALE —
+ * low→urgent — and scales read as words; a colour dot makes you remember what
+ * four hues mean in order, which nobody does. Kind is a CATEGORY of three, it
+ * never changes, and it already has three distinct icons, so it survives being
+ * compressed to a mark in a way priority doesn't.
+ *
+ * The tints deliberately avoid green/amber/red: those three ARE the state
+ * vocabulary on this board (done / in progress / urgent), and a "feature" chip
+ * in state-green sitting inches from the green Done button would mean something
+ * unrelated in the same colour. Slate, blue and violet are outside that
+ * vocabulary, so they read as "a different axis" rather than as state.
  */
-function KindBadge({ kind }: { kind: DebugKind }) {
+const KIND_STYLE: Record<DebugKind, string> = {
+  fix: "bg-line-strong/40 text-muted",
+  feature: "bg-info/10 text-info",
+  audit: "bg-[oklch(0.72_0.10_300)]/10 text-[oklch(0.72_0.10_300)]",
+};
+
+function KindMark({ kind }: { kind: DebugKind }) {
   const Icon = KIND_ICON[kind];
   return (
-    <Badge tone="neutral">
+    <span
+      className={cn(
+        "grid size-5 shrink-0 place-items-center rounded-md",
+        KIND_STYLE[kind]
+      )}
+      title={KIND_LABEL[kind]}
+    >
       <Icon className="size-3" aria-hidden />
-      {KIND_LABEL[kind]}
-    </Badge>
+      <span className="sr-only">{KIND_LABEL[kind]}</span>
+    </span>
   );
 }
 
@@ -88,6 +107,9 @@ const PRIORITY_TONE: Record<DebugPriority, BadgeTone> = {
   high: "amber",
   urgent: "danger",
 };
+
+/** Deadlines only earn a chip when they're close enough to act on. */
+const DUE_SOON_DAYS = 7;
 
 const STATE_LABEL: Record<DebugState, string> = {
   open: "Open",
@@ -137,7 +159,32 @@ export function TaskRow({
 }) {
   const { pending, run } = useAction();
   const { success: toastSuccess, error: toastError } = useToast();
+  const rowRef = useRef<HTMLLIElement>(null);
   const [expanded, setExpanded] = useState(false);
+
+  /**
+   * Opening a row near the bottom of the list used to leave its panel below the
+   * fold, so every control inside it cost a scroll (Parsa, 2026-07-19). Pull the
+   * row into view as it opens — after paint, so the panel has already been laid
+   * out and the browser scrolls to its real height.
+   */
+  function toggleExpanded() {
+    setExpanded((wasOpen) => {
+      if (!wasOpen) {
+        requestAnimationFrame(() => {
+          const el = rowRef.current;
+          if (!el) return;
+          // Only scroll if the row now overflows the viewport — a row already
+          // fully visible shouldn't jump under the user.
+          const rect = el.getBoundingClientRect();
+          if (rect.bottom > window.innerHeight) {
+            el.scrollIntoView({ block: "end", behavior: "smooth" });
+          }
+        });
+      }
+      return !wasOpen;
+    });
+  }
   const [editing, setEditing] = useState(false);
   // Audit only: the "what I found" composer, one finding per line.
   const [filing, setFiling] = useState(false);
@@ -158,9 +205,18 @@ export function TaskRow({
   // A deadline is "overdue" only while the task is still open. Compare on the
   // date string (YYYY-MM-DD) so it's timezone-agnostic — matches how due_on is
   // stored (a plain date, no time).
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayLocal();
   const overdue =
     task.due_on != null && task.state !== "done" && task.due_on < today;
+  // A deadline three months out is data, not a signal — it belongs in the
+  // expanded row, not as a chip competing with the ones that need attention.
+  // Overdue always shows; everything else shows once it's within the window.
+  const dueSoon =
+    task.due_on != null &&
+    task.state !== "done" &&
+    task.due_on >= today &&
+    task.due_on <= addDays(today, DUE_SOON_DAYS);
+  const showDue = overdue || dueSoon;
   // Show the suggestion only while nobody has claimed it — once claimed, the
   // assignee is the truth and the nudge is noise.
   const suggested =
@@ -205,9 +261,13 @@ export function TaskRow({
   }
 
   function saveEdit() {
-    const patch = {
+    // ONE normalized object drives both the optimistic row and the server call.
+    // Sending the raw draft while rendering a trimmed patch made the two
+    // disagree: a whitespace-only title showed the old title optimistically and
+    // was then rejected server-side ("A task needs a title").
+    const fields = {
       title: draft.title.trim() || task.title,
-      description: draft.description.trim() || null,
+      description: draft.description.trim(),
       priority: draft.priority,
       kind: draft.kind,
       due_on: draft.due_on || null,
@@ -215,9 +275,11 @@ export function TaskRow({
       suggested_for: draft.suggested_for || null,
     };
     const before = { ...task };
-    run(() => updateTask(task.id, draft), {
+    run(() => updateTask(task.id, fields), {
       optimistic: () => {
-        onPatch(task.id, patch);
+        // The row mirrors what the server will actually store: an emptied
+        // description becomes null there, so it must here too.
+        onPatch(task.id, { ...fields, description: fields.description || null });
         setEditing(false);
       },
       rollback: () => onRestore(before),
@@ -237,15 +299,33 @@ export function TaskRow({
     });
   }
 
+  // Done rows recede via the title's own colour + strikethrough, NOT a blanket
+  // opacity. `opacity-60` multiplied against text that is already `muted`/
+  // `faint` pushed the meta line under 3:1 — the row read as disabled rather
+  // than finished.
   return (
     <li
+      ref={rowRef}
+      // scroll-mb keeps a gap under the row when it scrolls itself into view,
+      // so an opened panel never sits flush against the window edge.
       className={cn(
-        "px-4 py-3 transition-colors duration-150",
-        task.state === "done" && "opacity-60",
+        "scroll-mb-6 px-4 py-3 transition-colors duration-150",
         highlight && "bg-primary/5"
       )}
     >
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+      {/* A grid, not a flex-wrap. Four columns that always mean the same thing:
+          title (elastic) · badges · state · assignee. The old single wrapping
+          row reflowed unpredictably below ~1100px — the state control would drop
+          under the title and the badges would orphan. Here the collapse is
+          declared instead: under `md` the row becomes two lines, badges moving
+          to their own line beneath the title, and the state control narrows. */}
+      <div
+        className={cn(
+          "grid items-center gap-x-3 gap-y-2",
+          "grid-cols-[minmax(0,1fr)_auto] md:grid-cols-[minmax(0,1fr)_auto_auto_auto]",
+          selectable && "grid-cols-[auto_minmax(0,1fr)_auto] md:grid-cols-[auto_minmax(0,1fr)_auto_auto_auto]"
+        )}
+      >
         {selectable && (
           <Checkbox
             checked={selected ?? false}
@@ -255,19 +335,24 @@ export function TaskRow({
         )}
         <button
           type="button"
-          onClick={() => setExpanded((v) => !v)}
-          className="min-w-0 flex-1 text-left"
+          onClick={toggleExpanded}
+          className="flex min-w-0 items-start gap-2 text-left"
           aria-expanded={expanded}
         >
+          {/* Kind leads the row — see KindMark. */}
+          <KindMark kind={task.kind} />
+          <span className="min-w-0">
           <span
             className={cn(
-              "text-sm font-medium text-ink",
-              task.state === "done" && "line-through decoration-faint"
+              "block truncate text-sm font-medium",
+              task.state === "done"
+                ? "text-muted line-through decoration-faint"
+                : "text-ink"
             )}
           >
             {task.title}
           </span>
-          <span className="mt-0.5 block text-xs text-faint">
+          <span className="mt-0.5 block truncate text-xs text-faint">
             {formatDate(task.created_at)}
             {task.created_by && members[task.created_by] && (
               <>
@@ -290,17 +375,23 @@ export function TaskRow({
               </>
             )}
           </span>
+          </span>
         </button>
 
-        {projectName && <Badge tone="info">{projectName}</Badge>}
-        <KindBadge kind={task.kind} />
-        {task.due_on && (
-          <Badge tone={overdue ? "danger" : "faint"}>
-            {overdue ? "Overdue " : "Due "}
-            {formatDate(task.due_on)}
-          </Badge>
-        )}
-        <Badge tone={PRIORITY_TONE[task.priority]}>{task.priority}</Badge>
+        {/* Badges. Below `md` they take their own grid line under the title,
+            spanning the full width, so they never squeeze the state control. */}
+        <div className="col-span-full order-last flex flex-wrap items-center gap-1.5 md:order-0 md:col-span-1">
+          {projectName && <Badge tone="info">{projectName}</Badge>}
+          {showDue && (
+            <Badge tone={overdue ? "danger" : "faint"}>
+              {overdue ? "Overdue " : "Due "}
+              {formatDate(task.due_on)}
+            </Badge>
+          )}
+          {/* Priority stays a WORD. It's a four-step scale, and a scale that
+              you have to decode from a colour is a scale nobody reads. */}
+          <Badge tone={PRIORITY_TONE[task.priority]}>{task.priority}</Badge>
+        </div>
 
         {/* One-click state switch */}
         <div

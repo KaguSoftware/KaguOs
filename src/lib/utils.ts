@@ -48,6 +48,27 @@ export function formatDate(value: string | Date | null | undefined) {
   return dateFmt.format(typeof value === "string" ? new Date(value) : value);
 }
 
+/**
+ * Today as a plain `YYYY-MM-DD` in the VIEWER'S timezone.
+ *
+ * Deliberately not `new Date().toISOString().slice(0, 10)` — that's UTC, and
+ * Istanbul is UTC+3, so between 00:00 and 03:00 local it returns yesterday.
+ * Anything comparing against a date-only column (`due_on`) would then call a
+ * task due today "overdue" every morning. Compared as strings, both sides being
+ * plain dates, so there's no time-of-day or offset arithmetic anywhere.
+ */
+export function todayLocal(now: Date = new Date()) {
+  const month = `${now.getMonth() + 1}`.padStart(2, "0");
+  const day = `${now.getDate()}`.padStart(2, "0");
+  return `${now.getFullYear()}-${month}-${day}`;
+}
+
+/** `YYYY-MM-DD` N days after a plain date string. Calendar-correct (month/year roll). */
+export function addDays(date: string, days: number) {
+  const [y, m, d] = date.split("-").map(Number);
+  return todayLocal(new Date(y, m - 1, d + days));
+}
+
 const relFmt = new Intl.RelativeTimeFormat("en", { numeric: "auto" });
 
 /** Compact relative time ("3h ago", "2d ago"). Snapshot at render time. */

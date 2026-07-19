@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import {
   Archive,
@@ -11,6 +11,7 @@ import {
   Download,
   ListPlus,
   Search,
+  SlidersHorizontal,
   Trash2,
   X,
 } from "lucide-react";
@@ -25,21 +26,13 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/components/ui/toast";
 import { useAction } from "@/lib/use-action";
 import { tasksToText } from "@/lib/debug-export";
-import { cn, formatDate } from "@/lib/utils";
+import { cn, formatDate, todayLocal } from "@/lib/utils";
 import type { DebugFocus, DebugState, DebugTask, MembersMap } from "@/lib/types";
 
 /** Above this many project boards, the tab strip gets a filter box. */
 const BOARD_SEARCH_THRESHOLD = 5;
 
-type Filter = "active" | "done" | "mine" | "all";
 type Sort = "smart" | "priority" | "deadline" | "newest";
-
-const FILTERS: { key: Filter; label: string }[] = [
-  { key: "active", label: "Active" },
-  { key: "mine", label: "Mine" },
-  { key: "done", label: "Done" },
-  { key: "all", label: "All" },
-];
 
 const SORT_OPTIONS = [
   { value: "smart", label: "Smart" },
@@ -71,6 +64,43 @@ const STATE_FILTER_OPTIONS = [
   { value: "done", label: "Done" },
 ];
 
+/**
+ * The quick views, expressed as WRITES INTO THE REAL FILTERS rather than as a
+ * parallel filter of their own.
+ *
+ * There used to be two systems: an Active/Mine/Done/All tab strip AND the state
+ * and assignee multi-selects. They overlapped, and they could contradict —
+ * "Mine" plus assignee=someone-else guaranteed an empty board with nothing on
+ * screen explaining why. Now a preset just sets the controls, so what it did is
+ * visible in the controls themselves, and disagreement is impossible.
+ */
+type Preset = {
+  key: string;
+  label: string;
+  /** `meId` is threaded in so "Mine" can name the current user. */
+  apply: (meId: string) => { state: string[]; assignee: string[] };
+};
+
+const PRESETS: Preset[] = [
+  {
+    key: "active",
+    label: "Active",
+    apply: () => ({ state: ["open", "in_progress"], assignee: [] }),
+  },
+  {
+    key: "mine",
+    label: "Mine",
+    apply: (meId) => ({ state: ["open", "in_progress"], assignee: [meId] }),
+  },
+  { key: "done", label: "Done", apply: () => ({ state: ["done"], assignee: [] }) },
+  { key: "all", label: "All", apply: () => ({ state: [], assignee: [] }) },
+];
+
+/** Same members, any order — presets are sets, not sequences. */
+function sameSet(a: string[], b: string[]) {
+  return a.length === b.length && a.every((v) => b.includes(v));
+}
+
 const STATE_ORDER: Record<DebugState, number> = { open: 0, in_progress: 1, done: 2 };
 const PRIORITY_ORDER: Record<DebugTask["priority"], number> = {
   urgent: 0,
@@ -79,10 +109,22 @@ const PRIORITY_ORDER: Record<DebugTask["priority"], number> = {
   low: 3,
 };
 
-/** The default "smart" order: active first, then priority, then newest. */
+/**
+ * The default "smart" order: overdue first, then active, then priority, then
+ * newest.
+ *
+ * Overdue leads because a passed deadline is the only thing on this board that
+ * gets worse on its own. Without it an overdue medium sank below a fresh high,
+ * which made deadlines decorative — the board knew the date and still buried it.
+ */
 function smartSort(tasks: DebugTask[]) {
+  const today = todayLocal();
+  const isOverdue = (t: DebugTask) =>
+    t.due_on != null && t.state !== "done" && t.due_on < today;
+
   return [...tasks].sort(
     (a, b) =>
+      Number(isOverdue(b)) - Number(isOverdue(a)) ||
       STATE_ORDER[a.state] - STATE_ORDER[b.state] ||
       PRIORITY_ORDER[a.priority] - PRIORITY_ORDER[b.priority] ||
       (a.created_at < b.created_at ? 1 : -1)
@@ -118,6 +160,7 @@ export function DebugBoard({
   members,
   meId,
   isAdmin,
+  showcase,
   suggestOptions,
   focusItems,
 }: {
@@ -126,13 +169,14 @@ export function DebugBoard({
   members: MembersMap;
   meId: string;
   isAdmin: boolean;
+  /** Which world this board is showing — realtime must match the page query. */
+  showcase: boolean;
   /** Work members an admin can "suggest for" from the edit form. Empty for non-admins. */
   suggestOptions: { value: string; label: string }[];
   /** Every active focus item, rank-ordered. Empty = no focus set. */
   focusItems: DebugFocus[];
 }) {
   const [tasks, setTasks] = useState<DebugTask[]>(initialTasks);
-  const [filter, setFilter] = useState<Filter>("active");
   // ["all"], or one-or-more of "general" / project ids. Pure client-side
   // switching, zero delay. Plain click replaces the selection, ctrl/cmd-click
   // adds to it, so the common case stays one click.
@@ -145,11 +189,20 @@ export function DebugBoard({
   // is usually "these two".
   const [assignee, setAssignee] = useState<string[]>([]); // "unassigned" · user ids
   const [priority, setPriority] = useState<string[]>([]);
-  const [stateFilter, setStateFilter] = useState<string[]>([]);
+  // Opens on the "Active" preset — the board's job is what's left to do.
+  const [stateFilter, setStateFilter] = useState<string[]>([
+    "open",
+    "in_progress",
+  ]);
   const [kindFilter, setKindFilter] = useState<string[]>([]);
   const [taskQuery, setTaskQuery] = useState("");
   const [sort, setSort] = useState<Sort>("smart");
-  const [live, setLive] = useState(false);
+  // Three states, not two. The old boolean could only say "live" or
+  // "connecting…", so a socket that never came back said "connecting…" forever
+  // — the board looked merely slow while silently showing stale data.
+  const [live, setLive] = useState<"connecting" | "live" | "offline">(
+    "connecting"
+  );
   const [showArchived, setShowArchived] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   // Batch select on the main board (distinct from the archived cleanup set):
@@ -250,10 +303,20 @@ export function DebugBoard({
   // symptom being "connected, but only my own optimistic edits ever show and
   // nothing from teammates arrives". So set the auth token explicitly before
   // subscribing, and refresh it whenever the session token rotates.
+  //
+  // The stream must also match the PAGE QUERY'S scope, which filters on
+  // `is_demo` (and hides archived rows from non-admins). A channel that skips
+  // those checks streams real tasks onto the showcase board — the server-side
+  // `filter` does the first cut, and `accepts()` re-checks every payload because
+  // an UPDATE can move a row out of scope after it arrived.
   useEffect(() => {
     const supabase = createClient();
     let channel: ReturnType<typeof supabase.channel> | null = null;
     let cancelled = false;
+    const scope = { filter: `is_demo=eq.${showcase}` };
+
+    const accepts = (row: DebugTask) =>
+      row.is_demo === showcase && (isAdmin || row.archived_at == null);
 
     (async () => {
       const {
@@ -271,9 +334,10 @@ export function DebugBoard({
       .channel("debug-board")
       .on(
         "postgres_changes",
-        { event: "INSERT", schema: "public", table: "debug_tasks" },
+        { event: "INSERT", schema: "public", table: "debug_tasks", ...scope },
         (payload) => {
           const row = payload.new as DebugTask;
+          if (!accepts(row)) return;
           setTasks((prev) =>
             prev.some((t) => t.id === row.id) ? prev : [...prev, row]
           );
@@ -281,9 +345,15 @@ export function DebugBoard({
       )
       .on(
         "postgres_changes",
-        { event: "UPDATE", schema: "public", table: "debug_tasks" },
+        { event: "UPDATE", schema: "public", table: "debug_tasks", ...scope },
         (payload) => {
           const row = payload.new as DebugTask;
+          // An edit can push a row OUT of scope (archived, for a non-admin).
+          // Dropping it here keeps the board honest instead of leaving a stale copy.
+          if (!accepts(row)) {
+            setTasks((prev) => prev.filter((t) => t.id !== row.id));
+            return;
+          }
           setTasks((prev) => prev.map((t) => (t.id === row.id ? row : t)));
         }
       )
@@ -291,18 +361,33 @@ export function DebugBoard({
         "postgres_changes",
         { event: "DELETE", schema: "public", table: "debug_tasks" },
         (payload) => {
+          // DELETE payloads carry only the replica identity (the id), so there's
+          // nothing to scope on — dropping an id we don't hold is a no-op anyway.
           const gone = payload.old as { id: string };
           setTasks((prev) => prev.filter((t) => t.id !== gone.id));
         }
       )
-      .subscribe((status) => setLive(status === "SUBSCRIBED"));
+      // CHANNEL_ERROR / TIMED_OUT / CLOSED all mean "you are no longer seeing
+      // other people's changes", which the user needs told — a stale board that
+      // looks live is worse than one that admits it's stale.
+      .subscribe((status) =>
+        setLive(
+          status === "SUBSCRIBED"
+            ? "live"
+            : status === "CHANNEL_ERROR" ||
+                status === "TIMED_OUT" ||
+                status === "CLOSED"
+              ? "offline"
+              : "connecting"
+        )
+      );
     })();
 
     return () => {
       cancelled = true;
       if (channel) supabase.removeChannel(channel);
     };
-  }, []);
+  }, [showcase, isAdmin]);
 
   // Archived tasks (auto-archived after 7 days done) never show on the normal
   // board — they live in the admin-only cleanup section below.
@@ -321,18 +406,6 @@ export function DebugBoard({
       list = list.filter((t) =>
         t.project_id ? board.includes(t.project_id) : board.includes("general")
       );
-    }
-
-    switch (filter) {
-      case "active":
-        list = list.filter((t) => t.state !== "done");
-        break;
-      case "done":
-        list = list.filter((t) => t.state === "done");
-        break;
-      case "mine":
-        list = list.filter((t) => t.assignee_id === meId);
-        break;
     }
 
     // Each filter is OR-within, AND-across: "(urgent or high) and (Pet app)".
@@ -372,7 +445,7 @@ export function DebugBoard({
       }
     }
     return list;
-  }, [liveTasks, filter, board, meId, assignee, priority, stateFilter, kindFilter, taskQuery, sort, sessionIds]);
+  }, [liveTasks, board, assignee, priority, stateFilter, kindFilter, taskQuery, sort, sessionIds]);
 
   const openCount = liveTasks.filter((t) => t.state === "open").length;
 
@@ -418,7 +491,7 @@ export function DebugBoard({
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `debug-tasks-${new Date().toISOString().slice(0, 10)}.txt`;
+    a.download = `debug-tasks-${todayLocal()}.txt`;
     document.body.appendChild(a);
     a.click();
     a.remove();
@@ -439,14 +512,41 @@ export function DebugBoard({
     return [{ value: "unassigned", label: "Unassigned" }, ...people];
   }, [liveTasks, members]);
 
+  // What the user has NARROWED beyond the default view. The state filter opens
+  // pre-set to "Active", so counting it flatly would show "Clear 2" on a board
+  // nobody has touched — only a state selection that isn't the default counts.
+  const activePreset = PRESETS.find((p) => {
+    const target = p.apply(meId);
+    return sameSet(stateFilter, target.state) && sameSet(assignee, target.assignee);
+  });
   const activeFilterCount =
-    assignee.length +
+    (activePreset?.key === "active" ? 0 : assignee.length + stateFilter.length) +
     priority.length +
-    stateFilter.length +
     kindFilter.length +
     (taskQuery.trim() ? 1 : 0);
   const secondaryActive = activeFilterCount > 0;
 
+  // The board(s) in view, named — for the empty state, so it can say which
+  // board is empty rather than implying the whole section is.
+  const boardLabel = board.includes("all")
+    ? null
+    : board
+        .map((k) => (k === "general" ? "General" : projectNames[k]))
+        .filter(Boolean)
+        .join(" + ") || null;
+
+  /** Back to the board's resting state — the "Active" preset, nothing else on. */
+  function clearFilters() {
+    const base = PRESETS[0].apply(meId);
+    setStateFilter(base.state);
+    setAssignee(base.assignee);
+    setPriority([]);
+    setKindFilter([]);
+    setTaskQuery("");
+  }
+
+  // Counted over liveTasks, never `tasks` — an admin also holds the archived
+  // rows, and counting those makes a tab claim work that isn't on the board.
   const countFor = (key: string) =>
     liveTasks.filter(
       (t) =>
@@ -578,23 +678,52 @@ export function DebugBoard({
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="flex gap-1" role="tablist" aria-label="Filter tasks">
-          {FILTERS.map((f) => (
+        {/* Quick views. These WRITE the state/assignee filters below rather
+            than filtering separately — a preset reads as "selected" whenever
+            the controls happen to match it, including when you got there by
+            setting the controls by hand.
+
+            "Reset" lives at the END of this group rather than in the control
+            row below: that row's search box is `flex-1`, so anything appearing
+            or disappearing there resized the search field and shifted the whole
+            line. Here it sits after fixed-width buttons with nothing to push. */}
+        <div className="flex items-center gap-1" role="group" aria-label="Quick views">
+          {PRESETS.map((p) => {
+            const target = p.apply(meId);
+            const on =
+              sameSet(stateFilter, target.state) &&
+              sameSet(assignee, target.assignee);
+            return (
+              <button
+                key={p.key}
+                type="button"
+                aria-pressed={on}
+                onClick={() => {
+                  setStateFilter(target.state);
+                  setAssignee(target.assignee);
+                }}
+                className={cn(
+                  "rounded-md px-2.5 py-1 text-[13px] transition-colors duration-150",
+                  on
+                    ? "bg-raised text-ink"
+                    : "text-muted hover:bg-raised/60 hover:text-ink"
+                )}
+              >
+                {p.label}
+              </button>
+            );
+          })}
+          {secondaryActive && (
             <button
-              key={f.key}
-              role="tab"
-              aria-selected={filter === f.key}
-              onClick={() => setFilter(f.key)}
-              className={cn(
-                "rounded-md px-2.5 py-1 text-[13px] transition-colors duration-150",
-                filter === f.key
-                  ? "bg-raised text-ink"
-                  : "text-muted hover:bg-raised/60 hover:text-ink"
-              )}
+              type="button"
+              onClick={clearFilters}
+              title="Clear search, kind, state, priority and assignee"
+              className="ml-1 inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] text-muted transition-colors duration-150 hover:bg-raised/60 hover:text-ink"
             >
-              {f.label}
+              <X className="size-3" aria-hidden />
+              Reset <span className="tabular-nums">{activeFilterCount}</span>
             </button>
-          ))}
+          )}
         </div>
         <div className="flex items-center gap-3">
           <button
@@ -622,16 +751,36 @@ export function DebugBoard({
             <span
               className={cn(
                 "size-1.5 rounded-full",
-                live ? "bg-primary" : "bg-line-strong"
+                live === "live"
+                  ? "bg-primary"
+                  : live === "offline"
+                    ? "bg-danger"
+                    : "bg-line-strong"
               )}
               aria-hidden
             />
-            {live ? "live" : "connecting…"} · {openCount} open
+            {live === "offline" ? (
+              <button
+                type="button"
+                onClick={() => window.location.reload()}
+                className="text-danger transition-colors duration-150 hover:underline"
+              >
+                offline — refresh
+              </button>
+            ) : (
+              <span>{live === "live" ? "live" : "connecting…"}</span>
+            )}
+            <span aria-hidden>·</span> {openCount} open
           </p>
         </div>
       </div>
 
-      {/* Refine: search + who + priority + sort. Client-side, instant. */}
+      {/* Refine: search + who + the rest behind one control + sort.
+          There used to be six equal-weight controls here, under two tab strips
+          — three tiers of filtering furniture before you reach a task. Search
+          and Assignee stay out (they're the two people actually reach for);
+          Kind, State and Priority moved into one popover that carries a count,
+          so the row states how narrowed you are without spending the width. */}
       <div className="flex flex-wrap items-center gap-2">
         <div className="relative min-w-44 flex-1">
           <Search
@@ -656,32 +805,13 @@ export function DebugBoard({
           options={assigneeOptions}
           searchThreshold={8}
         />
-        <MultiDropdown
-          className="w-36"
-          label="Kind"
-          placeholder="Any kind"
-          summaryNoun="kinds"
-          values={kindFilter}
-          onChange={setKindFilter}
-          options={KIND_FILTER_OPTIONS}
-        />
-        <MultiDropdown
-          className="w-36"
-          label="State"
-          placeholder="Any state"
-          summaryNoun="states"
-          values={stateFilter}
-          onChange={setStateFilter}
-          options={STATE_FILTER_OPTIONS}
-        />
-        <MultiDropdown
-          className="w-36"
-          label="Priority"
-          placeholder="Any priority"
-          summaryNoun="priorities"
-          values={priority}
-          onChange={setPriority}
-          options={PRIORITY_FILTER_OPTIONS}
+        <FiltersPopover
+          kindFilter={kindFilter}
+          setKindFilter={setKindFilter}
+          stateFilter={stateFilter}
+          setStateFilter={setStateFilter}
+          priority={priority}
+          setPriority={setPriority}
         />
         <Dropdown
           className="w-36"
@@ -690,22 +820,6 @@ export function DebugBoard({
           onChange={(v) => setSort(v as Sort)}
           options={SORT_OPTIONS}
         />
-        {secondaryActive && (
-          <button
-            type="button"
-            onClick={() => {
-              setAssignee([]);
-              setPriority([]);
-              setStateFilter([]);
-              setKindFilter([]);
-              setTaskQuery("");
-            }}
-            className="inline-flex items-center gap-1 text-[11px] text-muted transition-colors duration-150 hover:text-ink"
-          >
-            <X className="size-3" aria-hidden />
-            Clear {activeFilterCount}
-          </button>
-        )}
       </div>
 
       {/* The brainstorm session's tasks stay marked and pinned for triage
@@ -783,14 +897,19 @@ export function DebugBoard({
               hint="Try a different person, priority, or search term."
             />
           ) : (
+            // Name the reason the board is empty. The old copy said "post a
+            // task" even when the real answer was "you're looking at Pet app
+            // with the Mine view on".
             <EmptyState
               icon={Bug}
               title={
-                filter === "mine"
+                activePreset?.key === "mine"
                   ? "Nothing claimed by you"
-                  : filter === "done"
+                  : activePreset?.key === "done"
                     ? "Nothing done yet"
-                    : "No tasks here"
+                    : boardLabel
+                      ? `No tasks on ${boardLabel}`
+                      : "No tasks here"
               }
               hint="Post a task with “New task” — anyone in Debug can claim it by one click."
             />
@@ -847,6 +966,152 @@ export function DebugBoard({
             setSelected(new Set());
           }}
         />
+      )}
+    </div>
+  );
+}
+
+/**
+ * Kind + State + Priority behind one control.
+ *
+ * These three were three more full-width dropdowns in a row that already held
+ * a search box, an assignee picker and a sort — six equal-weight controls, none
+ * of which told you how filtered you were. Folded into one button with a count,
+ * the row gets its width back and gains the summary it was missing.
+ *
+ * Deliberately NOT a modal: it's a refinement, not a decision (DESIGN.md keeps
+ * modals for destructive confirms). Same frosted-popover language as Dropdown.
+ */
+function FiltersPopover({
+  kindFilter,
+  setKindFilter,
+  stateFilter,
+  setStateFilter,
+  priority,
+  setPriority,
+}: {
+  kindFilter: string[];
+  setKindFilter: (v: string[]) => void;
+  stateFilter: string[];
+  setStateFilter: (v: string[]) => void;
+  priority: string[];
+  setPriority: (v: string[]) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const count = kindFilter.length + stateFilter.length + priority.length;
+
+  // Same dismissal contract as every other popover in the app: click-away and
+  // Escape both close it.
+  useEffect(() => {
+    if (!open) return;
+    function onPointerDown(event: MouseEvent | TouchEvent) {
+      if (rootRef.current && !rootRef.current.contains(event.target as Node)) {
+        setOpen(false);
+      }
+    }
+    function onKey(event: KeyboardEvent) {
+      if (event.key === "Escape") setOpen(false);
+    }
+    document.addEventListener("mousedown", onPointerDown);
+    document.addEventListener("touchstart", onPointerDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onPointerDown);
+      document.removeEventListener("touchstart", onPointerDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  const GROUPS = [
+    { label: "Kind", options: KIND_FILTER_OPTIONS, values: kindFilter, set: setKindFilter },
+    { label: "State", options: STATE_FILTER_OPTIONS, values: stateFilter, set: setStateFilter },
+    { label: "Priority", options: PRIORITY_FILTER_OPTIONS, values: priority, set: setPriority },
+  ];
+
+  return (
+    <div ref={rootRef} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        aria-haspopup="dialog"
+        className={cn(
+          "flex h-9 items-center gap-2 rounded-md border px-3 text-sm transition-colors duration-150",
+          count > 0
+            ? "border-primary-dim/40 bg-primary/5 text-ink"
+            : "border-line bg-raised text-muted hover:border-line-strong"
+        )}
+      >
+        <SlidersHorizontal className="size-3.5" aria-hidden />
+        Filters
+        {/* Reserved slot, same reasoning as the Clear button: a badge that
+            mounts on demand widens the trigger and shifts the row beside it. */}
+        <span
+          aria-hidden={count === 0}
+          className={cn(
+            "rounded-full bg-primary/15 px-1.5 font-mono text-[11px] text-primary-dim tabular-nums",
+            "transition-opacity duration-150 ease-mac",
+            count > 0 ? "opacity-100" : "opacity-0"
+          )}
+        >
+          {count || 0}
+        </span>
+      </button>
+
+      {open && (
+        <div className="absolute right-0 z-20 mt-1 w-64 origin-top animate-pop-in rounded-md border border-line bg-raised/90 p-3 shadow-lg shadow-black/40 backdrop-blur-md">
+          <div className="space-y-3">
+            {GROUPS.map((group) => (
+              <div key={group.label}>
+                <p className="mb-1.5 text-[11px] font-medium uppercase tracking-wide text-faint">
+                  {group.label}
+                </p>
+                <div className="flex flex-wrap gap-1.5">
+                  {group.options.map((o) => {
+                    const on = group.values.includes(o.value);
+                    return (
+                      <button
+                        key={o.value}
+                        type="button"
+                        aria-pressed={on}
+                        onClick={() =>
+                          group.set(
+                            on
+                              ? group.values.filter((v) => v !== o.value)
+                              : [...group.values, o.value]
+                          )
+                        }
+                        className={cn(
+                          "rounded-md border px-2 py-0.5 text-[12px]",
+                          "transition-[background-color,border-color,transform] duration-150 ease-mac active:scale-[0.97]",
+                          on
+                            ? "border-primary/50 bg-primary/10 text-ink"
+                            : "border-line text-muted hover:border-line-strong hover:text-ink"
+                        )}
+                      >
+                        {o.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+          </div>
+          {count > 0 && (
+            <button
+              type="button"
+              onClick={() => {
+                setKindFilter([]);
+                setStateFilter([]);
+                setPriority([]);
+              }}
+              className="mt-3 w-full border-t border-line pt-2 text-left text-xs text-muted transition-colors duration-150 hover:text-ink"
+            >
+              Clear these {count}
+            </button>
+          )}
+        </div>
       )}
     </div>
   );
@@ -947,6 +1212,9 @@ function ArchivedSection({
                   onChange={() => toggle(t.id)}
                   aria-label={`Select ${t.title}`}
                 />
+                {/* Muted + strikethrough only. Adding an opacity on top (as
+                    the done rows used to) stacked three dimming signals and
+                    pushed this under the AA floor — archived, not disabled. */}
                 <span className="min-w-0 flex-1 truncate text-muted line-through decoration-faint">
                   {t.title}
                 </span>

@@ -2,6 +2,7 @@
 
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { Check, ChevronDown, Search } from "lucide-react";
+import { usePopoverSide } from "@/lib/use-popover-side";
 import { cn } from "@/lib/utils";
 
 export type DropdownOption = {
@@ -51,6 +52,9 @@ export function Dropdown({
   const listRef = useRef<HTMLUListElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
   const listboxId = useId();
+  // Open upward when the trigger is near the bottom of the window — otherwise
+  // the menu lands below the fold and every pick costs a scroll.
+  const side = usePopoverSide(rootRef, open);
 
   const searchable = searchThreshold > 0 && options.length >= searchThreshold;
 
@@ -205,7 +209,14 @@ export function Dropdown({
       </button>
 
       {open && (
-        <div className="absolute z-10 mt-1 w-full origin-top animate-pop-in overflow-hidden rounded-md border border-line bg-raised/90 shadow-lg shadow-black/40 backdrop-blur-md">
+        <div
+          className={cn(
+            "absolute z-10 w-full animate-pop-in overflow-hidden rounded-md border border-line bg-raised/90 shadow-lg shadow-black/40 backdrop-blur-md",
+            side === "top"
+              ? "bottom-full mb-1 origin-bottom"
+              : "top-full mt-1 origin-top"
+          )}
+        >
           {searchable && (
             <div className="flex items-center gap-2 border-b border-line px-2.5">
               <Search className="size-3.5 shrink-0 text-faint" aria-hidden />
@@ -319,6 +330,7 @@ export function MultiDropdown({
   const listRef = useRef<HTMLUListElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
   const listboxId = useId();
+  const side = usePopoverSide(rootRef, open);
 
   const searchable = searchThreshold > 0 && options.length >= searchThreshold;
 
@@ -462,7 +474,14 @@ export function MultiDropdown({
       </button>
 
       {open && (
-        <div className="absolute z-10 mt-1 w-full min-w-44 origin-top animate-pop-in overflow-hidden rounded-md border border-line bg-raised/90 shadow-lg shadow-black/40 backdrop-blur-md">
+        <div
+          className={cn(
+            "absolute z-10 w-full min-w-44 animate-pop-in overflow-hidden rounded-md border border-line bg-raised/90 shadow-lg shadow-black/40 backdrop-blur-md",
+            side === "top"
+              ? "bottom-full mb-1 origin-bottom"
+              : "top-full mt-1 origin-top"
+          )}
+        >
           {searchable && (
             <div className="flex items-center gap-2 border-b border-line px-2.5">
               <Search className="size-3.5 shrink-0 text-faint" aria-hidden />

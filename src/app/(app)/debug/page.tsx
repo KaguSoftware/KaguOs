@@ -87,6 +87,7 @@ export default async function DebugPage() {
         members={members}
         meId={ctx.userId}
         isAdmin={ctx.isAdmin}
+        showcase={ctx.showcase}
         suggestOptions={suggestOptions}
         focusItems={focusItems}
       />

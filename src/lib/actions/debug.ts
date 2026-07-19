@@ -280,17 +280,31 @@ export async function claimTask(taskId: string): Promise<ActionResult> {
   return { ok: true, message: "Claimed." };
 }
 
+/**
+ * Release a claim. Yours only — admins may release anyone's.
+ *
+ * `claimTask` has always been careful (`.is("assignee_id", null)`, first click
+ * wins); this was not, so any Debug member could free up a teammate's task.
+ * Guarded on the ROW here, matching migration 0035's RLS policy: the query only
+ * matches when the caller is the assignee, so a mismatch returns no rows rather
+ * than silently succeeding.
+ */
 export async function unclaimTask(taskId: string): Promise<ActionResult> {
   const showcaseStop = await blockIfShowcase();
   if (showcaseStop) return showcaseStop;
   const ctx = await requireSection("debug");
 
-  // UI offers this on your own tasks (admins: on any); DB culture allows unclaim generally.
-  const { error } = await ctx.supabase
+  const query = ctx.supabase
     .from("debug_tasks")
     .update({ assignee_id: null })
     .eq("id", taskId);
+  if (!ctx.isAdmin) query.eq("assignee_id", ctx.userId);
+
+  const { data, error } = await query.select("id");
   if (error) return { ok: false, message: error.message };
+  if (!data || data.length === 0) {
+    return { ok: false, message: "That task isn't yours to unclaim." };
+  }
 
   revalidatePath("/debug");
   return { ok: true, message: "Unclaimed." };

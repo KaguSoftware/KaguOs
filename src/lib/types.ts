@@ -296,6 +296,11 @@ export type DebugTask = {
   archived_at: string | null;
   /** The audit task that turned this up, if it came from one. */
   found_by: string | null;
+  /**
+   * Showcase-mode row. The board query scopes by this, and so must the realtime
+   * handlers — a channel that ignores it streams real tasks onto the demo board.
+   */
+  is_demo: boolean;
   created_by: string | null;
   created_at: string;
   updated_at: string;
