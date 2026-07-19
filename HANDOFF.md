@@ -59,7 +59,46 @@ Contracts w/ PDFs), **Debug** (everyone: per-project boards, self-claim-only, re
 - Chart colors are validated (dataviz skill): income `oklch(0.62 0.13 160)`, expense
   `oklch(0.55 0.16 25)` — L band 0.48–0.67 on dark; re-validate any new chart palette.
 
-## Current status (2026-07-19)
+## Current status (2026-07-20)
+
+### 🟢 STATUS PRESETS ×4 + DASHBOARD STAT ROW FILLS ITS ROW (2026-07-20) — BUILT + STATICALLY VERIFIED (tsc + lint + build green), pushed to `main` (`b359351`), **migration 0038 NOT YET APPLIED to prod**, live-drive by Parsa pending
+Two small asks in one session. ⚠️ **0038 is the one thing that must happen before this is usable** —
+setting any new status against prod today fails the `status_kind` CHECK.
+
+- **Four everyday statuses**: 🍜 Eating · 🚶 **Not home** (`away`) · 🛋️ Chilling · 😴 Sleeping.
+  Parsa asked for "sleeping, chilling, and some more", and picked "not home" over "commuting" as the
+  wording. Takes the picker from 5 chips to **9 — a clean 3×3** in the existing `grid-cols-3`; the
+  five old presets only covered the working day, so "I'm asleep" had to be a custom status.
+  Call defaults: **Not home and Chilling default to available_to_call = true** (you have your phone);
+  Eating and Sleeping false. All overridable, and **expiry stays manual** (Parsa chose no per-preset
+  auto-clear — no seeded durations).
+  Everything downstream is driven off `STATUS_KINDS`/`STATUS_PRESETS`, so the picker chips, the live
+  preview row, the hover cards and the notification text picked these up with **no other code change**.
+  `updateMyStatus` needed nothing.
+- **Migration 0038** widens the `profiles_status_kind_check` CHECK. Pure widening: no backfill, no
+  data movement, every existing kind stays valid. **Not applied — apply it before using the new states.**
+- **Dashboard stat row no longer leaves holes for people with partial access.** The strip was pinned
+  to `lg:grid-cols-6` while the `stats` array is built by membership gating, so anyone who can't reach
+  all six sections got **empty cells — bare `bg-line` gap colour in the shape of a tile**, quietly
+  announcing that something exists which they can't see. That contradicts design principle 4
+  ("membership is invisible until it matters"). Fixes:
+  - `lg` column count now **follows the data** via a `--stat-cols` custom property
+    (`Math.min(stats.length, 6)`) consumed by `lg:grid-cols-[repeat(var(--stat-cols),minmax(0,1fr))]`.
+    A `lg:grid-cols-${n}` template literal would NOT work — Tailwind's JIT can't see dynamic classes.
+  - The narrow breakpoints have fixed counts (`grid-cols-2` / `sm:grid-cols-3`), so a stat count that
+    doesn't divide evenly leaves the same hole at the end of the last row. **The first tile absorbs
+    the remainder** via `%2`/`%3` span rules.
+  - ⚠️ For n=5 the first tile receives both `sm:col-span-1` (from the `%2` rule) and `sm:col-span-2`
+    (from the `%3` rule). `tailwind-merge` resolves last-wins → `sm:col-span-2`, which is what the
+    arithmetic needs. **Verified against the real `cn()`**, not assumed — if you reorder those three
+    lines you will silently break n=5.
+  - Verified every count **1–6 fills base/sm/lg exactly** (no empty cells at any breakpoint), and the
+    generated CSS rule `grid-template-columns:repeat(var(--stat-cols),minmax(0,1fr))` is present in
+    the production build output.
+- **Not visually confirmed in a browser** — no screenshot/browser tool was available in this session,
+  and the panel is auth-gated. The layout is proven by the span arithmetic + the emitted CSS, not by
+  eye. Worth one look at a real account that lacks a section (the honest test: log in as someone with
+  2–3 sections and confirm the row reads as a complete strip, not a gapped one).
 
 ### 🟢 TASK SCREENSHOTS + COMMS SPLIT + MOBILE REMINDERS (2026-07-19) — BUILT + STATICALLY VERIFIED, on `main`, migrations 0036+0037 APPLIED to prod, **live-drive by Parsa PENDING**
 Three items Parsa noted at the gym, plus Kemal's standing Comms request. Migrations `0036`
@@ -933,6 +972,9 @@ volume. They're insurance, not a speedup.
   zero rows; it is now settled — a future change needs a real data migration.**
   ✅ **All of 0028–0034 were `migration repair`-ed to `applied` (2026-07-19); `migration list --linked`
   now shows local == remote for all 34.** A future `db push` won't try to re-run them.
+- **0038** `status_kind` CHECK widened for the four new presets (eating/away/chilling/sleeping),
+  2026-07-20 — ⚠️ **WRITTEN BUT NOT APPLIED.** Pure CHECK widening, no backfill. Until it runs,
+  picking any of the four new statuses fails against prod.
 - `supabase/migrations/0020–0025` (all APPLIED to prod, 2026-07-17): **0020** idea pipeline (vote value,
   required_count/stage, work_access_count) · **0021** debug suggest_for/due_on + project due_on · **0022**
   contact_interactions · **0023** debug_suggested notify kind · **0024** debug auto-archive (done_at/archived_at
@@ -945,6 +987,9 @@ volume. They're insurance, not a speedup.
 DONE this session: notifications, announcements hero, ⌘K palette, task/idea editing, admin-row
 redesign, empty-state CTAs (a–c, f from the old list); **DB/save latency pass — double-auth killed via
 `getClaims()`, notifications deferred via `after()` (see Current status).** REMAINING:
+000. ⬅️ **ACTIVE / do this first — apply migration 0038** (`scripts/apply-migration.mjs`, the usual
+    helper). One CHECK widening; until it runs, the four new statuses (Eating / Not home / Chilling /
+    Sleeping) fail to save against prod. Everything else in that change is already on `main` (`b359351`).
 00. 🌏 **MIGRATE the Supabase project from Tokyo (`ap-northeast-1`) to an EU region** — confirmed the
     single biggest remaining perf win (see Current status). Not in-place: new EU project → dump/restore
     → swap ref/URL/keys in `.env.local` + Vercel + re-run migration history. Cheapest to do NOW while
@@ -1006,11 +1051,11 @@ surface; run `/impeccable audit` after the batch (design hook was silenced after
 | Dashboard shape | **"Needs you" strip (overdue + suggested) + one dense stat row + full-width activity w/ per-kind filter and show-more** (done 2026-07-19) | strip currently covers **debug only** — sprint goals due, unticked reminders, and contracts expiring belong in it; counts should deep-link to filtered views once URL filters land | later |
 | Dashboard charts | numbers only (done) | **one** sparkline: net recurring over 12 months (`lastMonths()` + recharts both exist). Agreed with Parsa 2026-07-19 that the other five stats are single-state counts with nothing to plot — charting them would be decoration | next |
 | Reminder due dates | text + scope + done only | optional `due_on` via `DatePicker`, sort/dim by it. **Needs a migration** (`reminders` has no date column) — deferred rather than rushed at the end of a session | not started |
-| Mobile | **drawer menu + status reachable** (2026-07-19); layout padding and tables were already responsive | teammates' presence is still desktop-only (deliberate — browsing affordance); the rest of the app has NOT been driven on a real phone yet, only reasoned from the code + build. **Debug row, dashboard stat row and filter popover need a real-device pass** | needs a live pass |
+| Mobile | **drawer menu + status reachable** (2026-07-19); layout padding and tables were already responsive; **dashboard stat row now fills its row at every breakpoint for partial-access members (2026-07-20)** | teammates' presence is still desktop-only (deliberate — browsing affordance); the rest of the app has NOT been driven on a real phone yet, only reasoned from the code + build. **Debug row and filter popover still need a real-device pass** | needs a live pass |
 | Comms split (Kemal, 2026-07-19) | **DONE 2026-07-19** — three tabs (External / Meetings / Notes), migration 0037. Meetings = title, date, attendees, summary, notes. Notes = body + pin. Both shared section-wide | Follow-ups if asked: link a meeting to a contact or project · attendees from an actual calendar · search across notes | — |
 | Task screenshots (2026-07-19) | 6 images/task, 5MB each, attach from create form + row + editor; Copy downloads them and writes filenames into the text | Paste-to-upload (Ctrl+V a screenshot straight onto a task) · annotation/crop · thumbnails via a transform CDN rather than full-size `unoptimized` | later |
 | ⌘K search | nav actions + content (tasks/projects/ideas/contacts/sprints), loaded-once client-filter (done) | live/fresh results, ranking, recents | later |
-| Presence | **REDESIGNED 2026-07-19 (`a26ff0f`)**: three signals — LIVE online/away/offline dot via presence channels + status (emoji+note, presets are shortcuts) + available-to-call; **simple durations (30m/1h/2h/12h)** auto-expiry; **centered modal editor** w/ live preview + **Save button** (draft, not auto-save); **teammate hover cards** (full status); always-on last-seen column; status-change notify to work team kept (done) | real emoji picker (currently a text field); open/close delay on hover cards; per-section activity | later |
+| Presence | **REDESIGNED 2026-07-19 (`a26ff0f`)**: three signals — LIVE online/away/offline dot via presence channels + status (emoji+note, presets are shortcuts) + available-to-call; **simple durations (30m/1h/2h/12h)** auto-expiry; **centered modal editor** w/ live preview + **Save button** (draft, not auto-save); **teammate hover cards** (full status); always-on last-seen column; status-change notify to work team kept (done). **2026-07-20: 9 presets, a 3×3 grid** — added 🍜 Eating · 🚶 Not home · 🛋️ Chilling · 😴 Sleeping (migration **0038, NOT yet applied**) | real emoji picker (currently a text field); open/close delay on hover cards; per-section activity; **per-preset default durations were considered and deliberately declined** (Parsa: expiry stays manual) | later |
 | Realtime | **live updates on every tab via `useRealtimeRefresh`→router.refresh(); debug board in-place (done 2026-07-19)** | in-place patching on more tabs (currently only debug patches; others refresh) | later |
 | Email (Resend) | **NONE — scoped then dropped by Parsa 2026-07-19 ("forget resend for now")**. `resend` not installed | announcements→everyone, task-assign→assignee, admin digests, role-polarized | when Parsa revives it |
 | Debug brainstorm | /debug/brainstorm: capture → one-trip post → per-task details pass + board trail + collapsed notify (done 2026-07-18, v2 after Parsa rejected the inline-bar v1) | — | — |
