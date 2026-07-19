@@ -8,13 +8,27 @@ import { notifyWorkTeam } from "@/lib/actions/notify";
 import { isValidColorKey } from "@/lib/colors";
 import { STATUS_KINDS, STATUS_PRESETS, type StatusKind } from "@/lib/types";
 
-/** Durations the picker offers, in ms. 0 = open-ended (clears any expiry). */
-const STATUS_DURATIONS_MS = new Set([
-  30 * 60 * 1000, // 30m
-  60 * 60 * 1000, // 1h
-  2 * 60 * 60 * 1000, // 2h
-  12 * 60 * 60 * 1000, // "until tomorrow"-ish; client labels it
-]);
+/**
+ * Bounds for a status expiry, in ms. The picker offers chips (30m/1h/2h/12h)
+ * AND a custom "3h 30m" entry, so this can no longer be a whitelist of the
+ * chip values — it's a RANGE plus a granularity rule instead.
+ *
+ * Still validated server-side, and still the server that turns the relative
+ * duration into an absolute `status_until`: the client never sends a wall
+ * clock, so a skewed or tampered clock can't plant an expiry years out.
+ * 0 = open-ended (clears any expiry).
+ */
+const STATUS_DURATION_MIN_MS = 60 * 1000; // 1m — below this the status is noise
+const STATUS_DURATION_MAX_MS = 7 * 24 * 60 * 60 * 1000; // 7d — "off today" tops out well under this
+
+function isValidDurationMs(ms: number): boolean {
+  return (
+    Number.isInteger(ms) &&
+    ms >= STATUS_DURATION_MIN_MS &&
+    ms <= STATUS_DURATION_MAX_MS &&
+    ms % STATUS_DURATION_MIN_MS === 0 // whole minutes only
+  );
+}
 
 export type ActionResult = {
   ok: boolean;
@@ -100,7 +114,7 @@ export async function updateMyStatus(fields: {
   // Turn the relative duration into an absolute expiry. Only a value from the
   // known set counts, and only while a status is set.
   let until: string | null = null;
-  if (kind !== "none" && fields.durationMs && STATUS_DURATIONS_MS.has(fields.durationMs)) {
+  if (kind !== "none" && fields.durationMs && isValidDurationMs(fields.durationMs)) {
     until = new Date(Date.now() + fields.durationMs).toISOString();
   }
 

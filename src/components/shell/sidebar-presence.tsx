@@ -19,14 +19,37 @@ import {
 /** Preset chips, in editor order. `none` is the explicit "Clear" affordance. */
 const PRESET_CHIPS = STATUS_KINDS.filter((k) => k !== "none" && k !== "custom");
 
-/** Duration options: label + ms. 0 = open-ended. Mirrors the server's allowed set. */
+const MINUTE_MS = 60 * 1000;
+const HOUR_MS = 60 * MINUTE_MS;
+
+/** Duration shortcuts: label + ms. 0 = open-ended. A custom value is allowed
+ *  alongside these (the "+" chip) — the server validates a RANGE, not this set. */
 const DURATIONS: { label: string; ms: number }[] = [
   { label: "Open", ms: 0 },
-  { label: "30m", ms: 30 * 60 * 1000 },
-  { label: "1h", ms: 60 * 60 * 1000 },
-  { label: "2h", ms: 2 * 60 * 60 * 1000 },
-  { label: "12h", ms: 12 * 60 * 60 * 1000 },
+  { label: "30m", ms: 30 * MINUTE_MS },
+  { label: "1h", ms: HOUR_MS },
+  { label: "2h", ms: 2 * HOUR_MS },
+  { label: "12h", ms: 12 * HOUR_MS },
 ];
+
+/** Server-side bounds, mirrored so the UI can't offer an invalid value. */
+const CUSTOM_MAX_MS = 7 * 24 * HOUR_MS;
+
+/** Digits only, capped at `max` characters — keeps the h/m fields numeric
+ *  without a native number spinner (the app uses custom controls throughout). */
+function digits(value: string, max: number): string {
+  return value.replace(/\D/g, "").slice(0, max);
+}
+
+/** "3h 30m" / "45m" / "2h" — the custom chip's label and the a11y name. */
+function formatDuration(ms: number): string {
+  const mins = Math.round(ms / MINUTE_MS);
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  if (h && m) return `${h}h ${m}m`;
+  if (h) return `${h}h`;
+  return `${m}m`;
+}
 
 function initials(name: string) {
   return name
@@ -215,14 +238,12 @@ function draftFromMe(me: PresencePerson, now: number): Draft {
   const expired = isExpired(me.status_until, now);
   const kind = expired ? "none" : me.status_kind;
   const remainingMs = me.status_until && !expired ? Date.parse(me.status_until) - now : 0;
+  // Round the REMAINING time to whole minutes and keep it as-is. This used to
+  // snap to the nearest preset chip, which a custom duration makes wrong: save
+  // "3h 30m", reopen, and it would read back as "2h" — the editor would both
+  // lie about your status and look un-dirty while holding a different value.
   const durationMs =
-    remainingMs > 0
-      ? DURATIONS.reduce((best, d) =>
-          d.ms > 0 && Math.abs(d.ms - remainingMs) < Math.abs(best.ms - remainingMs)
-            ? d
-            : best
-        ).ms
-      : 0;
+    remainingMs > 0 ? Math.round(remainingMs / MINUTE_MS) * MINUTE_MS : 0;
   return {
     kind,
     emoji: kind === "none" ? "" : (me.status_emoji ?? ""),
@@ -288,6 +309,25 @@ function StatusModal({ me, now, pending, onSet, onClose }: EditorProps) {
 
   const active = draft.kind !== "none";
   const dirty = !draftsEqual(draft, baseline);
+
+  // A duration that isn't one of the shortcut chips is a custom one. The panel
+  // starts open when the saved status already carries such a value, so
+  // reopening the editor shows what's actually set rather than an empty row.
+  const isCustomDuration =
+    draft.durationMs > 0 && !DURATIONS.some((d) => d.ms === draft.durationMs);
+  const [customOpen, setCustomOpen] = useState(isCustomDuration);
+  const [customH, setCustomH] = useState(() =>
+    isCustomDuration ? String(Math.floor(draft.durationMs / HOUR_MS)) : ""
+  );
+  const [customM, setCustomM] = useState(() =>
+    isCustomDuration
+      ? String(Math.round((draft.durationMs % HOUR_MS) / MINUTE_MS))
+      : ""
+  );
+  const customMs = Math.min(
+    (Number(customH) || 0) * HOUR_MS + (Number(customM) || 0) * MINUTE_MS,
+    CUSTOM_MAX_MS
+  );
 
   function pickPreset(kind: StatusKind) {
     // Adopt the preset's call default only when switching INTO a new preset.
@@ -437,7 +477,10 @@ function StatusModal({ me, now, pending, onSet, onClose }: EditorProps) {
                       <button
                         key={d.ms}
                         type="button"
-                        onClick={() => set({ durationMs: d.ms })}
+                        onClick={() => {
+                          setCustomOpen(false);
+                          set({ durationMs: d.ms });
+                        }}
                         aria-pressed={selected}
                         className={cn(
                           "rounded-md border px-2.5 py-1 font-mono text-[12px]",
@@ -451,8 +494,80 @@ function StatusModal({ me, now, pending, onSet, onClose }: EditorProps) {
                       </button>
                     );
                   })}
+                  {/* Custom duration. Shows the chosen value once set, so a
+                      custom pick reads like the presets rather than hiding
+                      behind a "+" that gives no clue what's selected. */}
+                  <button
+                    type="button"
+                    onClick={() => setCustomOpen((v) => !v)}
+                    aria-pressed={isCustomDuration}
+                    aria-expanded={customOpen}
+                    aria-label={
+                      isCustomDuration
+                        ? `Custom duration: ${formatDuration(draft.durationMs)}`
+                        : "Set a custom duration"
+                    }
+                    className={cn(
+                      "rounded-md border px-2.5 py-1 font-mono text-[12px]",
+                      "transition-colors duration-150 ease-mac",
+                      isCustomDuration || customOpen
+                        ? "border-primary/50 bg-primary/10 text-ink"
+                        : "border-line text-muted hover:border-line-strong hover:text-ink"
+                    )}
+                  >
+                    {isCustomDuration ? formatDuration(draft.durationMs) : "Custom"}
+                  </button>
                 </div>
               </div>
+
+              {customOpen && (
+                <div
+                  className="flex items-center gap-2 pl-19"
+                  // Enter commits the duration, matching the note field. Without
+                  // it the only way out of these inputs is a mouse.
+                  onKeyDown={(e) => {
+                    if (e.key !== "Enter" || !customMs) return;
+                    e.preventDefault();
+                    set({ durationMs: customMs });
+                    setCustomOpen(false);
+                  }}
+                >
+                  {/* Plain controlled Inputs, not NumberInput — that one is an
+                      uncontrolled form field that normalizes to decimals on
+                      blur ("3" → "3.00"), which is wrong for hours/minutes. */}
+                  <Input
+                    value={customH}
+                    onChange={(e) => setCustomH(digits(e.target.value, 3))}
+                    inputMode="numeric"
+                    placeholder="0"
+                    aria-label="Hours"
+                    className="w-14 text-center font-mono"
+                  />
+                  <span className="text-[12px] text-faint">h</span>
+                  <Input
+                    value={customM}
+                    onChange={(e) => setCustomM(digits(e.target.value, 2))}
+                    inputMode="numeric"
+                    placeholder="0"
+                    aria-label="Minutes"
+                    className="w-14 text-center font-mono"
+                  />
+                  <span className="text-[12px] text-faint">m</span>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    disabled={!customMs}
+                    onClick={() => {
+                      if (!customMs) return;
+                      set({ durationMs: customMs });
+                      setCustomOpen(false);
+                    }}
+                  >
+                    Set
+                  </Button>
+                </div>
+              )}
 
               <button
                 type="button"
@@ -495,7 +610,12 @@ function StatusModal({ me, now, pending, onSet, onClose }: EditorProps) {
           {active && (
             <button
               type="button"
-              onClick={() => set({ kind: "none", emoji: "", note: "", durationMs: 0 })}
+              onClick={() => {
+                setCustomOpen(false);
+                setCustomH("");
+                setCustomM("");
+                set({ kind: "none", emoji: "", note: "", durationMs: 0 });
+              }}
               className="text-[13px] text-faint transition-colors duration-150 hover:text-danger"
             >
               Clear
