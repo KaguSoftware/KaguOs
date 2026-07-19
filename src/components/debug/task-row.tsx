@@ -29,13 +29,16 @@ import { Dropdown } from "@/components/ui/dropdown";
 import { DatePicker } from "@/components/ui/date-picker";
 import { useAction } from "@/lib/use-action";
 import { useToast } from "@/components/ui/toast";
-import { taskToText } from "@/lib/debug-export";
+import { downloadTaskImages, taskToText } from "@/lib/debug-export";
+import { createClient } from "@/lib/supabase/client";
+import { TaskImages } from "@/components/debug/task-images";
 import { addDays, cn, formatDate, todayInIstanbul } from "@/lib/utils";
 import type {
   DebugKind,
   DebugPriority,
   DebugState,
   DebugTask,
+  DebugTaskImage,
   MembersMap,
 } from "@/lib/types";
 
@@ -127,6 +130,8 @@ export function TaskRow({
   projectName,
   foundCount,
   foundByTitle,
+  images,
+  onImagesChange,
   highlight,
   selectable,
   selected,
@@ -147,6 +152,9 @@ export function TaskRow({
   foundCount: number;
   /** Title of the audit that found this task, when it came from one. */
   foundByTitle?: string | null;
+  /** Screenshots attached to this task. */
+  images: DebugTaskImage[];
+  onImagesChange: (next: DebugTaskImage[]) => void;
   /** Part of the brainstorm session trail — tinted until the trail is cleared. */
   highlight?: boolean;
   /** In batch-select mode: show a leading checkbox. */
@@ -253,10 +261,39 @@ export function TaskRow({
     );
   }
 
-  /** Plain-text snapshot for pasting into a chat or a commit message. */
+  /**
+   * Plain-text snapshot for pasting into a chat, a commit message, or Claude
+   * Code. Any screenshots are downloaded alongside, and the text names the
+   * files — a terminal can't take a pasted image or fetch a private URL, so a
+   * local path is the only form it can act on.
+   */
   function copyTask() {
-    navigator.clipboard.writeText(taskToText(task, { members, projects })).then(
-      () => toastSuccess("Task copied."),
+    const text = taskToText(task, { members, projects, images });
+    // Clipboard FIRST, still inside the click's gesture window — awaiting the
+    // image fetches before this would get the write rejected in Safari.
+    navigator.clipboard.writeText(text).then(
+      async () => {
+        if (images.length === 0) {
+          toastSuccess("Task copied.");
+          return;
+        }
+        const supabase = createClient();
+        const saved = await downloadTaskImages(
+          [task],
+          { [task.id]: images },
+          async (paths) => {
+            const { data } = await supabase.storage
+              .from("debug")
+              .createSignedUrls(paths, 60 * 5);
+            return (data ?? []).map((d) => d.signedUrl ?? null);
+          }
+        );
+        toastSuccess(
+          saved > 0
+            ? `Copied — ${saved} image${saved === 1 ? "" : "s"} saved to Downloads.`
+            : "Task copied, but the images couldn't be downloaded."
+        );
+      },
       () => toastError("Couldn't copy — clipboard blocked.")
     );
   }
@@ -465,10 +502,20 @@ export function TaskRow({
       </div>
 
       {expanded && !editing && (
-        <div className="mt-2 flex items-start justify-between gap-4 pl-0.5">
-          <p className="max-w-[70ch] whitespace-pre-wrap text-[13px] leading-relaxed text-muted">
-            {task.description || "No details."}
-          </p>
+        <div className="mt-2 flex flex-col items-start justify-between gap-4 pl-0.5 sm:flex-row">
+          <div className="min-w-0">
+            <p className="max-w-[70ch] whitespace-pre-wrap text-[13px] leading-relaxed text-muted">
+              {task.description || "No details."}
+            </p>
+            {/* Screenshots live with the details, not in the button cluster —
+                they're part of what the task SAYS, not something you do to it. */}
+            <TaskImages
+              taskId={task.id}
+              images={images}
+              canEdit={!task.archived_at}
+              onChange={onImagesChange}
+            />
+          </div>
           <div className="flex shrink-0 items-center gap-1.5">
             {/* An audit's output IS a list of tasks — filing them is the way
                 this kind of work gets finished. */}
@@ -583,6 +630,17 @@ export function TaskRow({
             rows={3}
             placeholder="Details…"
             aria-label="Task description"
+          />
+          {/* Also in the editor, not just the read view: reaching for "add a
+              screenshot" while you're already editing the task is the obvious
+              move, and finding it only after cancelling out is a dead end
+              (Parsa, 2026-07-19). Uploads are immediate — they don't wait for
+              Save, because they're already stored against this task id. */}
+          <TaskImages
+            taskId={task.id}
+            images={images}
+            canEdit={!task.archived_at}
+            onChange={onImagesChange}
           />
           <div className="flex flex-wrap items-center gap-2">
             <Dropdown

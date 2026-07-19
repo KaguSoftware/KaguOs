@@ -61,7 +61,36 @@ Contracts w/ PDFs), **Debug** (everyone: per-project boards, self-claim-only, re
 
 ## Current status (2026-07-19)
 
-### 🟢 DEBUG OVERHAUL + DASHBOARD RESHAPE + APP-WIDE DATE FIX (2026-07-19) — BUILT + STATICALLY VERIFIED, branch `debug-board-overhaul`, migration 0035 APPLIED to prod, preview deployed, live-drive by Parsa PARTLY done
+### 🟢 TASK SCREENSHOTS + COMMS SPLIT + MOBILE REMINDERS (2026-07-19) — BUILT + STATICALLY VERIFIED, on `main`, migrations 0036+0037 APPLIED to prod, **live-drive by Parsa PENDING**
+Three items Parsa noted at the gym, plus Kemal's standing Comms request. Migrations `0036`
+(`debug_task_images` + private `debug` bucket) and `0037` (`comms_meetings` + `comms_notes`) are
+live in production.
+
+1. **Screenshots on debug tasks.** Private `debug` bucket, member-write (deliberately unlike
+   `learn`, which is admin-write — a screenshot is part of reporting a bug). Attach from **three**
+   places: the create form (files are staged locally and flushed once `createTask` returns the new
+   id — they can't upload earlier, nothing to key them to), the expanded row, and the row EDITOR.
+   All three exist because Parsa reached for each in turn and hit a dead end. Caps: 6 per task,
+   5MB each, PNG/JPEG/WebP/GIF, all announced rather than silently truncating.
+2. **Copy carries the images — for pasting into Claude Code.** This is what decided the design: a
+   terminal takes text only, can't receive a pasted image, and can't fetch a private Supabase URL.
+   The only thing it can act on is a LOCAL PATH. So Copy downloads the files and writes their
+   filenames into the text. `imageStem()` computes the name once for both the download and the
+   text — if those ever drift, the paste hands Claude a path that doesn't exist, which is worse
+   than no path. **Clipboard is written BEFORE awaiting the fetches** (Safari rejects a `writeText`
+   that's drifted from its user gesture).
+3. **Comms split into External / Meetings / Notes** — Kemal's request, finally scoped and built.
+   Both internal tables are SHARED with the whole comms section, not private: "in case it comes up
+   later" fails if only the author can see it. `comms_notes` is deliberately body + pin and nothing
+   else — a title, a category and a status would each be a reason not to bother.
+4. **Reminders composer stacks on phones.** `sm:contents` dissolves the wrapper at desktop so the
+   existing shift-free row is byte-identical to before. Do not remove it (see the anti-shift
+   comments in `reminders.tsx`).
+
+**Not yet driven by a human on any of this.** The one test that matters: copy a task with 2 images,
+paste into Claude Code, confirm it can `Read` both paths unaided.
+
+### 🟢 DEBUG OVERHAUL + DASHBOARD RESHAPE + APP-WIDE DATE FIX (2026-07-19) — SHIPPED, merged to `main` (`3f5f7b9`), migration 0035 applied, production deployed
 Two review passes ("go through the entire debug tab / dashboard tab, list me improvements") turned
 into two plans, both approved and built. Branch `debug-board-overhaul` (off `main`), commits
 `b4a7580` (debug) + `cff9f79` (dashboard/dates) + this one. Preview:
@@ -789,6 +818,16 @@ volume. They're insurance, not a speedup.
   (deferred — 2-browser tested). **The agreed feature plan is now fully built.**
 
 ## File map (key files)
+- `src/lib/debug-export.ts` — `taskToText`/`tasksToText`, plus `imageStem`/`imageFilename`/
+  `downloadBlob`/`downloadTaskImages`. The filename helpers are the contract between the file
+  written to disk and the path written into the clipboard — change one, change both.
+- `src/lib/debug-images.ts` — image caps (6/task, 5MB, allowed MIME). Lives outside
+  `actions/debug.ts` because a `"use server"` module may only export async functions.
+- `src/components/debug/task-images.tsx` — upload / thumbnails / lightbox, signed URLs batched in
+  one call per row. Used by the expanded row AND the row editor.
+- `src/components/comms/workspace.tsx` — Comms tablist (External / Meetings / Notes); contacts stay
+  server-rendered and arrive as the `external` prop.
+- `src/components/comms/internal.tsx` — `MeetingList` + `NoteList` (the internal half).
 - `src/lib/data/session.ts` — cached session context + `requireSection`/`requireAdmin` guards.
 - `src/lib/actions/*.ts` — server actions per section (account, admin, debug, work, learn,
   management, marketing).
@@ -968,7 +1007,8 @@ surface; run `/impeccable audit` after the batch (design hook was silenced after
 | Dashboard charts | numbers only (done) | **one** sparkline: net recurring over 12 months (`lastMonths()` + recharts both exist). Agreed with Parsa 2026-07-19 that the other five stats are single-state counts with nothing to plot — charting them would be decoration | next |
 | Reminder due dates | text + scope + done only | optional `due_on` via `DatePicker`, sort/dim by it. **Needs a migration** (`reminders` has no date column) — deferred rather than rushed at the end of a session | not started |
 | Mobile | **drawer menu + status reachable** (2026-07-19); layout padding and tables were already responsive | teammates' presence is still desktop-only (deliberate — browsing affordance); the rest of the app has NOT been driven on a real phone yet, only reasoned from the code + build. **Debug row, dashboard stat row and filter popover need a real-device pass** | needs a live pass |
-| Comms split (Kemal, 2026-07-19) | one flat Comms section (contacts + interactions) | **"divide comms into internal and external"** — internal = meeting notes, things to write down in case they come up later, general internal comms. External stays the current contacts/leads/clients. Needs its own plan: new tables + RLS, nav shape, and whether "internal" is per-person or shared | **not started — requested, not scoped** |
+| Comms split (Kemal, 2026-07-19) | **DONE 2026-07-19** — three tabs (External / Meetings / Notes), migration 0037. Meetings = title, date, attendees, summary, notes. Notes = body + pin. Both shared section-wide | Follow-ups if asked: link a meeting to a contact or project · attendees from an actual calendar · search across notes | — |
+| Task screenshots (2026-07-19) | 6 images/task, 5MB each, attach from create form + row + editor; Copy downloads them and writes filenames into the text | Paste-to-upload (Ctrl+V a screenshot straight onto a task) · annotation/crop · thumbnails via a transform CDN rather than full-size `unoptimized` | later |
 | ⌘K search | nav actions + content (tasks/projects/ideas/contacts/sprints), loaded-once client-filter (done) | live/fresh results, ranking, recents | later |
 | Presence | **REDESIGNED 2026-07-19 (`a26ff0f`)**: three signals — LIVE online/away/offline dot via presence channels + status (emoji+note, presets are shortcuts) + available-to-call; **simple durations (30m/1h/2h/12h)** auto-expiry; **centered modal editor** w/ live preview + **Save button** (draft, not auto-save); **teammate hover cards** (full status); always-on last-seen column; status-change notify to work team kept (done) | real emoji picker (currently a text field); open/close delay on hover cards; per-section activity | later |
 | Realtime | **live updates on every tab via `useRealtimeRefresh`→router.refresh(); debug board in-place (done 2026-07-19)** | in-place patching on more tabs (currently only debug patches; others refresh) | later |

@@ -3,22 +3,27 @@ import Link from "next/link";
 import { Plus, Users } from "lucide-react";
 import { requireSection } from "@/lib/data/session";
 import { getMembersMap } from "@/lib/data/members";
-import { PageHeader } from "@/components/shell/page-header";
 import { LiveRefresh } from "@/components/shell/live-refresh";
 import { EmptyState } from "@/components/ui/empty-state";
 import { LinkButton } from "@/components/ui/link-button";
 import { Badge } from "@/components/ui/badge";
 import { CONTACT_STATUS_TONE, CONTACT_STATUS_LABEL } from "@/components/comms/bits";
+import { CommsWorkspace } from "@/components/comms/workspace";
 import { formatDate } from "@/lib/utils";
-import type { Contact } from "@/lib/types";
+import type { CommsMeeting, CommsNote, Contact } from "@/lib/types";
 
 export const metadata: Metadata = { title: "Comms" };
 
 export default async function CommsPage() {
   const ctx = await requireSection("comms");
 
-  const [{ data: contacts }, { data: interactions }, members] =
-    await Promise.all([
+  const [
+    { data: contacts },
+    { data: interactions },
+    members,
+    { data: meetings },
+    { data: notes },
+  ] = await Promise.all([
       ctx.supabase
         .from("contacts")
         .select("*")
@@ -33,6 +38,20 @@ export default async function CommsPage() {
         .order("happened_on", { ascending: false })
         .order("created_at", { ascending: false }),
       getMembersMap(ctx.supabase),
+      // Internal comms rides the SAME wave — two extra queries here cost ~3ms,
+      // whereas awaiting them after this block would be two more serial
+      // round-trips to the Tokyo db (~305ms each).
+      ctx.supabase
+        .from("comms_meetings")
+        .select("*")
+        .eq("is_demo", ctx.showcase)
+        .order("held_on", { ascending: false })
+        .order("created_at", { ascending: false }),
+      ctx.supabase
+        .from("comms_notes")
+        .select("*")
+        .eq("is_demo", ctx.showcase)
+        .order("created_at", { ascending: false }),
     ]);
 
   const rows = (contacts ?? []) as Contact[];
@@ -52,18 +71,47 @@ export default async function CommsPage() {
 
   return (
     <>
-      <LiveRefresh tables={["contacts", "contact_interactions"]} />
-      <PageHeader
-        title="Kagu Comms"
-        description="Leads, clients, and everything tied to them."
-        action={
-          <LinkButton href="/comms/new">
-            <Plus className="size-3.5" aria-hidden />
-            New contact
-          </LinkButton>
-        }
+      <LiveRefresh
+        tables={[
+          "contacts",
+          "contact_interactions",
+          "comms_meetings",
+          "comms_notes",
+        ]}
       />
+      <CommsWorkspace
+        meetings={(meetings ?? []) as CommsMeeting[]}
+        notes={(notes ?? []) as CommsNote[]}
+        members={members}
+        meId={ctx.userId}
+        external={<ExternalContacts
+          rows={rows}
+          leads={leads}
+          clients={clients}
+          members={members}
+          lastByContact={lastByContact}
+        />}
+      />
+    </>
+  );
+}
 
+/** The outward-facing half: leads and clients, server-rendered as before. */
+function ExternalContacts({
+  rows,
+  leads,
+  clients,
+  members,
+  lastByContact,
+}: {
+  rows: Contact[];
+  leads: Contact[];
+  clients: Contact[];
+  members: Record<string, { name: string; color: string }>;
+  lastByContact: Map<string, { happened_on: string; summary: string }>;
+}) {
+  return (
+    <>
       {rows.length === 0 ? (
         <div className="rounded-lg border border-line bg-surface">
           <EmptyState

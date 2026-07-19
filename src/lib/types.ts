@@ -306,6 +306,26 @@ export type DebugTask = {
   updated_at: string;
 };
 
+/**
+ * A screenshot attached to a debug task. Bytes live in the private `debug`
+ * bucket; this row is the index. `width`/`height` are the natural size captured
+ * at upload so a thumbnail can reserve its box before the signed URL resolves.
+ */
+export type DebugTaskImage = {
+  id: string;
+  task_id: string;
+  /** Path within the `debug` bucket: "<task_id>/<uuid>.<ext>". */
+  file_path: string;
+  width: number | null;
+  height: number | null;
+  is_demo: boolean;
+  created_by: string | null;
+  created_at: string;
+};
+
+/** An image plus the short-lived signed URL that actually renders it. */
+export type DebugTaskImageView = DebugTaskImage & { url: string };
+
 export type CampaignStatus = "idea" | "planned" | "running" | "done";
 export type PostStatus = "draft" | "scheduled" | "published";
 
@@ -468,6 +488,41 @@ export type ContactLink = {
   note: string | null;
   created_by: string | null;
   created_at: string;
+};
+
+/**
+ * An internal meeting record — what happened, who was there, what we decided.
+ * The counterpart to `ContactInteraction`, which logs OUTWARD contact.
+ */
+export type CommsMeeting = {
+  id: string;
+  title: string;
+  /** Date only — the day it happened. Compare with `todayInIstanbul()`. */
+  held_on: string;
+  /** Profile ids of who attended. */
+  attendees: string[];
+  /** The one-line "what came of it", shown without expanding. */
+  summary: string | null;
+  notes: string | null;
+  is_demo: boolean;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+/**
+ * A shared scratchpad line — "things to write down in case they come up later".
+ * Deliberately thin: a body and a pin, nothing else. Structure is what stops
+ * people jotting things down.
+ */
+export type CommsNote = {
+  id: string;
+  body: string;
+  pinned: boolean;
+  is_demo: boolean;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
 };
 
 export type InteractionKind = "call" | "email" | "meeting" | "message" | "note";

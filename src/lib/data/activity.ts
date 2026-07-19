@@ -5,7 +5,9 @@ export type ActivityKind =
   | "idea"
   | "project"
   | "transaction"
-  | "post";
+  | "post"
+  | "meeting"
+  | "contact";
 
 export type ActivityItem = {
   id: string;
@@ -130,6 +132,45 @@ export async function getActivity(
           kind: "post" as const,
           title: r.title,
           href: "/marketing?tab=content",
+          at: r.created_at,
+          actorId: r.created_by,
+        }));
+      })()
+    );
+  }
+
+  if (canAccess(ctx, "comms")) {
+    jobs.push(
+      (async () => {
+        const { data } = await sb
+          .from("comms_meetings")
+          .select("id, title, created_at, created_by")
+          .eq("is_demo", ctx.showcase)
+          .order("created_at", { ascending: false })
+          .limit(PER_SOURCE);
+        return (data ?? []).map((r) => ({
+          id: `meeting:${r.id}`,
+          kind: "meeting" as const,
+          title: r.title,
+          href: "/comms",
+          at: r.created_at,
+          actorId: r.created_by,
+        }));
+      })()
+    );
+    jobs.push(
+      (async () => {
+        const { data } = await sb
+          .from("contacts")
+          .select("id, name, created_at, created_by")
+          .eq("is_demo", ctx.showcase)
+          .order("created_at", { ascending: false })
+          .limit(PER_SOURCE);
+        return (data ?? []).map((r) => ({
+          id: `contact:${r.id}`,
+          kind: "contact" as const,
+          title: r.name,
+          href: `/comms/${r.id}`,
           at: r.created_at,
           actorId: r.created_by,
         }));

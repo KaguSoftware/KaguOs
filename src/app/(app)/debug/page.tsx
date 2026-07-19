@@ -6,7 +6,7 @@ import { PageHeader } from "@/components/shell/page-header";
 import { DebugBoard } from "@/components/debug/board";
 import { LiveRefresh } from "@/components/shell/live-refresh";
 import { LinkButton } from "@/components/ui/link-button";
-import type { DebugFocus, DebugTask } from "@/lib/types";
+import type { DebugFocus, DebugTask, DebugTaskImage } from "@/lib/types";
 
 export const metadata: Metadata = { title: "Debug" };
 
@@ -28,6 +28,7 @@ export default async function DebugPage() {
     members,
     { data: workMemberships },
     focusRes,
+    { data: images },
   ] = await Promise.all([
     taskQuery,
     ctx.supabase
@@ -55,6 +56,14 @@ export default async function DebugPage() {
           .eq("active", true)
           .order("rank", { ascending: true })
           .order("created_at", { ascending: true }),
+    // Every screenshot on the board in one trip, grouped per task below. A
+    // per-row fetch would be one round-trip per expanded task against a Tokyo
+    // db; this rides the existing wave and costs nothing extra.
+    ctx.supabase
+      .from("debug_task_images")
+      .select("*")
+      .eq("is_demo", ctx.showcase)
+      .order("created_at", { ascending: true }),
   ]);
 
   const focusItems = (focusRes?.data ?? []) as DebugFocus[];
@@ -90,6 +99,7 @@ export default async function DebugPage() {
         showcase={ctx.showcase}
         suggestOptions={suggestOptions}
         focusItems={focusItems}
+        initialImages={(images ?? []) as DebugTaskImage[]}
       />
     </>
   );

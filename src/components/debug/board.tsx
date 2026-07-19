@@ -25,9 +25,23 @@ import { Button, ConfirmButton } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/components/ui/toast";
 import { useAction } from "@/lib/use-action";
-import { tasksToText } from "@/lib/debug-export";
+import {
+  downloadBlob,
+  downloadTaskImages,
+  tasksToText,
+} from "@/lib/debug-export";
 import { cn, formatDate, todayInIstanbul, todayLocal } from "@/lib/utils";
-import type { DebugFocus, DebugState, DebugTask, MembersMap } from "@/lib/types";
+import type {
+  DebugFocus,
+  DebugState,
+  DebugTask,
+  DebugTaskImage,
+  MembersMap,
+} from "@/lib/types";
+
+/** Stable identity for tasks with no screenshots — a fresh `[]` per render
+ *  would re-sign URLs in TaskImages on every parent update. */
+const EMPTY_IMAGES: DebugTaskImage[] = [];
 
 /** Above this many project boards, the tab strip gets a filter box. */
 const BOARD_SEARCH_THRESHOLD = 5;
@@ -166,6 +180,7 @@ export function DebugBoard({
   showcase,
   suggestOptions,
   focusItems,
+  initialImages,
 }: {
   initialTasks: DebugTask[];
   projects: { id: string; name: string }[];
@@ -178,8 +193,11 @@ export function DebugBoard({
   suggestOptions: { value: string; label: string }[];
   /** Every active focus item, rank-ordered. Empty = no focus set. */
   focusItems: DebugFocus[];
+  /** Every screenshot on the board, grouped per task below. */
+  initialImages: DebugTaskImage[];
 }) {
   const [tasks, setTasks] = useState<DebugTask[]>(initialTasks);
+  const [images, setImages] = useState<DebugTaskImage[]>(initialImages);
   // ["all"], or one-or-more of "general" / project ids. Pure client-side
   // switching, zero delay. Plain click replaces the selection, ctrl/cmd-click
   // adds to it, so the common case stays one click.
@@ -228,6 +246,23 @@ export function DebugBoard({
   if (seenTasks !== initialTasks) {
     setSeenTasks(initialTasks);
     setTasks(initialTasks);
+  }
+  const [seenImages, setSeenImages] = useState(initialImages);
+  if (seenImages !== initialImages) {
+    setSeenImages(initialImages);
+    setImages(initialImages);
+  }
+
+  /** Screenshots grouped by task, so each row gets its own slice in O(1). */
+  const imagesByTask = useMemo(() => {
+    const map: Record<string, DebugTaskImage[]> = {};
+    for (const img of images) (map[img.task_id] ??= []).push(img);
+    return map;
+  }, [images]);
+
+  /** Replace one task's images after an upload or delete inside a row. */
+  function setTaskImages(taskId: string, next: DebugTaskImage[]) {
+    setImages((prev) => [...prev.filter((i) => i.task_id !== taskId), ...next]);
   }
 
   const projectNames = useMemo(() => {
@@ -477,31 +512,60 @@ export function DebugBoard({
 
   function copyPicked() {
     if (pickedVisible.length === 0) return;
-    const text = tasksToText(pickedVisible, { members, projects });
+    const text = tasksToText(pickedVisible, {
+      members,
+      projects,
+      imagesByTask,
+    });
+    const n = pickedVisible.length;
+    // Clipboard first, inside the gesture window — see task-row's copyTask.
     navigator.clipboard.writeText(text).then(
-      () =>
+      async () => {
+        const saved = await downloadTaskImages(
+          pickedVisible,
+          imagesByTask,
+          async (paths) => {
+            const { data } = await createClient()
+              .storage
+              .from("debug")
+              .createSignedUrls(paths, 60 * 5);
+            return (data ?? []).map((d) => d.signedUrl ?? null);
+          }
+        );
         toastSuccess(
-          `Copied ${pickedVisible.length} task${pickedVisible.length === 1 ? "" : "s"}.`
-        ),
+          saved > 0
+            ? `Copied ${n} task${n === 1 ? "" : "s"} — ${saved} image${saved === 1 ? "" : "s"} saved to Downloads.`
+            : `Copied ${n} task${n === 1 ? "" : "s"}.`
+        );
+      },
       () => toastError("Couldn't copy — clipboard blocked.")
     );
   }
 
   function downloadPicked() {
     if (pickedVisible.length === 0) return;
-    const text = tasksToText(pickedVisible, { members, projects });
-    const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `debug-tasks-${todayLocal()}.txt`;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(url);
-    toastSuccess(
-      `Downloaded ${pickedVisible.length} task${pickedVisible.length === 1 ? "" : "s"}.`
+    // The .txt names the screenshots too, and they come down beside it — a
+    // saved bundle that mentions images you don't have is half a bug report.
+    const text = tasksToText(pickedVisible, { members, projects, imagesByTask });
+    // todayLocal (not todayInIstanbul) is right here: a download filename is
+    // about the person saving it, not a shared domain date.
+    downloadBlob(
+      new Blob([text], { type: "text/plain;charset=utf-8" }),
+      `debug-tasks-${todayLocal()}.txt`
     );
+    const n = pickedVisible.length;
+    downloadTaskImages(pickedVisible, imagesByTask, async (paths) => {
+      const { data } = await createClient()
+        .storage.from("debug")
+        .createSignedUrls(paths, 60 * 5);
+      return (data ?? []).map((d) => d.signedUrl ?? null);
+    }).then((saved) => {
+      toastSuccess(
+        saved > 0
+          ? `Downloaded ${n} task${n === 1 ? "" : "s"} and ${saved} image${saved === 1 ? "" : "s"}.`
+          : `Downloaded ${n} task${n === 1 ? "" : "s"}.`
+      );
+    });
   }
 
   // Assignee filter options: only people who actually hold a task, so the list
@@ -636,7 +700,7 @@ export function DebugBoard({
           reads as "there's more this way" instead of exposing a scrollbar. */}
       <div className="border-b border-line">
         <div
-          className="scrollbar-none flex gap-1 overflow-x-auto [mask-image:linear-gradient(to_right,transparent,black_1.25rem,black_calc(100%-1.25rem),transparent)]"
+          className="scrollbar-none flex gap-1 overflow-x-auto mask-[linear-gradient(to_right,transparent,black_1.25rem,black_calc(100%-1.25rem),transparent)]"
           role="tablist"
           aria-label="Project boards"
         >
@@ -936,6 +1000,8 @@ export function DebugBoard({
                     ? (tasks.find((t) => t.id === task.found_by)?.title ?? null)
                     : null
                 }
+                images={imagesByTask[task.id] ?? EMPTY_IMAGES}
+                onImagesChange={(next) => setTaskImages(task.id, next)}
                 highlight={sessionIds.has(task.id)}
                 selectable={selectMode}
                 selected={picked.has(task.id)}

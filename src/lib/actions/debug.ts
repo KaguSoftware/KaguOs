@@ -1,8 +1,14 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { blockIfShowcase, requireAdmin, requireSection } from "@/lib/data/session";
+import {
+  blockIfShowcase,
+  requireAdmin,
+  requireSection,
+  type SessionContext,
+} from "@/lib/data/session";
 import { notifySection, notifyUser } from "@/lib/actions/notify";
+import { MAX_IMAGES_PER_TASK } from "@/lib/debug-images";
 import type { ActionResult } from "@/lib/actions/account";
 import type { DebugKind, DebugPriority, DebugState, DebugTask } from "@/lib/types";
 
@@ -33,17 +39,26 @@ export async function createTask(
     ? String(formData.get("suggested_for") ?? "").trim() || null
     : null;
 
-  const { error } = await ctx.supabase.from("debug_tasks").insert({
-    title,
-    description: description || null,
-    priority,
-    kind,
-    project_id: projectId,
-    due_on: dueOn,
-    suggested_for: suggestedFor,
-    created_by: ctx.userId,
-  });
+  const { data: created, error } = await ctx.supabase
+    .from("debug_tasks")
+    .insert({
+      title,
+      description: description || null,
+      priority,
+      kind,
+      project_id: projectId,
+      due_on: dueOn,
+      suggested_for: suggestedFor,
+      created_by: ctx.userId,
+    })
+    .select("id")
+    .single();
   if (error) return { ok: false, message: error.message };
+
+  // The new id rides back on the result so the create form can attach the
+  // screenshots that were staged before the task existed. `ActionResult` carries
+  // it as an optional field, so every other caller is unaffected.
+  const newTaskId = created?.id as string | undefined;
 
   notifySection(ctx, "debug", {
     kind: "debug_task_new",
@@ -62,7 +77,7 @@ export async function createTask(
   }
 
   revalidatePath("/debug");
-  return { ok: true, message: "Task posted." };
+  return { ok: true, message: "Task posted.", id: newTaskId };
 }
 
 /**
@@ -310,11 +325,37 @@ export async function unclaimTask(taskId: string): Promise<ActionResult> {
   return { ok: true, message: "Unclaimed." };
 }
 
+/**
+ * Remove the stored screenshots for these tasks.
+ *
+ * `debug_task_images.task_id` cascades, so deleting a task drops the ROWS — but
+ * a cascade knows nothing about storage, so the OBJECTS would sit in the bucket
+ * forever, unreferenced and unbilled-for by anyone watching. Call this BEFORE
+ * deleting the tasks, while the paths are still readable. Same shape as the
+ * contract-file cleanup in `management.ts`.
+ *
+ * Best-effort: a storage failure must not block the delete, or a task becomes
+ * undeletable because of a leftover file.
+ */
+async function purgeTaskImages(
+  supabase: SessionContext["supabase"],
+  taskIds: string[]
+): Promise<void> {
+  if (taskIds.length === 0) return;
+  const { data } = await supabase
+    .from("debug_task_images")
+    .select("file_path")
+    .in("task_id", taskIds);
+  const paths = (data ?? []).map((r) => r.file_path).filter(Boolean);
+  if (paths.length > 0) await supabase.storage.from("debug").remove(paths);
+}
+
 export async function deleteTask(taskId: string): Promise<ActionResult> {
   const showcaseStop = await blockIfShowcase();
   if (showcaseStop) return showcaseStop;
   const ctx = await requireSection("debug");
 
+  await purgeTaskImages(ctx.supabase, [taskId]);
   const { error } = await ctx.supabase.from("debug_tasks").delete().eq("id", taskId);
   if (error) return { ok: false, message: error.message };
 
@@ -336,6 +377,7 @@ export async function deleteTasks(taskIds: string[]): Promise<ActionResult> {
   const ids = taskIds.filter(Boolean);
   if (ids.length === 0) return { ok: false, message: "Nothing selected." };
 
+  await purgeTaskImages(ctx.supabase, ids);
   const { error } = await ctx.supabase
     .from("debug_tasks")
     .delete()
@@ -347,4 +389,89 @@ export async function deleteTasks(taskIds: string[]): Promise<ActionResult> {
     ok: true,
     message: `Deleted ${ids.length} task${ids.length === 1 ? "" : "s"}.`,
   };
+}
+
+// ---- Screenshots -----------------------------------------------------------
+
+/**
+ * Record an already-uploaded screenshot. The BYTES go browser → private bucket
+ * (same path as learn's sprint files); this only writes the index row, so a
+ * large upload never travels through a server action.
+ *
+ * The cap is enforced here rather than only in the UI: the client already
+ * counts, but a second tab could push a seventh past it.
+ */
+export async function addTaskImage(input: {
+  taskId: string;
+  filePath: string;
+  width: number | null;
+  height: number | null;
+  /**
+   * Skip the path revalidation. The create form attaches images in a loop and
+   * then navigates to /debug, so revalidating once per image would do the same
+   * work up to six times for a page that's about to be refetched anyway.
+   */
+  skipRevalidate?: boolean;
+}): Promise<ActionResult> {
+  const showcaseStop = await blockIfShowcase();
+  if (showcaseStop) return showcaseStop;
+  const ctx = await requireSection("debug");
+
+  const { count } = await ctx.supabase
+    .from("debug_task_images")
+    .select("id", { count: "exact", head: true })
+    .eq("task_id", input.taskId);
+  if ((count ?? 0) >= MAX_IMAGES_PER_TASK) {
+    // Undo the upload — otherwise the bytes sit in the bucket with no row
+    // pointing at them, which nothing would ever clean up.
+    await ctx.supabase.storage.from("debug").remove([input.filePath]);
+    return {
+      ok: false,
+      message: `That task already has ${MAX_IMAGES_PER_TASK} images.`,
+    };
+  }
+
+  const { error } = await ctx.supabase.from("debug_task_images").insert({
+    task_id: input.taskId,
+    file_path: input.filePath,
+    width: input.width,
+    height: input.height,
+    is_demo: ctx.showcase,
+    created_by: ctx.userId,
+  });
+  if (error) {
+    await ctx.supabase.storage.from("debug").remove([input.filePath]);
+    return { ok: false, message: error.message };
+  }
+
+  if (!input.skipRevalidate) revalidatePath("/debug");
+  return { ok: true, message: "Image attached." };
+}
+
+/** Delete one screenshot — the row AND the stored object, never just one. */
+export async function deleteTaskImage(imageId: string): Promise<ActionResult> {
+  const showcaseStop = await blockIfShowcase();
+  if (showcaseStop) return showcaseStop;
+  const ctx = await requireSection("debug");
+
+  // Read the path first: after the row is gone there's no way back to the object.
+  const { data: image } = await ctx.supabase
+    .from("debug_task_images")
+    .select("file_path")
+    .eq("id", imageId)
+    .maybeSingle();
+
+  const { error } = await ctx.supabase
+    .from("debug_task_images")
+    .delete()
+    .eq("id", imageId)
+    .select("id");
+  if (error) return { ok: false, message: error.message };
+
+  if (image?.file_path) {
+    await ctx.supabase.storage.from("debug").remove([image.file_path]);
+  }
+
+  revalidatePath("/debug");
+  return { ok: true, message: "Image removed." };
 }

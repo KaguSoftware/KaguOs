@@ -105,7 +105,7 @@ export function Reminders({
           e.preventDefault();
           submit();
         }}
-        className="flex flex-wrap items-center gap-2 border-b border-line px-4 py-2.5"
+        className="flex flex-col gap-2 border-b border-line px-4 py-2.5 sm:flex-row sm:flex-wrap sm:items-center"
       >
         <Input
           value={draft}
@@ -113,11 +113,18 @@ export function Reminders({
           placeholder={scope === "team" ? "Tell the whole team…" : "Note to self…"}
           maxLength={300}
           aria-label="New reminder"
-          className="h-8 min-w-0 flex-1"
+          className="h-8 w-full min-w-0 sm:w-auto sm:flex-1"
         />
+        {/* On a phone the field gets its own row and the controls share the one
+            below it — at 375px a flex-1 input squeezed beside both collapsed to
+            a sliver. `sm:contents` DISSOLVES this wrapper from `sm` up, so the
+            desktop row is byte-identical to what it was: same flex parent, same
+            children, same widths. That matters more than it looks — the whole
+            row was tuned to not shift by a pixel when you toggle scope. */}
+        <div className="flex w-full items-center gap-2 sm:contents">
         {/* Scope is picked here, before submit — so Enter can't surprise you. */}
         <div
-          className="flex shrink-0 overflow-hidden rounded-md border border-line"
+          className="flex flex-1 shrink-0 overflow-hidden rounded-md border border-line sm:flex-none"
           role="group"
           aria-label="Who this reminder is for"
         >
@@ -134,7 +141,9 @@ export function Reminders({
               // lengths, so letting them size to content moved the group (and
               // with it the flex-1 input) on every toggle.
               className={cn(
-                "inline-flex w-19 items-center justify-center gap-1 py-1 text-xs transition-colors duration-150",
+                // flex-1 on phones so the pair fills its row; the fixed w-19
+                // returns at `sm` — see the comment below on why it's fixed.
+                "inline-flex flex-1 items-center justify-center gap-1 py-1 text-xs transition-colors duration-150 sm:w-19 sm:flex-none",
                 scope === s
                   ? "bg-raised text-ink"
                   : "text-faint hover:bg-raised/60 hover:text-muted"
@@ -158,6 +167,7 @@ export function Reminders({
           type="submit"
           size="sm"
           variant="outline"
+          className="shrink-0"
           disabled={!draft.trim() || pending}
           title={
             scope === "team"
@@ -168,6 +178,7 @@ export function Reminders({
           <Plus className="size-3.5" aria-hidden />
           Add
         </Button>
+        </div>
       </form>
 
       {items.length === 0 ? (

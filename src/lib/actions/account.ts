@@ -16,7 +16,17 @@ const STATUS_DURATIONS_MS = new Set([
   12 * 60 * 60 * 1000, // "until tomorrow"-ish; client labels it
 ]);
 
-export type ActionResult = { ok: boolean; message: string } | null;
+export type ActionResult = {
+  ok: boolean;
+  message: string;
+  /**
+   * Id of the row a create action just inserted. Optional, and only set by the
+   * actions whose forms need to do something with the new row before
+   * navigating away — the debug create form attaches staged screenshots, which
+   * can't be uploaded earlier because they need a task_id to belong to.
+   */
+  id?: string;
+} | null;
 
 export async function signOut() {
   const supabase = await createClient();

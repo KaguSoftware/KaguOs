@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { blockIfShowcase, requireSection } from "@/lib/data/session";
+import { todayInIstanbul } from "@/lib/utils";
 import type { ActionResult } from "@/lib/actions/account";
 import type { ContactKind, ContactStatus, InteractionKind } from "@/lib/types";
 
@@ -206,4 +207,116 @@ export async function deleteInteraction(
 
   revalidatePath(`/comms/${contactId}`);
   return { ok: true, message: "Interaction removed." };
+}
+
+// ---- Internal comms: meetings + notes ---------------------------------------
+//
+// The inward-facing half of the section. Everything above this line is about
+// people OUTSIDE the company; everything below is about us.
+
+/** Record a meeting that happened. Create and edit share this action. */
+export async function saveMeeting(
+  _prev: ActionResult,
+  formData: FormData
+): Promise<ActionResult> {
+  const showcaseStop = await blockIfShowcase();
+  if (showcaseStop) return showcaseStop;
+  const ctx = await requireSection("comms");
+
+  const id = String(formData.get("id") ?? "").trim() || null;
+  // No required fields (create-flow rule) — fall back so NOT NULL stays valid.
+  const title =
+    String(formData.get("title") ?? "").trim().slice(0, 200) || "Untitled meeting";
+  const heldOn = String(formData.get("held_on") ?? "").trim() || todayInIstanbul();
+  const summary = String(formData.get("summary") ?? "").trim() || null;
+  const notes = String(formData.get("notes") ?? "").trim() || null;
+  const attendees = formData
+    .getAll("attendees")
+    .map((v) => String(v))
+    .filter(Boolean);
+
+  const fields = { title, held_on: heldOn, attendees, summary, notes };
+
+  const { error } = id
+    ? await ctx.supabase.from("comms_meetings").update(fields).eq("id", id)
+    : await ctx.supabase
+        .from("comms_meetings")
+        .insert({ ...fields, is_demo: ctx.showcase, created_by: ctx.userId });
+  if (error) return { ok: false, message: error.message };
+
+  revalidatePath("/comms");
+  return { ok: true, message: id ? "Meeting updated." : "Meeting recorded." };
+}
+
+export async function deleteMeeting(meetingId: string): Promise<ActionResult> {
+  const showcaseStop = await blockIfShowcase();
+  if (showcaseStop) return showcaseStop;
+  const ctx = await requireSection("comms");
+
+  const { error } = await ctx.supabase
+    .from("comms_meetings")
+    .delete()
+    .eq("id", meetingId);
+  if (error) return { ok: false, message: error.message };
+
+  revalidatePath("/comms");
+  return { ok: true, message: "Meeting removed." };
+}
+
+/**
+ * Jot something down. One field on purpose — the moment this needs a title and
+ * a category, people stop using it and the thing gets forgotten instead.
+ */
+export async function addNote(body: string): Promise<ActionResult> {
+  const showcaseStop = await blockIfShowcase();
+  if (showcaseStop) return showcaseStop;
+  const ctx = await requireSection("comms");
+
+  const text = body.trim().slice(0, 2000);
+  if (!text) return { ok: false, message: "Nothing to note." };
+
+  const { error } = await ctx.supabase.from("comms_notes").insert({
+    body: text,
+    is_demo: ctx.showcase,
+    created_by: ctx.userId,
+  });
+  if (error) return { ok: false, message: error.message };
+
+  revalidatePath("/comms");
+  return { ok: true, message: "Noted." };
+}
+
+export async function setNotePinned(
+  noteId: string,
+  pinned: boolean
+): Promise<ActionResult> {
+  const showcaseStop = await blockIfShowcase();
+  if (showcaseStop) return showcaseStop;
+  const ctx = await requireSection("comms");
+
+  const { error } = await ctx.supabase
+    .from("comms_notes")
+    .update({ pinned })
+    .eq("id", noteId);
+  if (error) return { ok: false, message: error.message };
+
+  // No revalidatePath: the pin is optimistic in the client and LiveRefresh
+  // covers other tabs. Re-rendering the whole section on a pin toggle would
+  // make it feel slower than it is.
+  return { ok: true, message: pinned ? "Pinned." : "Unpinned." };
+}
+
+export async function deleteNote(noteId: string): Promise<ActionResult> {
+  const showcaseStop = await blockIfShowcase();
+  if (showcaseStop) return showcaseStop;
+  const ctx = await requireSection("comms");
+
+  const { error } = await ctx.supabase
+    .from("comms_notes")
+    .delete()
+    .eq("id", noteId);
+  if (error) return { ok: false, message: error.message };
+
+  revalidatePath("/comms");
+  return { ok: true, message: "Note removed." };
 }

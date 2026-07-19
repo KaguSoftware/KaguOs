@@ -4,10 +4,12 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import {
   Bug,
+  CalendarDays,
   FolderKanban,
   Lightbulb,
   Megaphone,
   Receipt,
+  UserPlus,
   type LucideIcon,
 } from "lucide-react";
 import type { ActivityItem, ActivityKind } from "@/lib/data/activity";
@@ -20,6 +22,8 @@ const KIND: Record<ActivityKind, { icon: LucideIcon; verb: string; label: string
   project: { icon: FolderKanban, verb: "started a project", label: "Projects" },
   transaction: { icon: Receipt, verb: "logged", label: "Money" },
   post: { icon: Megaphone, verb: "planned a post", label: "Posts" },
+  meeting: { icon: CalendarDays, verb: "recorded a meeting", label: "Meetings" },
+  contact: { icon: UserPlus, verb: "added a contact", label: "Contacts" },
 };
 
 /** How many rows show before "Show more". */
