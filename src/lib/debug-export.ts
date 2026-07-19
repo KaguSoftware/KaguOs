@@ -25,6 +25,7 @@ export function taskToText(
       : null;
   const meta = [
     boardName ?? "General",
+    task.kind,
     `${task.priority} priority`,
     task.due_on ? `due ${formatDate(task.due_on)}` : null,
     author ? `by ${author}` : null,

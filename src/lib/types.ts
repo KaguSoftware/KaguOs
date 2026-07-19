@@ -270,6 +270,12 @@ export type Contract = {
 
 export type DebugState = "open" | "in_progress" | "done";
 export type DebugPriority = "low" | "medium" | "high" | "urgent";
+/**
+ * What sort of work a task is. `audit` is the odd one: its output isn't a
+ * working thing, it's a LIST of things that need doing — "sweep the checkout
+ * for bugs" finishes by producing tasks, not by fixing anything.
+ */
+export type DebugKind = "fix" | "feature" | "audit";
 
 export type DebugTask = {
   id: string;
@@ -277,6 +283,7 @@ export type DebugTask = {
   description: string | null;
   state: DebugState;
   priority: DebugPriority;
+  kind: DebugKind;
   project_id: string | null;
   assignee_id: string | null;
   /** Admin's soft suggestion of who should take this — does NOT claim it. */
@@ -287,6 +294,8 @@ export type DebugTask = {
   done_at: string | null;
   /** When it was auto-archived off the board (null = live). */
   archived_at: string | null;
+  /** The audit task that turned this up, if it came from one. */
+  found_by: string | null;
   created_by: string | null;
   created_at: string;
   updated_at: string;
@@ -370,6 +379,39 @@ export type Announcement = {
   body: string;
   tone: "info" | "primary" | "warning";
   active: boolean;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+/** The structured picks behind a focus item's sentence, so it can be re-edited. */
+export type DebugFocusParts = {
+  /** "work" = get through the board · "find" = go look for what's NOT on it yet. */
+  mode?: "work" | "find";
+  /** What to go looking for, in "find" mode. */
+  hunt?: string[];
+  kinds?: string[];
+  states?: string[];
+  priorities?: string[];
+  order?: string[];
+};
+
+/**
+ * ONE focus item on the debug board — a set of boards plus their shared
+ * qualifiers. SEVERAL items are active at once, so the two axes are both open:
+ *   - one item, many boards  → "Pet app and Site — fixes" (one instruction)
+ *   - many items             → "Pet app: clear bugs" + "Site: ship features"
+ *                              (two different instructions, not smeared into one)
+ * `project_ids` empty = the whole board.
+ */
+export type DebugFocus = {
+  id: string;
+  body: string;
+  tone: "info" | "primary" | "warning";
+  active: boolean;
+  project_ids: string[];
+  parts: DebugFocusParts;
+  rank: number;
   created_by: string | null;
   created_at: string;
   updated_at: string;

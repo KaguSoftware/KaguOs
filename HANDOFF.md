@@ -61,6 +61,106 @@ Contracts w/ PDFs), **Debug** (everyone: per-project boards, self-claim-only, re
 
 ## Current status (2026-07-19)
 
+### 🟢 DEBUG: fix/feature KIND + MULTI-SELECT FILTERS + FOCUS HERO (2026-07-19) — BUILT + STATICALLY VERIFIED (tsc/lint/build green), NOT committed, live-drive by Parsa pending
+Parsa: "add a feature or fix tag to the things in the debug tab, with a filter for it" + "a hero
+section in debug tab that admins can write something, similar to the dashboard one, but with presets".
+Then, iteratively in the same session: narrow-and-deep presets → a composable sentence builder →
+multi-select everywhere → the composer moved into an overlay. **Migration 0031 APPLIED to prod**
+via `scripts/apply-migration.mjs` (STATUS 201). Green: `tsc`, lint (zero warnings in the touched
+files), `npm run build`. What shipped:
+
+- **`debug_tasks.kind` — `'fix' | 'feature' | 'audit'`** (0031 + **0034**, default `'fix'`: the board
+  began as a bug list so every existing row IS a fix). Set on create (`new-task-form.tsx` Kind field)
+  and in the inline edit; `createTask`/`updateTask` validate against a `KINDS` whitelist. Shown as a
+  `KindBadge` (Wrench / Sparkles / SearchCheck icon + lowercase word) in `task-row.tsx`, and carried
+  into the copy/export text (`debug-export.ts`).
+- **"Go find what needs doing" is a FOCUS MODE — this was the actual ask.** Parsa: "have an
+  announcement preset which tells people to go find issues/features needed with the selected project."
+  The focus builder's first step is now **Asking the team to → `Work through the board` | `Go find what
+  needs doing`**, because those are opposite instructions and can't share a sentence shape:
+  work → "Pet app — fixes, urgent and high priority." · find → "Pet app — go looking for anything
+  broken, what's missing. File what you hit." In find mode the qualifier row swaps to **Looking for**
+  (bugs · missing features · rough edges · out-of-date stuff), all optional. Persisted in `parts.mode`
+  + `parts.hunt` so an item re-opens in the right mode.
+  ⚠️ The find sentence **comma-joins** its list and never uses "and" — the clause already ends with
+  "File what you hit", and "anything broken and what's missing and file what you hit" was unreadable.
+- **`audit` as a third task kind — built BEFORE the ask was clarified, kept because it's genuinely
+  useful, but it is NOT what "go find issues" meant.** (Claude first read the request as a new task
+  type; Parsa corrected it to a focus preset, above.) Same axis as fix/feature
+  ("what sort of work is this"), so it inherits the badge, the multi-select filter and the focus
+  builder for free. What makes it different: **an audit's output is a LIST of tasks, not a finished
+  thing.** So (**0034**) `debug_tasks.found_by` → the audit that turned a task up, and a new action
+  **`logAuditFindings(auditId, titles)`** files N findings in ONE trip — they inherit the audit's
+  board, default to `fix`, and fire ONE collapsed notification ("Audit found 7: …"), never one per row.
+  UI: an audit row's expanded view gets a **"Log findings" / "Found N"** button opening a one-per-line
+  textarea; a task that came from an audit reads "· found by <audit title>" in its meta line. The
+  `Found N` count is computed over ALL tasks, not the filtered view, so an audit's yield doesn't
+  change as you filter.
+  ⚠️ `found_by` is **`on delete set null`, NOT cascade** — deleting an audit must never delete the real
+  work it discovered; that work is the value the audit produced.
+  ⚠️ Filing findings deliberately does **not** mark the audit done — finding things and declaring the
+  sweep over are two separate calls, and an audit often files a batch, keeps looking, files more.
+  ⚠️ **The kind badge is deliberately NEUTRAL for BOTH kinds.** The first build gave `feature` the
+  `green` tone; a critique caught that green already means *done* on this board (`bg-primary/10` badge
+  vs `bg-primary/15` done-state button — 5% apart, four hues already on one row). DESIGN.md says colour
+  marks STATE ONLY and a kind is not a state. Icon + word carry the distinction. **Don't re-colour it.**
+- **ALL board filters are now MULTI-SELECT** (Parsa: "sometimes we need multiple priorities, multiple
+  projects"). New **`MultiDropdown`** in `ui/dropdown.tsx` — same shell/keyboard model as `Dropdown`,
+  but menu stays OPEN on pick, `aria-multiselectable`, a "Clear selection" footer, and a trigger that
+  collapses to "3 projects" past one pick. Assignee / kind / state / priority are `string[]`;
+  **empty array = no filter** (so untouched controls never hide rows), several picks are **OR-within,
+  AND-across**. The `"" → "Any priority"` placeholder rows were REMOVED from the option lists — the
+  neutral state is now the empty array, and each control passes an explicit `placeholder` that still
+  names its field ("Anyone" / "Any kind" / "Any state" / "Any priority"). `MultiDropdown` makes
+  `placeholder` + `label` REQUIRED props so it can't regress to the generic "Choose…".
+  Also: **project boards are ctrl/⌘-click multi-select** — plain click still replaces the selection,
+  so the one-board case stays one click; deselecting the last board falls back to `["all"]`. The
+  per-row project badge now shows whenever >1 board is in view. "Clear" reports a count ("Clear 3").
+  ⚠️ Four of the five refine dropdowns previously had **no accessible name** (the trigger's text is a
+  value, not a label) — `MultiDropdown` takes an explicit `label` and builds `aria-label="Kind: 2 kinds"`.
+- **Debug focus — a LIST of items, not one banner** (`debug/focus-hero.tsx` +
+  `lib/actions/debug-focus.ts` + table `debug_focus`, migrations **0031 + 0032**, both applied).
+  Deliberately a **separate table from `announcements`** — that one is company-wide news, this one
+  never leaves /debug; sharing a table would mean every announcement query has to remember to filter,
+  and forgetting once leaks a debug focus onto the dashboard.
+  **The unit is a focus ITEM: a SET of boards (`project_ids`; empty = the whole board) + their shared
+  qualifiers — and SEVERAL items are active at once.** Both axes matter and each was wrong once:
+  0031 shipped ONE row holding one sentence, so every clause smeared across every project ("Focus on
+  Pet app and Site — fixes and features" tells nobody which board needs which); **0032** split it into
+  a list but pinned each item to ONE project, which then forced duplicate items for "Pet app and Site
+  both need bugs cleared". **0033** made the target an array, so:
+  one item + many boards = one shared instruction · many items = genuinely different instructions.
+  Two items MAY name the same board (a broad "Pet app — fixes" plus a sharper "Pet app — login crash
+  first"); rank disambiguates, so 0032's one-item-per-board unique index was dropped.
+  `parts jsonb` holds the structured picks so an item re-opens for editing instead of being retyped.
+  `saveDebugFocus({id?, projectIds, …})` — with `id` it UPDATES in place (keeping rank, so the list
+  doesn't reshuffle under a typo fix); `clearDebugFocus(id)` / `clearAllDebugFocus()` / `reorderDebugFocus(ids)`.
+  **Banner**: 0 items → dashed "Set the focus" (admins only) · 1 item → the full-width tone-coloured
+  banner it always was · 2+ → a compact ranked list, one row each, each keeping its own tone dot.
+  **Modal** (portaled, frosted, pop-in, Esc/backdrop, scroll-lock — same language as the sidebar
+  `StatusModal`, deliberately NOT `CreateOverlay`): shows the CURRENT LIST first with per-item
+  up/down/edit/remove, because editing focus is usually a small change to what's there. The composer
+  — board chips + a single flat "Narrow it" row (kind · priority · state · order, hairline-separated)
+  + the live sentence + tone — appears **only while adding/editing one item**, so the modal is short
+  at rest and the chips are never permanent furniture.
+  ⚠️ **The board picker gets a search box at ≥5 projects** (`BOARD_SEARCH_THRESHOLD`, same constant and
+  reasoning as the board tab strip — Parsa: "I really have to look for the project I wanna select").
+  Enter picks the single match. **Already-picked boards always render even when filtered out** — a
+  filter that hides your own selection reads as having dropped it. A count + Clear sits in the header.
+  ⚠️ **Chips, not dropdowns, and no "use this wording" step.** Five multi-select dropdowns hid sixteen
+  options behind five closed doors (Parsa: "the multi-select dropdown is messy"); as chips the whole
+  vocabulary is visible and each option is one click — the same reasoning as the status modal's preset
+  tiles. The sentence is a **live editable textarea**: chips rewrite it until the admin types, then
+  `edited` latches and chips stop clobbering their words ("Back to the built wording" un-latches).
+  ⚠️ An early build highlighted the "active" preset via `body === preset.text` exact compare, which
+  silently vanished on any keystroke; that dishonest state was **removed**, not fixed.
+  ⚠️ Order/state phrases deliberately avoid the word "and" (clauses are already joined with it —
+  "urgent and high only and overdue first" was the bug).
+- Mounted at the top of `board.tsx`; `/debug/page.tsx` fetches ALL active items rank-ordered in the
+  existing `Promise.all` wave (showcase → `null`, same rule as the dashboard announcement) and mounts
+  `<LiveRefresh tables={["debug_focus"]} />` — the tasks stream through the board's own channel, but
+  the banner is server-rendered and needs the re-pull.
+
 ### 🟢 STATUS REDESIGN — three-signal model, live presence channels, modal editor, hover cards (2026-07-19) — BUILT + STATICALLY VERIFIED (tsc/lint/build green), committed `a26ff0f`, live two-browser drive by Parsa pending
 Parsa: "redo the entire status thing — it can be a lot better." Full rebuild agreed via Q&A, built in
 one session. **Migration 0030 APPLIED to prod by Parsa.** Committed as `a26ff0f "status update"`.
@@ -625,6 +725,16 @@ volume. They're insurance, not a speedup.
   members (the presence denominator).
 - `src/components/shell/announcement-hero.tsx` + `lib/actions/announcements.ts` — admin banner
   (one active at a time). `src/components/shell/command-palette.tsx` — ⌘K nav+actions.
+- **Debug focus (2026-07-19)**: `src/components/debug/focus-hero.tsx` — banner (0/1/many shapes) +
+  `FocusModal` (list-first editor, chip composer). `src/lib/actions/debug-focus.ts` —
+  save/clear/clearAll/reorder. Table `debug_focus` (0031 + **0032**: `project_id`, `parts` jsonb,
+  `rank`, partial unique index = one active item per board). Type `DebugFocus`/`DebugFocusParts`
+  in types.ts. **Several items are active at once — it's a list, not a single banner.**
+- `src/components/ui/dropdown.tsx` — `Dropdown` (single) **and `MultiDropdown`** (multi-select:
+  menu stays open on pick, `aria-multiselectable`, "Clear selection" footer, trigger collapses to
+  "3 boards"; `placeholder` + `label` are REQUIRED so a control always names its field). The debug
+  board's assignee/kind/state/priority filters use it — **empty array = no filter**, picks are
+  OR-within and AND-across.
 - `supabase/migrations/0001–0010` — full schema history (0008 reminders, 0009 notifications,
   0010 announcements; all applied to cloud).
 - **Presence (REDESIGNED 2026-07-19, `a26ff0f`)**: `src/components/shell/sidebar-presence.tsx` — the
@@ -651,7 +761,15 @@ volume. They're insurance, not a speedup.
   **0027** presence status columns + grants (applied 2026-07-18) · **0028** `status_until` + `status_change`
   notify kind (applied 2026-07-19) · **0029** realtime publication + replica-identity-full, idempotent
   (applied 2026-07-19) · **0030** `profiles.status_emoji` + grant, drops `unavailable` from kind CHECK,
-  backfills preset emojis (applied by Parsa 2026-07-19).
+  backfills preset emojis (applied by Parsa 2026-07-19) · **0031** `debug_tasks.kind` (fix/feature,
+  default 'fix') + `debug_focus` table (applied 2026-07-19 via `apply-migration.mjs`) · **0032**
+  debug focus becomes a LIST — `project_id`/`parts`/`rank` + partial unique index (applied 2026-07-19) ·
+  **0033** focus item targets MANY boards — `project_ids uuid[]`, drops `project_id` + that unique
+  index (applied 2026-07-19) · **0034** `audit` added to the kind CHECK + `debug_tasks.found_by`
+  (applied 2026-07-19). **0031→0032→0033 all reshaped `debug_focus` in place because it held
+  zero rows; it is now settled — a future change needs a real data migration.**
+  ✅ **All of 0028–0034 were `migration repair`-ed to `applied` (2026-07-19); `migration list --linked`
+  now shows local == remote for all 34.** A future `db push` won't try to re-run them.
 - `supabase/migrations/0020–0025` (all APPLIED to prod, 2026-07-17): **0020** idea pipeline (vote value,
   required_count/stage, work_access_count) · **0021** debug suggest_for/due_on + project due_on · **0022**
   contact_interactions · **0023** debug_suggested notify kind · **0024** debug auto-archive (done_at/archived_at
@@ -713,6 +831,10 @@ surface; run `/impeccable audit` after the batch (design hook was silenced after
 | Ideas pipeline | up/down votes, unanimous auto-promote, "N to promote" bar, filters (done) | **stage funnel UI (open→discussing→accepted; cols exist), reactions (🤔/🔥), effort×impact + quick-wins sort, dedupe/merge, auto-archive stale, "needs your vote" nudge, weekly digest** | Phase 2/3 (Parsa's "far more" — agreed, not yet built) |
 | Comms interactions | log per contact + last-interaction on list (done) | analytics / follow-up reminders | later |
 | Debug lifecycle | suggest-for + deadlines + auto-archive (7d, pg_cron) + admin batch-delete (done) | — | — |
+| Debug kind tag | `fix`/`feature`/**`audit`** on every task + create/edit + multi-select filter + copy/export text (done 2026-07-19) | — | — |
+| Debug audits | `audit` kind + `found_by` link + "Log findings" one-per-line composer filing N tasks in one trip + "Found N" / "found by X" (done 2026-07-19) | audit templates (a reusable checklist per project); "close the audit when all findings are done"; audit yield on the dashboard | later |
+| Debug focus | **a LIST of items, each covering MANY boards** (`project_ids[]`; empty = whole board) with kind/priority/state/order qualifiers, hand-ranked, searchable chip composer in a status-style modal (done 2026-07-19) | **"Apply" — snap the board's filters to a focus item, making it a shared saved view instead of only words**; expiry/auto-clear; who set it + when on the banner | not scoped with Parsa yet |
+| Debug filters | assignee/kind/state/priority all MULTI-select; project boards ctrl/⌘-click multi (done 2026-07-19) | saved views, URL-backed filter state (currently resets on navigation) | later |
 | ⌘K search | nav actions + content (tasks/projects/ideas/contacts/sprints), loaded-once client-filter (done) | live/fresh results, ranking, recents | later |
 | Presence | **REDESIGNED 2026-07-19 (`a26ff0f`)**: three signals — LIVE online/away/offline dot via presence channels + status (emoji+note, presets are shortcuts) + available-to-call; **simple durations (30m/1h/2h/12h)** auto-expiry; **centered modal editor** w/ live preview + **Save button** (draft, not auto-save); **teammate hover cards** (full status); always-on last-seen column; status-change notify to work team kept (done) | real emoji picker (currently a text field); open/close delay on hover cards; per-section activity | later |
 | Realtime | **live updates on every tab via `useRealtimeRefresh`→router.refresh(); debug board in-place (done 2026-07-19)** | in-place patching on more tabs (currently only debug patches; others refresh) | later |
@@ -756,12 +878,16 @@ surface; run `/impeccable audit` after the batch (design hook was silenced after
   subscription MUST call `await supabase.realtime.setAuth(session.access_token)` before `.subscribe()`
   (done in the debug board + `useRealtimeRefresh`). If a new realtime surface shows no teammate events,
   this is the first thing to check. **The debug-board fix still needs TWO-BROWSER live verification.**
-- ⚠️ **Migrations 0028 + 0029 + 0030 applied to prod but `migration repair` status unconfirmed**
-  (2026-07-19). 0028/0029 went via `apply-migration.mjs`; **0030 was applied by Parsa** (method not
-  confirmed to Claude). Per the standing rule, run
-  `npx supabase migration repair --status applied 0028 0029 0030 --linked` before the next `db push` if
-  `migration list --linked` shows any as remote-only, or `db push` will try to re-run them (0029 is
-  idempotent; 0028/0030 would error harmlessly on their first statement — no partial state).
+- ✅ **CLI migration history reconciled through 0034 (2026-07-19).** 0028–0034 had all been applied to
+  prod via `apply-migration.mjs` (and 0030 by Parsa) but showed `remote: ""` in `migration list --linked`
+  — the exact drift the standing rule warns about. Claude ran
+  `npx supabase migration repair --status applied 0028 0029 0030 0031 0032 0033 0034 --linked`;
+  **local == remote for all 34 now**, verified. The standing rule still holds for the NEXT one: anything
+  applied via `apply-migration.mjs` must be repaired before the next `db push`.
+- ⚠️ **`debug_focus` was reshaped in place three times** (0031 → 0032 → 0033) rather than versioned,
+  because the table held **zero rows in prod** — verified with a count before each migration. The shape
+  is settled now (`project_ids uuid[]` + `parts jsonb` + `rank`); once it holds real rows, any further
+  reshape needs a real data migration.
 - Deleting a user cascades cleanly (created_by set-null everywhere).
 - `staleTimes` is experimental — if a Next upgrade breaks it, drop it from next.config.ts.
 

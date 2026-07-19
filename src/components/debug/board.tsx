@@ -17,15 +17,16 @@ import {
 import { createClient } from "@/lib/supabase/client";
 import { deleteTasks } from "@/lib/actions/debug";
 import { TaskRow } from "@/components/debug/task-row";
+import { DebugFocusHero } from "@/components/debug/focus-hero";
 import { EmptyState } from "@/components/ui/empty-state";
-import { Dropdown } from "@/components/ui/dropdown";
+import { Dropdown, MultiDropdown } from "@/components/ui/dropdown";
 import { Button, ConfirmButton } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/components/ui/toast";
 import { useAction } from "@/lib/use-action";
 import { tasksToText } from "@/lib/debug-export";
 import { cn, formatDate } from "@/lib/utils";
-import type { DebugState, DebugTask, MembersMap } from "@/lib/types";
+import type { DebugFocus, DebugState, DebugTask, MembersMap } from "@/lib/types";
 
 /** Above this many project boards, the tab strip gets a filter box. */
 const BOARD_SEARCH_THRESHOLD = 5;
@@ -47,18 +48,24 @@ const SORT_OPTIONS = [
   { value: "newest", label: "Newest" },
 ];
 
+// Multi-select filter options — no "Any …" row, because picking nothing IS
+// "any". The placeholder on each control says so.
 const PRIORITY_FILTER_OPTIONS = [
-  { value: "", label: "Any priority" },
   { value: "urgent", label: "Urgent" },
   { value: "high", label: "High" },
   { value: "medium", label: "Medium" },
   { value: "low", label: "Low" },
 ];
 
+const KIND_FILTER_OPTIONS = [
+  { value: "fix", label: "Fix" },
+  { value: "feature", label: "Feature" },
+  { value: "audit", label: "Audit" },
+];
+
 // Explicit per-state filter — finer than the Active/Done tabs, which fold
 // open + in_progress together under "Active". Refines within the active tab.
 const STATE_FILTER_OPTIONS = [
-  { value: "", label: "Any state" },
   { value: "open", label: "Open" },
   { value: "in_progress", label: "In progress" },
   { value: "done", label: "Done" },
@@ -112,6 +119,7 @@ export function DebugBoard({
   meId,
   isAdmin,
   suggestOptions,
+  focusItems,
 }: {
   initialTasks: DebugTask[];
   projects: { id: string; name: string }[];
@@ -120,15 +128,25 @@ export function DebugBoard({
   isAdmin: boolean;
   /** Work members an admin can "suggest for" from the edit form. Empty for non-admins. */
   suggestOptions: { value: string; label: string }[];
+  /** Every active focus item, rank-ordered. Empty = no focus set. */
+  focusItems: DebugFocus[];
 }) {
   const [tasks, setTasks] = useState<DebugTask[]>(initialTasks);
   const [filter, setFilter] = useState<Filter>("active");
-  // "all" | "general" | a project id — pure client-side switching, zero delay.
-  const [board, setBoard] = useState<string>("all");
+  // ["all"], or one-or-more of "general" / project ids. Pure client-side
+  // switching, zero delay. Plain click replaces the selection, ctrl/cmd-click
+  // adds to it, so the common case stays one click.
+  const [board, setBoard] = useState<string[]>(["all"]);
   const [boardQuery, setBoardQuery] = useState("");
-  const [assignee, setAssignee] = useState(""); // "" any · "unassigned" · a user id
-  const [priority, setPriority] = useState(""); // "" any · a priority
-  const [stateFilter, setStateFilter] = useState(""); // "" any · a DebugState
+  // Filters are multi-select: an EMPTY array means "no filter" (show all), and
+  // several picks are OR'd together — "urgent or high", "Pet app or Site".
+  // That's the shape people actually want on a shared board; a single-value
+  // filter forces you to look at one project at a time when the real question
+  // is usually "these two".
+  const [assignee, setAssignee] = useState<string[]>([]); // "unassigned" · user ids
+  const [priority, setPriority] = useState<string[]>([]);
+  const [stateFilter, setStateFilter] = useState<string[]>([]);
+  const [kindFilter, setKindFilter] = useState<string[]>([]);
   const [taskQuery, setTaskQuery] = useState("");
   const [sort, setSort] = useState<Sort>("smart");
   const [live, setLive] = useState(false);
@@ -161,6 +179,16 @@ export function DebugBoard({
     for (const p of projects) map[p.id] = p.name;
     return map;
   }, [projects]);
+
+  // How many tasks each audit turned up — counted over ALL tasks, not the
+  // filtered view, so an audit's yield doesn't change as you filter the board.
+  const foundCounts = useMemo(() => {
+    const map: Record<string, number> = {};
+    for (const t of tasks) {
+      if (t.found_by) map[t.found_by] = (map[t.found_by] ?? 0) + 1;
+    }
+    return map;
+  }, [tasks]);
 
   // Optimistic layer: rows update instantly, server + realtime reconcile after.
   const patchTask = useCallback((id: string, patch: Partial<DebugTask>) => {
@@ -286,8 +314,14 @@ export function DebugBoard({
 
   const visible = useMemo(() => {
     let list = sortTasks(liveTasks, sort);
-    if (board === "general") list = list.filter((t) => !t.project_id);
-    else if (board !== "all") list = list.filter((t) => t.project_id === board);
+    // `board` holds "all", or one-or-more board keys ("general" / project ids).
+    // Ctrl/Cmd-click a tab to add it to the selection — "Pet app AND Site" is a
+    // real question people ask, and one-board-at-a-time forced two passes.
+    if (!board.includes("all")) {
+      list = list.filter((t) =>
+        t.project_id ? board.includes(t.project_id) : board.includes("general")
+      );
+    }
 
     switch (filter) {
       case "active":
@@ -301,12 +335,24 @@ export function DebugBoard({
         break;
     }
 
-    if (assignee === "unassigned") list = list.filter((t) => !t.assignee_id);
-    else if (assignee) list = list.filter((t) => t.assignee_id === assignee);
+    // Each filter is OR-within, AND-across: "(urgent or high) and (Pet app)".
+    // An empty array is no filter at all, so untouched controls never hide rows.
+    if (assignee.length > 0) {
+      list = list.filter((t) =>
+        t.assignee_id
+          ? assignee.includes(t.assignee_id)
+          : assignee.includes("unassigned")
+      );
+    }
 
-    if (priority) list = list.filter((t) => t.priority === priority);
+    if (priority.length > 0)
+      list = list.filter((t) => priority.includes(t.priority));
 
-    if (stateFilter) list = list.filter((t) => t.state === stateFilter);
+    if (stateFilter.length > 0)
+      list = list.filter((t) => stateFilter.includes(t.state));
+
+    if (kindFilter.length > 0)
+      list = list.filter((t) => kindFilter.includes(t.kind));
 
     const q = taskQuery.trim().toLowerCase();
     if (q) {
@@ -326,7 +372,7 @@ export function DebugBoard({
       }
     }
     return list;
-  }, [liveTasks, filter, board, meId, assignee, priority, stateFilter, taskQuery, sort, sessionIds]);
+  }, [liveTasks, filter, board, meId, assignee, priority, stateFilter, kindFilter, taskQuery, sort, sessionIds]);
 
   const openCount = liveTasks.filter((t) => t.state === "open").length;
 
@@ -390,14 +436,16 @@ export function DebugBoard({
     const people = [...ids]
       .map((id) => ({ value: id, label: members[id]?.name ?? "Someone" }))
       .sort((a, b) => a.label.localeCompare(b.label));
-    return [
-      { value: "", label: "Anyone" },
-      { value: "unassigned", label: "Unassigned" },
-      ...people,
-    ];
+    return [{ value: "unassigned", label: "Unassigned" }, ...people];
   }, [liveTasks, members]);
 
-  const secondaryActive = Boolean(assignee || priority || stateFilter || taskQuery);
+  const activeFilterCount =
+    assignee.length +
+    priority.length +
+    stateFilter.length +
+    kindFilter.length +
+    (taskQuery.trim() ? 1 : 0);
+  const secondaryActive = activeFilterCount > 0;
 
   const countFor = (key: string) =>
     liveTasks.filter(
@@ -412,11 +460,38 @@ export function DebugBoard({
   const showBoardSearch = projects.length >= BOARD_SEARCH_THRESHOLD;
   const q = boardQuery.trim().toLowerCase();
   const projectTabs = projects
-    .filter((p) => !q || p.name.toLowerCase().includes(q) || p.id === board)
+    .filter((p) => !q || p.name.toLowerCase().includes(q) || board.includes(p.id))
     .map((p) => ({ key: p.id, name: p.name }));
+
+  /**
+   * Plain click selects just this board; ctrl/cmd-click toggles it into a
+   * multi-board selection. "All boards" always resets to the single "all"
+   * state — it can't meaningfully combine with anything.
+   */
+  function pickBoard(key: string, additive: boolean) {
+    if (key === "all" || !additive) {
+      setBoard([key]);
+      return;
+    }
+    setBoard((prev) => {
+      const base = prev.filter((k) => k !== "all");
+      const next = base.includes(key)
+        ? base.filter((k) => k !== key)
+        : [...base, key];
+      // Deselecting the last board falls back to "all" rather than showing
+      // an empty board with no way to tell why.
+      return next.length === 0 ? ["all"] : next;
+    });
+  }
 
   return (
     <div className="space-y-3">
+      <DebugFocusHero
+        items={focusItems}
+        isAdmin={isAdmin}
+        projects={projects}
+      />
+
       {showBoardSearch && (
         <div className="relative max-w-xs">
           <Search
@@ -431,7 +506,7 @@ export function DebugBoard({
               // type "pet", hit Enter, you're on Pet app without reaching for it.
               if (e.key === "Enter" && projectTabs.length === 1) {
                 e.preventDefault();
-                setBoard(projectTabs[0].key);
+                setBoard([projectTabs[0].key]);
                 setBoardQuery("");
               }
             }}
@@ -467,14 +542,19 @@ export function DebugBoard({
             { key: "general", name: "General" },
             ...projectTabs,
           ].map((tab) => {
-            const active = board === tab.key;
+            const active = board.includes(tab.key);
             const count = tab.key === "all" ? null : countFor(tab.key);
             return (
               <button
                 key={tab.key}
                 role="tab"
                 aria-selected={active}
-                onClick={() => setBoard(tab.key)}
+                title={
+                  tab.key === "all"
+                    ? undefined
+                    : "Ctrl/⌘-click to add another board"
+                }
+                onClick={(e) => pickBoard(tab.key, e.ctrlKey || e.metaKey)}
                 className={cn(
                   "-mb-px flex shrink-0 items-center gap-1.5 border-b-2 px-3 py-2 text-sm transition-colors duration-150",
                   active
@@ -566,27 +646,46 @@ export function DebugBoard({
             className="h-9 w-full rounded-md border border-line bg-raised pl-8 pr-3 text-sm text-ink placeholder:text-muted transition-colors duration-150 hover:border-line-strong focus-visible:border-line-strong"
           />
         </div>
-        <Dropdown
+        <MultiDropdown
           className="w-40"
-          value={assignee}
+          label="Assignee"
+          placeholder="Anyone"
+          summaryNoun="people"
+          values={assignee}
           onChange={setAssignee}
           options={assigneeOptions}
           searchThreshold={8}
         />
-        <Dropdown
+        <MultiDropdown
           className="w-36"
-          value={stateFilter}
+          label="Kind"
+          placeholder="Any kind"
+          summaryNoun="kinds"
+          values={kindFilter}
+          onChange={setKindFilter}
+          options={KIND_FILTER_OPTIONS}
+        />
+        <MultiDropdown
+          className="w-36"
+          label="State"
+          placeholder="Any state"
+          summaryNoun="states"
+          values={stateFilter}
           onChange={setStateFilter}
           options={STATE_FILTER_OPTIONS}
         />
-        <Dropdown
+        <MultiDropdown
           className="w-36"
-          value={priority}
+          label="Priority"
+          placeholder="Any priority"
+          summaryNoun="priorities"
+          values={priority}
           onChange={setPriority}
           options={PRIORITY_FILTER_OPTIONS}
         />
         <Dropdown
           className="w-36"
+          id="debug-sort"
           value={sort}
           onChange={(v) => setSort(v as Sort)}
           options={SORT_OPTIONS}
@@ -595,15 +694,16 @@ export function DebugBoard({
           <button
             type="button"
             onClick={() => {
-              setAssignee("");
-              setPriority("");
-              setStateFilter("");
+              setAssignee([]);
+              setPriority([]);
+              setStateFilter([]);
+              setKindFilter([]);
               setTaskQuery("");
             }}
             className="inline-flex items-center gap-1 text-[11px] text-muted transition-colors duration-150 hover:text-ink"
           >
             <X className="size-3" aria-hidden />
-            Clear
+            Clear {activeFilterCount}
           </button>
         )}
       </div>
@@ -706,13 +806,23 @@ export function DebugBoard({
                 isAdmin={isAdmin}
                 projects={projects}
                 suggestOptions={suggestOptions}
+                foundCount={foundCounts[task.id] ?? 0}
+                foundByTitle={
+                  task.found_by
+                    ? (tasks.find((t) => t.id === task.found_by)?.title ?? null)
+                    : null
+                }
                 highlight={sessionIds.has(task.id)}
                 selectable={selectMode}
                 selected={picked.has(task.id)}
                 onToggleSelect={togglePicked}
                 projectName={
-                  board === "all" && task.project_id
-                    ? (projectNames[task.project_id] ?? null)
+                  // Name the board on the row whenever more than one is in
+                  // view — with a single board selected it'd be noise.
+                  board.length > 1 || board.includes("all")
+                    ? task.project_id
+                      ? (projectNames[task.project_id] ?? null)
+                      : null
                     : null
                 }
                 onPatch={patchTask}

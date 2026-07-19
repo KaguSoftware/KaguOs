@@ -4,10 +4,11 @@ import { revalidatePath } from "next/cache";
 import { blockIfShowcase, requireAdmin, requireSection } from "@/lib/data/session";
 import { notifySection, notifyUser } from "@/lib/actions/notify";
 import type { ActionResult } from "@/lib/actions/account";
-import type { DebugPriority, DebugState, DebugTask } from "@/lib/types";
+import type { DebugKind, DebugPriority, DebugState, DebugTask } from "@/lib/types";
 
 const STATES: DebugState[] = ["open", "in_progress", "done"];
 const PRIORITIES: DebugPriority[] = ["low", "medium", "high", "urgent"];
+const KINDS: DebugKind[] = ["fix", "feature", "audit"];
 
 export async function createTask(
   _prev: ActionResult,
@@ -23,6 +24,8 @@ export async function createTask(
   const description = String(formData.get("description") ?? "").trim();
   const rawPriority = String(formData.get("priority") ?? "medium") as DebugPriority;
   const priority = PRIORITIES.includes(rawPriority) ? rawPriority : "medium";
+  const rawKind = String(formData.get("kind") ?? "fix") as DebugKind;
+  const kind = KINDS.includes(rawKind) ? rawKind : "fix";
   const projectId = String(formData.get("project_id") ?? "").trim() || null;
   const dueOn = String(formData.get("due_on") ?? "").trim() || null;
   // The soft suggestion is admin-only — gate it server-side, never trust the form.
@@ -34,6 +37,7 @@ export async function createTask(
     title,
     description: description || null,
     priority,
+    kind,
     project_id: projectId,
     due_on: dueOn,
     suggested_for: suggestedFor,
@@ -102,6 +106,67 @@ export async function quickAddTasks(
 }
 
 /**
+ * File what an audit turned up: N new tasks, each pointing back at the audit
+ * that found them.
+ *
+ * This is the payoff of the `audit` kind — the sweep's whole output is a list,
+ * so recording it must be one action, not N trips through the create form.
+ * The found tasks inherit the audit's board (they're about the same thing) and
+ * default to 'fix'; priorities get set afterwards on the board like any task.
+ */
+export async function logAuditFindings(
+  auditId: string,
+  titles: string[]
+): Promise<{ ok: boolean; message: string; tasks?: DebugTask[] }> {
+  const showcaseStop = await blockIfShowcase();
+  if (showcaseStop) return showcaseStop;
+  const ctx = await requireSection("debug");
+
+  const clean = titles
+    .map((t) => t.trim().slice(0, 200))
+    .filter(Boolean)
+    .slice(0, 50); // same sanity cap as quickAddTasks — a sweep, not an import
+  if (clean.length === 0) return { ok: false, message: "Nothing to file." };
+
+  // Inherit the audit's board so findings land beside the thing audited.
+  const { data: audit } = await ctx.supabase
+    .from("debug_tasks")
+    .select("project_id, title")
+    .eq("id", auditId)
+    .single();
+
+  const { data, error } = await ctx.supabase
+    .from("debug_tasks")
+    .insert(
+      clean.map((title) => ({
+        title,
+        kind: "fix" as const,
+        project_id: audit?.project_id ?? null,
+        found_by: auditId,
+        created_by: ctx.userId,
+      }))
+    )
+    .select("*");
+  if (error) return { ok: false, message: error.message };
+
+  // One collapsed notification for the whole sweep, never one per finding.
+  notifySection(ctx, "debug", {
+    kind: "debug_task_new",
+    title: `Audit found ${clean.length} thing${clean.length === 1 ? "" : "s"}${
+      audit?.title ? `: ${audit.title}` : ""
+    }`,
+    href: "/debug",
+  });
+
+  revalidatePath("/debug");
+  return {
+    ok: true,
+    message: `Filed ${clean.length}.`,
+    tasks: (data ?? []) as DebugTask[],
+  };
+}
+
+/**
  * The one collapsed notification for a batch-add session ("14 new tasks on
  * Pet App"). Called by the bar when it closes, with however many landed since
  * the last notify — never per task.
@@ -153,6 +218,7 @@ export async function updateTask(
     title: string;
     description: string;
     priority: DebugPriority;
+    kind?: DebugKind;
     due_on?: string | null;
     project_id?: string | null;
     /** Admin-only soft suggestion; silently ignored for everyone else. */
@@ -172,6 +238,9 @@ export async function updateTask(
       title,
       description: fields.description.trim() || null,
       priority,
+      ...(fields.kind !== undefined && KINDS.includes(fields.kind)
+        ? { kind: fields.kind }
+        : {}),
       // Only touch due_on / project_id when the caller included them —
       // undefined leaves them as they are ("" means clear → null).
       ...(fields.due_on !== undefined ? { due_on: fields.due_on || null } : {}),

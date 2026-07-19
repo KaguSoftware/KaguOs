@@ -15,6 +15,16 @@ const PRIORITY_OPTIONS = [
   { value: "urgent", label: "Urgent", hint: "Drop other things" },
 ];
 
+const KIND_OPTIONS = [
+  { value: "fix", label: "Fix", hint: "Something's broken" },
+  { value: "feature", label: "Feature", hint: "Something new to build" },
+  {
+    value: "audit",
+    label: "Audit",
+    hint: "Go find what needs fixing — files its findings as tasks",
+  },
+];
+
 export function NewTaskForm({
   projects,
   memberOptions,
@@ -54,6 +64,16 @@ export function NewTaskForm({
             ]}
           />
         </Field>
+        <Field label="Kind" htmlFor="task-kind" hint="Repairing something, or building something new.">
+          <Dropdown
+            id="task-kind"
+            name="kind"
+            defaultValue="fix"
+            options={KIND_OPTIONS}
+          />
+        </Field>
+      </div>
+      <div className="grid gap-4 sm:grid-cols-2">
         <Field label="Priority" htmlFor="task-priority">
           <Dropdown
             id="task-priority"
@@ -62,8 +82,6 @@ export function NewTaskForm({
             options={PRIORITY_OPTIONS}
           />
         </Field>
-      </div>
-      <div className="grid gap-4 sm:grid-cols-2">
         <Field
           label="Deadline"
           htmlFor="task-due"
@@ -71,6 +89,8 @@ export function NewTaskForm({
         >
           <DatePicker id="task-due" name="due_on" placeholder="No deadline" />
         </Field>
+      </div>
+      <div className="grid gap-4 sm:grid-cols-2">
         {memberOptions.length > 0 && (
           <Field
             label="Suggest for"

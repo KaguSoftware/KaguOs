@@ -1,10 +1,22 @@
 "use client";
 
 import { useState } from "react";
-import { Copy, Hand, Loader2, Pencil, Trash2, Undo2 } from "lucide-react";
+import {
+  Copy,
+  Hand,
+  ListPlus,
+  Loader2,
+  Pencil,
+  SearchCheck,
+  Sparkles,
+  Trash2,
+  Undo2,
+  Wrench,
+} from "lucide-react";
 import {
   claimTask,
   deleteTask,
+  logAuditFindings,
   setTaskState,
   unclaimTask,
   updateTask,
@@ -19,7 +31,13 @@ import { useAction } from "@/lib/use-action";
 import { useToast } from "@/components/ui/toast";
 import { taskToText } from "@/lib/debug-export";
 import { cn, formatDate } from "@/lib/utils";
-import type { DebugPriority, DebugState, DebugTask, MembersMap } from "@/lib/types";
+import type {
+  DebugKind,
+  DebugPriority,
+  DebugState,
+  DebugTask,
+  MembersMap,
+} from "@/lib/types";
 
 const PRIORITY_OPTIONS = [
   { value: "low", label: "Low" },
@@ -27,6 +45,42 @@ const PRIORITY_OPTIONS = [
   { value: "high", label: "High" },
   { value: "urgent", label: "Urgent" },
 ];
+
+const KIND_OPTIONS = [
+  { value: "fix", label: "Fix", hint: "Something's broken" },
+  { value: "feature", label: "Feature", hint: "Something new to build" },
+  { value: "audit", label: "Audit", hint: "Go find what needs fixing" },
+];
+
+const KIND_LABEL: Record<DebugKind, string> = {
+  fix: "fix",
+  feature: "feature",
+  audit: "audit",
+};
+
+const KIND_ICON: Record<DebugKind, typeof Wrench> = {
+  fix: Wrench,
+  feature: Sparkles,
+  audit: SearchCheck,
+};
+
+/**
+ * The kind marker. Every kind is NEUTRAL on purpose: colour on this board marks
+ * state (green = done, amber = in progress, red = urgent), and a kind is not a
+ * state — it never changes. A green "feature" pill would sit two inches from the
+ * green "Done" button meaning something unrelated, and the row already carries
+ * up to four coloured chips. Icon plus word separates the kinds without
+ * spending a hue.
+ */
+function KindBadge({ kind }: { kind: DebugKind }) {
+  const Icon = KIND_ICON[kind];
+  return (
+    <Badge tone="neutral">
+      <Icon className="size-3" aria-hidden />
+      {KIND_LABEL[kind]}
+    </Badge>
+  );
+}
 
 const PRIORITY_TONE: Record<DebugPriority, BadgeTone> = {
   low: "faint",
@@ -49,6 +103,8 @@ export function TaskRow({
   projects,
   suggestOptions,
   projectName,
+  foundCount,
+  foundByTitle,
   highlight,
   selectable,
   selected,
@@ -65,6 +121,10 @@ export function TaskRow({
   /** Work members an admin can "suggest for". Empty for non-admins. */
   suggestOptions: { value: string; label: string }[];
   projectName?: string | null;
+  /** How many tasks this audit turned up. 0 for non-audits. */
+  foundCount: number;
+  /** Title of the audit that found this task, when it came from one. */
+  foundByTitle?: string | null;
   /** Part of the brainstorm session trail — tinted until the trail is cleared. */
   highlight?: boolean;
   /** In batch-select mode: show a leading checkbox. */
@@ -79,10 +139,14 @@ export function TaskRow({
   const { success: toastSuccess, error: toastError } = useToast();
   const [expanded, setExpanded] = useState(false);
   const [editing, setEditing] = useState(false);
+  // Audit only: the "what I found" composer, one finding per line.
+  const [filing, setFiling] = useState(false);
+  const [findings, setFindings] = useState("");
   const [draft, setDraft] = useState({
     title: task.title,
     description: task.description ?? "",
     priority: task.priority as DebugPriority,
+    kind: task.kind as DebugKind,
     due_on: task.due_on ?? "",
     project_id: task.project_id ?? "",
     suggested_for: task.suggested_for ?? "",
@@ -104,6 +168,34 @@ export function TaskRow({
       ? members[task.suggested_for]
       : null;
 
+  const findingLines = findings
+    .split("\n")
+    .map((l) => l.trim())
+    .filter(Boolean);
+
+  /**
+   * File the audit's findings as real tasks. Deliberately does NOT mark the
+   * audit done — finding things and deciding the sweep is over are two calls,
+   * and an audit often files a batch, keeps looking, files more.
+   */
+  function fileFindings() {
+    const lines = findingLines;
+    if (lines.length === 0) return;
+    run(
+      async () => {
+        const res = await logAuditFindings(task.id, lines);
+        return res.ok ? { ok: true, message: res.message } : res;
+      },
+      {
+        success: `Filed ${lines.length} task${lines.length === 1 ? "" : "s"}.`,
+        onSuccess: () => {
+          setFindings("");
+          setFiling(false);
+        },
+      }
+    );
+  }
+
   /** Plain-text snapshot for pasting into a chat or a commit message. */
   function copyTask() {
     navigator.clipboard.writeText(taskToText(task, { members, projects })).then(
@@ -117,6 +209,7 @@ export function TaskRow({
       title: draft.title.trim() || task.title,
       description: draft.description.trim() || null,
       priority: draft.priority,
+      kind: draft.kind,
       due_on: draft.due_on || null,
       project_id: draft.project_id || null,
       suggested_for: draft.suggested_for || null,
@@ -190,10 +283,17 @@ export function TaskRow({
                 <span style={{ color: suggested.color }}>{suggested.name}</span>
               </>
             )}
+            {foundByTitle && (
+              <>
+                {" · found by "}
+                <span className="text-muted">{foundByTitle}</span>
+              </>
+            )}
           </span>
         </button>
 
         {projectName && <Badge tone="info">{projectName}</Badge>}
+        <KindBadge kind={task.kind} />
         {task.due_on && (
           <Badge tone={overdue ? "danger" : "faint"}>
             {overdue ? "Overdue " : "Due "}
@@ -277,6 +377,18 @@ export function TaskRow({
             {task.description || "No details."}
           </p>
           <div className="flex shrink-0 items-center gap-1.5">
+            {/* An audit's output IS a list of tasks — filing them is the way
+                this kind of work gets finished. */}
+            {task.kind === "audit" && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setFiling((v) => !v)}
+              >
+                <ListPlus className="size-3.5" aria-hidden />
+                {foundCount > 0 ? `Found ${foundCount}` : "Log findings"}
+              </Button>
+            )}
             <Button variant="ghost" size="sm" onClick={copyTask}>
               <Copy className="size-3.5" aria-hidden />
               Copy
@@ -289,6 +401,7 @@ export function TaskRow({
                   title: task.title,
                   description: task.description ?? "",
                   priority: task.priority,
+                  kind: task.kind,
                   due_on: task.due_on ?? "",
                   project_id: task.project_id ?? "",
                   suggested_for: task.suggested_for ?? "",
@@ -321,6 +434,48 @@ export function TaskRow({
         </div>
       )}
 
+      {/* Filing what an audit found: one line per finding, filed in one trip.
+          Each becomes a normal task on this audit's board, linked back to it. */}
+      {expanded && filing && (
+        <div className="mt-2 space-y-2 rounded-md border border-line bg-raised/40 p-2.5">
+          <Textarea
+            autoFocus
+            value={findings}
+            onChange={(e) => setFindings(e.target.value)}
+            rows={4}
+            placeholder={"One finding per line…\nCheckout total wrong on discounts\nAvatar 404s on first load"}
+            aria-label="What the audit found, one per line"
+          />
+          <div className="flex items-center gap-2">
+            <p className="text-[11px] text-faint">
+              {findingLines.length > 0
+                ? `${findingLines.length} task${findingLines.length === 1 ? "" : "s"} — they land on this board as fixes.`
+                : "One per line."}
+            </p>
+            <div className="ml-auto flex gap-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setFiling(false);
+                  setFindings("");
+                }}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="primary"
+                size="sm"
+                disabled={findingLines.length === 0 || pending}
+                onClick={fileFindings}
+              >
+                File {findingLines.length > 0 ? findingLines.length : ""}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {expanded && editing && (
         <div className="mt-2 space-y-2.5 pl-0.5">
           <Input
@@ -345,6 +500,12 @@ export function TaskRow({
                 ...projects.map((p) => ({ value: p.id, label: p.name })),
               ]}
               onChange={(v) => setDraft((d) => ({ ...d, project_id: v }))}
+            />
+            <Dropdown
+              className="w-32"
+              value={draft.kind}
+              options={KIND_OPTIONS}
+              onChange={(v) => setDraft((d) => ({ ...d, kind: v as DebugKind }))}
             />
             <Dropdown
               className="w-32"
