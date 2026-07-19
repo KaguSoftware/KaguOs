@@ -32,6 +32,10 @@ export type StatusKind =
   | "focus"
   | "meeting"
   | "break"
+  | "eating"
+  | "away"
+  | "chilling"
+  | "sleeping"
   | "off"
   | "custom";
 
@@ -41,6 +45,10 @@ export const STATUS_KINDS: StatusKind[] = [
   "focus",
   "meeting",
   "break",
+  "eating",
+  "away",
+  "chilling",
+  "sleeping",
   "off",
   "custom",
 ];
@@ -63,6 +71,10 @@ export const STATUS_PRESETS: Record<StatusKind, StatusPreset> = {
   focus: { emoji: "🧠", label: "Deep focus", callDefault: false },
   meeting: { emoji: "📅", label: "In a meeting", callDefault: false },
   break: { emoji: "☕", label: "On a break", callDefault: false },
+  eating: { emoji: "🍜", label: "Eating", callDefault: false },
+  away: { emoji: "🚶", label: "Not home", callDefault: true },
+  chilling: { emoji: "🛋️", label: "Chilling", callDefault: true },
+  sleeping: { emoji: "😴", label: "Sleeping", callDefault: false },
   off: { emoji: "🌙", label: "Off today", callDefault: false },
   custom: { emoji: "💬", label: "Custom…", callDefault: false },
 };

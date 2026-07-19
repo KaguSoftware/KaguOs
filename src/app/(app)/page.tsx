@@ -1,3 +1,4 @@
+import type { CSSProperties } from "react";
 import Link from "next/link";
 import { ArrowUpRight, Plus } from "lucide-react";
 import { getSessionContext, canAccess } from "@/lib/data/session";
@@ -11,7 +12,7 @@ import { AnnouncementHero } from "@/components/shell/announcement-hero";
 import { PrefetchHeavy } from "@/components/shell/prefetch-heavy";
 import { ShowcaseToggle } from "@/components/shell/showcase";
 import { formatTRY, isActiveRecurring, monthlyAmount, toTRY, type FxRates } from "@/lib/finance";
-import { todayInIstanbul } from "@/lib/utils";
+import { cn, todayInIstanbul } from "@/lib/utils";
 import { SECTION_LABELS, type Announcement, type Reminder, type Section } from "@/lib/types";
 
 /**
@@ -395,12 +396,30 @@ export default async function DashboardPage() {
           figures; the section name is the link. Values are mono and sized up so
           the row scans as data, which is what it always was. */}
       {stats.length > 0 && (
-        <div className="mb-6 grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-line bg-line sm:grid-cols-3 lg:grid-cols-6">
-          {stats.map((s) => (
+        <div
+          className="mb-6 grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-line bg-line sm:grid-cols-3 lg:grid-cols-[repeat(var(--stat-cols),minmax(0,1fr))]"
+          style={{
+            // The column count FOLLOWS the data. Hardcoding six left a member
+            // who can't reach every section staring at empty cells — bare gap
+            // color in the shape of a tile, which announces "something is
+            // hidden from you". Membership is invisible until it matters.
+            "--stat-cols": Math.min(stats.length, 6),
+          } as CSSProperties}
+        >
+          {stats.map((s, i) => (
             <Link
               key={s.section}
               href={s.href}
-              className="group bg-surface p-3 transition-colors duration-150 hover:bg-raised"
+              className={cn(
+                "group bg-surface p-3 transition-colors duration-150 hover:bg-raised",
+                // The narrow breakpoints have fixed column counts, so a stat
+                // count that doesn't divide evenly leaves a hole at the end of
+                // the last row — the same tell as above, just narrower. The
+                // first tile absorbs the remainder so every row ends flush.
+                stats.length % 2 === 1 && i === 0 && "col-span-2 sm:col-span-1",
+                stats.length % 3 === 1 && i === 0 && "sm:col-span-3 lg:col-span-1",
+                stats.length % 3 === 2 && i === 0 && "sm:col-span-2 lg:col-span-1"
+              )}
             >
               <span className="flex items-center gap-1 text-[11px] text-faint">
                 {SECTION_LABELS[s.section].replace("Kagu ", "")}
