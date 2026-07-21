@@ -2,6 +2,7 @@ import { cache } from "react";
 import { memberColorCss } from "@/lib/colors";
 import type { MembersMap } from "@/lib/types";
 import { getSessionContext, type SessionContext } from "@/lib/data/session";
+import { rowsOrThrow } from "@/lib/data/query";
 
 /**
  * A stable, non-identifying display name for a real person while showcasing.
@@ -35,13 +36,16 @@ export function demoName(id: string) {
 export const getMembersMap = cache(async function getMembersMap(
   supabase: SessionContext["supabase"]
 ): Promise<MembersMap> {
-  const [{ data }, ctx] = await Promise.all([
-    supabase.from("profiles").select("id, full_name, email, color"),
+  const [data, ctx] = await Promise.all([
+    rowsOrThrow(
+      supabase.from("profiles").select("id, full_name, email, color"),
+      "members: profiles"
+    ),
     getSessionContext(),
   ]);
 
   const map: MembersMap = {};
-  for (const p of data ?? []) {
+  for (const p of data) {
     map[p.id] = {
       name: ctx.showcase ? demoName(p.id) : p.full_name || p.email,
       color: memberColorCss(p.id, p.color),

@@ -4,6 +4,7 @@ import { getSessionContext, getUserId } from "@/lib/data/session";
 import { getMembersMap } from "@/lib/data/members";
 import { getPresence } from "@/lib/data/presence";
 import { getPulse } from "@/lib/data/pulse";
+import { selectOrThrow } from "@/lib/data/query";
 import { LiveRefresh } from "@/components/shell/live-refresh";
 import { Sidebar } from "@/components/shell/sidebar";
 import { CommandPalette } from "@/components/shell/command-palette";
@@ -28,12 +29,15 @@ export default async function AppLayout({
   // fly together. getMembersMap is cache()-deduped against the page's own call.
   const [ctx, { data: notifRows }, members] = await Promise.all([
     getSessionContext(),
-    supabase
-      .from("notifications")
-      .select("*")
-      .eq("recipient_id", userId)
-      .order("created_at", { ascending: false })
-      .limit(30),
+    selectOrThrow(
+      supabase
+        .from("notifications")
+        .select("*")
+        .eq("recipient_id", userId)
+        .order("created_at", { ascending: false })
+        .limit(30),
+      "notifications"
+    ),
     getMembersMap(supabase),
   ]);
 

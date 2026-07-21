@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { requireSection } from "@/lib/data/session";
+import { selectOrThrow } from "@/lib/data/query";
 import { PageHeader } from "@/components/shell/page-header";
 import { Panel, PanelHeader } from "@/components/ui/panel";
 import {
@@ -22,11 +23,10 @@ export default async function ContractPage({
   const { id } = await params;
   const ctx = await requireSection("management");
 
-  const { data: contract } = await ctx.supabase
-    .from("contracts")
-    .select("*")
-    .eq("id", id)
-    .maybeSingle();
+  const { data: contract } = await selectOrThrow(
+    ctx.supabase.from("contracts").select("*").eq("id", id).maybeSingle(),
+    "contracts"
+  );
   if (!contract) notFound();
 
   // No render-time signing: the file link mints its own short-lived URL when

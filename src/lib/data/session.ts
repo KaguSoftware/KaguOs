@@ -40,6 +40,12 @@ export const getSessionContext = cache(async function getSessionContext(): Promi
   // microseconds; what costs ~305ms is the flight to it — so trips, not query
   // count, are what to optimise. The function reads auth.uid() internally, so
   // there's no id to pass and nothing for a client to tamper with.
+  //
+  // ⚠️ Deliberately NOT wrapped in selectOrThrow. This is the one place where a
+  // failed read must NOT throw: a missing/failed session means "signed out", and
+  // the correct response is the redirect below, not an error screen. Throwing
+  // here would turn an expired token into a crash on every route, including the
+  // path out to /login.
   const { data: row } = await supabase.rpc("session_context");
   const ctx = row as { profile: Profile; sections: Section[] } | null;
   if (!ctx?.profile) redirect("/login");

@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { requireAdmin } from "@/lib/data/session";
+import { rowsOrThrow } from "@/lib/data/query";
 import { CreatePage } from "@/components/ui/create";
 import { SprintComposer } from "@/components/learn/sprint-composer";
 
@@ -8,12 +9,15 @@ export const metadata: Metadata = { title: "New sprint" };
 export default async function NewSprintPage() {
   const ctx = await requireAdmin();
 
-  const { data: learnMembers } = await ctx.supabase
-    .from("section_memberships")
-    .select("user_id, profiles(id, full_name, email)")
-    .eq("section", "learn");
+  const learnMembers = await rowsOrThrow(
+    ctx.supabase
+      .from("section_memberships")
+      .select("user_id, profiles(id, full_name, email)")
+      .eq("section", "learn"),
+    "section_memberships"
+  );
 
-  const members = (learnMembers ?? [])
+  const members = learnMembers
     .map((m) => {
       const profile = m.profiles as unknown as {
         id: string;

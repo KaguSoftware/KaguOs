@@ -1,6 +1,7 @@
 import { cache } from "react";
 import { memberColorCss } from "@/lib/colors";
 import { canAccess, type SessionContext } from "@/lib/data/session";
+import { rowsOrThrow } from "@/lib/data/query";
 import type { PresencePerson } from "@/lib/types";
 
 /**
@@ -18,17 +19,23 @@ export const getPresence = cache(async function getPresence(
 ): Promise<PresencePerson[] | null> {
   if (!canAccess(ctx, "work") || ctx.showcase) return null;
 
-  const [{ data: profileRows }, { data: workRows }] = await Promise.all([
-    ctx.supabase
-      .from("profiles")
-      .select(
-        "id, full_name, email, color, is_admin, last_seen_at, status_kind, status_emoji, status_text, available_to_call, status_until"
-      ),
-    ctx.supabase.from("section_memberships").select("user_id").eq("section", "work"),
+  const [profileRows, workRows] = await Promise.all([
+    rowsOrThrow(
+      ctx.supabase
+        .from("profiles")
+        .select(
+          "id, full_name, email, color, is_admin, last_seen_at, status_kind, status_emoji, status_text, available_to_call, status_until"
+        ),
+      "presence: profiles"
+    ),
+    rowsOrThrow(
+      ctx.supabase.from("section_memberships").select("user_id").eq("section", "work"),
+      "presence: section_memberships"
+    ),
   ]);
 
-  const workIds = new Set((workRows ?? []).map((r) => r.user_id));
-  return (profileRows ?? [])
+  const workIds = new Set(workRows.map((r) => r.user_id));
+  return profileRows
     .filter((p) => p.is_admin || workIds.has(p.id))
     .map((p) => ({
       id: p.id,

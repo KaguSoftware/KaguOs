@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { requireSection } from "@/lib/data/session";
 import { getMembersMap } from "@/lib/data/members";
+import { rowsOrThrow, selectOrThrow } from "@/lib/data/query";
 import { PageHeader } from "@/components/shell/page-header";
 import { Panel, PanelHeader } from "@/components/ui/panel";
 import { Badge, type BadgeTone } from "@/components/ui/badge";
@@ -35,39 +36,47 @@ export default async function IdeaPage({
   const { id } = await params;
   const ctx = await requireSection("work");
 
-  const [{ data: idea }, { data: comments }, { data: votes }, members] =
-    await Promise.all([
-      // Gate the idea on the demo/real split — a real idea id is notFound in
-      // showcase, so its real comments/votes never render in a client demo.
+  const [{ data: idea }, comments, votes, members] = await Promise.all([
+    // Gate the idea on the demo/real split — a real idea id is notFound in
+    // showcase, so its real comments/votes never render in a client demo.
+    selectOrThrow(
       ctx.supabase
         .from("ideas")
         .select("*")
         .eq("id", id)
         .eq("is_demo", ctx.showcase)
         .maybeSingle(),
+      "idea"
+    ),
+    rowsOrThrow(
       ctx.supabase
         .from("idea_comments")
         .select("*")
         .eq("idea_id", id)
         .eq("is_demo", ctx.showcase)
         .order("created_at"),
+      "idea_comments"
+    ),
+    rowsOrThrow(
       ctx.supabase
         .from("idea_votes")
         .select("user_id, value")
         .eq("idea_id", id)
         .eq("is_demo", ctx.showcase),
-      getMembersMap(ctx.supabase),
-    ]);
+      "idea_votes"
+    ),
+    getMembersMap(ctx.supabase),
+  ]);
   if (!idea) notFound();
 
-  const voteList = votes ?? [];
+  const voteList = votes;
   const up = voteList.filter((v) => v.value === 1).length;
   const down = voteList.filter((v) => v.value === -1).length;
   const mine = (voteList.find((v) => v.user_id === ctx.userId)?.value ?? 0) as
     | -1
     | 0
     | 1;
-  const commentList = (comments ?? []) as IdeaComment[];
+  const commentList = comments as IdeaComment[];
 
   return (
     <>

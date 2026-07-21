@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft, FileText, Link2, Pencil } from "lucide-react";
 import { requireSection } from "@/lib/data/session";
+import { rowsOrThrow, selectOrThrow } from "@/lib/data/query";
 import { PageHeader } from "@/components/shell/page-header";
 import { Panel, PanelHeader } from "@/components/ui/panel";
 import { Badge, type BadgeTone } from "@/components/ui/badge";
@@ -42,73 +43,97 @@ export default async function SprintPage({
 
   const [
     { data: sprint },
-    { data: resources },
-    { data: participants },
-    { data: goals },
-    { data: learnMembers },
-    { data: questions },
+    resources,
+    participants,
+    goals,
+    learnMembers,
+    questions,
   ] = await Promise.all([
     // Gate the sprint on the demo/real split — a real sprint id is notFound in
     // showcase, so its real resources/goals/questions/files never render in a
     // client demo. Child tables carry the same filter as defence in depth.
-    ctx.supabase
-      .from("sprints")
-      .select("*")
-      .eq("id", id)
-      .eq("is_demo", ctx.showcase)
-      .maybeSingle(),
-    ctx.supabase
-      .from("sprint_resources")
-      .select("*")
-      .eq("sprint_id", id)
-      .eq("is_demo", ctx.showcase)
-      .order("created_at"),
-    ctx.supabase
-      .from("sprint_participants")
-      .select("user_id")
-      .eq("sprint_id", id)
-      .eq("is_demo", ctx.showcase),
-    ctx.supabase
-      .from("sprint_goals")
-      .select("*")
-      .eq("sprint_id", id)
-      .eq("is_demo", ctx.showcase)
-      .order("sort_order")
-      .order("created_at"),
-    ctx.supabase
-      .from("section_memberships")
-      .select("user_id, profiles(id, full_name, email, color)")
-      .eq("section", "learn"),
-    ctx.supabase
-      .from("sprint_questions")
-      .select("*")
-      .eq("sprint_id", id)
-      .eq("is_demo", ctx.showcase)
-      .order("created_at", { ascending: false }),
+    selectOrThrow(
+      ctx.supabase
+        .from("sprints")
+        .select("*")
+        .eq("id", id)
+        .eq("is_demo", ctx.showcase)
+        .maybeSingle(),
+      "sprint"
+    ),
+    rowsOrThrow(
+      ctx.supabase
+        .from("sprint_resources")
+        .select("*")
+        .eq("sprint_id", id)
+        .eq("is_demo", ctx.showcase)
+        .order("created_at"),
+      "sprint_resources"
+    ),
+    rowsOrThrow(
+      ctx.supabase
+        .from("sprint_participants")
+        .select("user_id")
+        .eq("sprint_id", id)
+        .eq("is_demo", ctx.showcase),
+      "sprint_participants"
+    ),
+    rowsOrThrow(
+      ctx.supabase
+        .from("sprint_goals")
+        .select("*")
+        .eq("sprint_id", id)
+        .eq("is_demo", ctx.showcase)
+        .order("sort_order")
+        .order("created_at"),
+      "sprint_goals"
+    ),
+    rowsOrThrow(
+      ctx.supabase
+        .from("section_memberships")
+        .select("user_id, profiles(id, full_name, email, color)")
+        .eq("section", "learn"),
+      "section_memberships"
+    ),
+    rowsOrThrow(
+      ctx.supabase
+        .from("sprint_questions")
+        .select("*")
+        .eq("sprint_id", id)
+        .eq("is_demo", ctx.showcase)
+        .order("created_at", { ascending: false }),
+      "sprint_questions"
+    ),
   ]);
   if (!sprint) notFound();
 
   // Second wave: both reads depend on ids from the first (goal ids, question
   // ids) — still ONE wave, per the perf doctrine.
-  const goalIds = (goals ?? []).map((g) => g.id);
-  const questionIds = (questions ?? []).map((q) => q.id);
-  const [{ data: progress }, { data: replies }] = await Promise.all([
+  const goalIds = goals.map((g) => g.id);
+  const questionIds = questions.map((q) => q.id);
+  const [progress, replies] = await Promise.all([
     goalIds.length
-      ? ctx.supabase
-          .from("sprint_goal_progress")
-          .select("goal_id, user_id")
-          .in("goal_id", goalIds)
-      : Promise.resolve({ data: [] }),
+      ? rowsOrThrow(
+          ctx.supabase
+            .from("sprint_goal_progress")
+            .select("goal_id, user_id")
+            .in("goal_id", goalIds),
+          "sprint_goal_progress"
+        )
+      : Promise.resolve([]),
     questionIds.length
-      ? ctx.supabase
-          .from("sprint_question_replies")
-          .select("*")
-          .in("question_id", questionIds)
-          .order("created_at")
-      : Promise.resolve({ data: [] }),
+      ? rowsOrThrow(
+          ctx.supabase
+            .from("sprint_question_replies")
+            .select("*")
+            .in("question_id", questionIds)
+            .order("created_at"),
+          "sprint_question_replies"
+        )
+      : Promise.resolve([]),
   ]);
 
-  const people = (learnMembers ?? [])
+  const people = learnMembers
     .map((m) => {
       const profile = m.profiles as unknown as {
         id: string;
@@ -130,7 +155,7 @@ export default async function SprintPage({
     })
     .filter((p): p is { id: string; name: string; color: string } => p !== null);
 
-  const participantIds = (participants ?? []).map((p) => p.user_id);
+  const participantIds = participants.map((p) => p.user_id);
   const gridPeople = people.filter((p) => participantIds.includes(p.id));
 
   // Attachments are NOT signed here. They used to be — one batched
@@ -139,7 +164,7 @@ export default async function SprintPage({
   // a back-navigation), so clicking a PDF an hour later hit an expired token and
   // looked like a dead button. `SignedFileLink` signs at click instead, which
   // also takes the signing round-trip off this page's critical path entirely.
-  const resourceList = (resources ?? []) as SprintResource[];
+  const resourceList = resources as SprintResource[];
 
   const phase = phaseOf(sprint as Sprint);
 
@@ -162,9 +187,9 @@ export default async function SprintPage({
         : null;
 
   // Team completion across every participant and goal, from rows already fetched.
-  const totalCells = (goals?.length ?? 0) * gridPeople.length;
+  const totalCells = goals.length * gridPeople.length;
   const participantSet = new Set(participantIds);
-  const doneCells = (progress ?? []).filter((p) => participantSet.has(p.user_id)).length;
+  const doneCells = progress.filter((p) => participantSet.has(p.user_id)).length;
   const teamPct = totalCells > 0 ? Math.round((doneCells / totalCells) * 100) : null;
 
   return (
@@ -286,9 +311,9 @@ export default async function SprintPage({
 
         <SprintProgress
           sprintId={sprint.id}
-          goals={(goals ?? []) as SprintGoal[]}
+          goals={goals as SprintGoal[]}
           participants={gridPeople}
-          progress={progress ?? []}
+          progress={progress}
           meId={ctx.userId}
           isAdmin={ctx.isAdmin}
         />
@@ -297,17 +322,17 @@ export default async function SprintPage({
           <PanelHeader
             title="Questions"
             action={
-              (questions ?? []).length > 0 ? (
+              questions.length > 0 ? (
                 <span className="font-mono text-xs text-muted">
-                  {(questions ?? []).length}
+                  {questions.length}
                 </span>
               ) : undefined
             }
           />
           <SprintQuestions
             sprintId={sprint.id}
-            questions={(questions ?? []) as SprintQuestion[]}
-            replies={(replies ?? []) as SprintQuestionReply[]}
+            questions={questions as SprintQuestion[]}
+            replies={replies as SprintQuestionReply[]}
             people={people}
             meId={ctx.userId}
             isAdmin={ctx.isAdmin}

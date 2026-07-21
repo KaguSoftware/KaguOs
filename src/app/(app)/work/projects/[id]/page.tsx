@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft, Lightbulb } from "lucide-react";
 import { requireSection, canAccess } from "@/lib/data/session";
+import { rowsOrThrow, selectOrThrow } from "@/lib/data/query";
 import { PageHeader } from "@/components/shell/page-header";
 import { Panel, PanelHeader } from "@/components/ui/panel";
 import { LinkButton } from "@/components/ui/link-button";
@@ -36,37 +37,49 @@ export default async function ProjectPage({
       // Gate the project itself on the demo/real split: in showcase mode a real
       // project id resolves to nothing (→ notFound below), so no real project —
       // and none of its real secrets — can ever render in a client demo.
-      ctx.supabase
-        .from("projects")
-        .select("*")
-        .eq("id", id)
-        .eq("is_demo", ctx.showcase)
-        .maybeSingle(),
-      ctx.supabase
-        .from("ideas")
-        .select("id, title")
-        .eq("promoted_project_id", id)
-        .eq("is_demo", ctx.showcase)
-        .maybeSingle(),
+      selectOrThrow(
+        ctx.supabase
+          .from("projects")
+          .select("*")
+          .eq("id", id)
+          .eq("is_demo", ctx.showcase)
+          .maybeSingle(),
+        "project"
+      ),
+      selectOrThrow(
+        ctx.supabase
+          .from("ideas")
+          .select("id, title")
+          .eq("promoted_project_id", id)
+          .eq("is_demo", ctx.showcase)
+          .maybeSingle(),
+        "source idea"
+      ),
       canSeeSecrets
-        ? ctx.supabase
-            .from("project_secrets")
-            .select("*")
-            .eq("project_id", id)
-            .eq("is_demo", ctx.showcase)
-            .order("created_at", { ascending: true })
+        ? rowsOrThrow(
+            ctx.supabase
+              .from("project_secrets")
+              .select("*")
+              .eq("project_id", id)
+              .eq("is_demo", ctx.showcase)
+              .order("created_at", { ascending: true }),
+            "project_secrets"
+          )
         : null,
       // Head-only count for the Ideas button — the rows themselves live on
       // /ideas, so this page only needs the number.
-      ctx.supabase
-        .from("ideas")
-        .select("id", { count: "exact", head: true })
-        .eq("project_id", id)
-        .eq("is_demo", ctx.showcase),
+      selectOrThrow(
+        ctx.supabase
+          .from("ideas")
+          .select("id", { count: "exact", head: true })
+          .eq("project_id", id)
+          .eq("is_demo", ctx.showcase),
+        "project idea count"
+      ),
     ]);
   if (!project) notFound();
 
-  const secrets = (secretRows?.data ?? []) as ProjectSecret[];
+  const secrets = (secretRows ?? []) as ProjectSecret[];
   const ideaCount = ideaCountRes.count ?? 0;
 
   return (

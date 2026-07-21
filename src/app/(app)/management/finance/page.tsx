@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Suspense } from "react";
 import { Plus, RefreshCcw } from "lucide-react";
 import { requireSection } from "@/lib/data/session";
+import { rowsOrThrow } from "@/lib/data/query";
 import { LinkButton } from "@/components/ui/link-button";
 import { LiveRefresh } from "@/components/shell/live-refresh";
 import { TabbedPanels } from "@/components/shell/tabbed-panels";
@@ -13,29 +14,33 @@ export const metadata: Metadata = { title: "Finance" };
 export default async function ManagementPage() {
   const ctx = await requireSection("management");
 
-  const [
-    { data: transactions },
-    { data: recurring },
-    { data: fxRates },
-    { data: contracts },
-  ] = await Promise.all([
-    ctx.supabase
-      .from("transactions")
-      .select("*")
-      .eq("is_demo", ctx.showcase)
-      .order("occurred_on", { ascending: false })
-      .limit(500),
-    ctx.supabase
-      .from("recurring_items")
-      .select("*")
-      .eq("is_demo", ctx.showcase)
-      .order("created_at", { ascending: false }),
-    ctx.supabase.from("fx_rates").select("*"),
-    ctx.supabase
-      .from("contracts")
-      .select("*")
-      .eq("is_demo", ctx.showcase)
-      .order("updated_at", { ascending: false }),
+  const [transactions, recurring, fxRates, contracts] = await Promise.all([
+    rowsOrThrow(
+      ctx.supabase
+        .from("transactions")
+        .select("*")
+        .eq("is_demo", ctx.showcase)
+        .order("occurred_on", { ascending: false })
+        .limit(500),
+      "transactions"
+    ),
+    rowsOrThrow(
+      ctx.supabase
+        .from("recurring_items")
+        .select("*")
+        .eq("is_demo", ctx.showcase)
+        .order("created_at", { ascending: false }),
+      "recurring_items"
+    ),
+    rowsOrThrow(ctx.supabase.from("fx_rates").select("*"), "fx_rates"),
+    rowsOrThrow(
+      ctx.supabase
+        .from("contracts")
+        .select("*")
+        .eq("is_demo", ctx.showcase)
+        .order("updated_at", { ascending: false }),
+      "contracts"
+    ),
   ]);
 
   return (
@@ -63,9 +68,9 @@ export default async function ManagementPage() {
             ),
             content: (
               <FinancePanel
-                transactions={(transactions ?? []) as Transaction[]}
-                recurring={(recurring ?? []) as RecurringItem[]}
-                fxRates={(fxRates ?? []) as FxRate[]}
+                transactions={transactions as Transaction[]}
+                recurring={recurring as RecurringItem[]}
+                fxRates={fxRates as FxRate[]}
               />
             ),
           },
@@ -79,7 +84,7 @@ export default async function ManagementPage() {
               </LinkButton>
             ),
             content: (
-              <ContractsPanel contracts={(contracts ?? []) as Contract[]} />
+              <ContractsPanel contracts={contracts as Contract[]} />
             ),
           },
         ]}

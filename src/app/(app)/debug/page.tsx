@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Plus } from "lucide-react";
 import { requireSection } from "@/lib/data/session";
 import { getMembersMap } from "@/lib/data/members";
+import { rowsOrThrow } from "@/lib/data/query";
 import { PageHeader } from "@/components/shell/page-header";
 import { DebugBoard } from "@/components/debug/board";
 import { LiveRefresh } from "@/components/shell/live-refresh";
@@ -22,54 +23,61 @@ export default async function DebugPage() {
     .order("created_at", { ascending: false });
   if (!ctx.isAdmin) taskQuery.is("archived_at", null);
 
-  const [
-    { data: tasks },
-    { data: projects },
-    members,
-    { data: workMemberships },
-    focusRes,
-    { data: images },
-  ] = await Promise.all([
-    taskQuery,
-    ctx.supabase
-      .from("projects")
-      .select("id, name")
-      .eq("is_demo", ctx.showcase)
-      .order("name"),
-    getMembersMap(ctx.supabase),
-    // Admins can (re)set the "suggest for" nudge from the inline edit too —
-    // same Work-members-only roster as the create page.
-    ctx.isAdmin
-      ? ctx.supabase
-          .from("section_memberships")
-          .select("user_id")
-          .eq("section", "work")
-      : Promise.resolve({ data: [] as { user_id: string }[] }),
-    // Showcase mode never surfaces the real board's focus — same rule the
-    // dashboard announcement follows. SEVERAL items can be active at once
-    // (one per board), hand-ranked; the banner renders them in that order.
-    ctx.showcase
-      ? null
-      : ctx.supabase
-          .from("debug_focus")
+  const [tasks, projects, members, workMemberships, focusRes, images] =
+    await Promise.all([
+      rowsOrThrow(taskQuery, "debug_tasks"),
+      rowsOrThrow(
+        ctx.supabase
+          .from("projects")
+          .select("id, name")
+          .eq("is_demo", ctx.showcase)
+          .order("name"),
+        "projects"
+      ),
+      getMembersMap(ctx.supabase),
+      // Admins can (re)set the "suggest for" nudge from the inline edit too —
+      // same Work-members-only roster as the create page.
+      ctx.isAdmin
+        ? rowsOrThrow(
+            ctx.supabase
+              .from("section_memberships")
+              .select("user_id")
+              .eq("section", "work"),
+            "section_memberships"
+          )
+        : Promise.resolve([] as { user_id: string }[]),
+      // Showcase mode never surfaces the real board's focus — same rule the
+      // dashboard announcement follows. SEVERAL items can be active at once
+      // (one per board), hand-ranked; the banner renders them in that order.
+      // Stays `null` when gated: that's "not applicable", not a failure.
+      ctx.showcase
+        ? null
+        : rowsOrThrow(
+            ctx.supabase
+              .from("debug_focus")
+              .select("*")
+              .eq("active", true)
+              .order("rank", { ascending: true })
+              .order("created_at", { ascending: true }),
+            "debug_focus"
+          ),
+      // Every screenshot on the board in one trip, grouped per task below. A
+      // per-row fetch would be one round-trip per expanded task against a Tokyo
+      // db; this rides the existing wave and costs nothing extra.
+      rowsOrThrow(
+        ctx.supabase
+          .from("debug_task_images")
           .select("*")
-          .eq("active", true)
-          .order("rank", { ascending: true })
+          .eq("is_demo", ctx.showcase)
           .order("created_at", { ascending: true }),
-    // Every screenshot on the board in one trip, grouped per task below. A
-    // per-row fetch would be one round-trip per expanded task against a Tokyo
-    // db; this rides the existing wave and costs nothing extra.
-    ctx.supabase
-      .from("debug_task_images")
-      .select("*")
-      .eq("is_demo", ctx.showcase)
-      .order("created_at", { ascending: true }),
-  ]);
+        "debug_task_images"
+      ),
+    ]);
 
-  const focusItems = (focusRes?.data ?? []) as DebugFocus[];
+  const focusItems = (focusRes ?? []) as DebugFocus[];
 
   const suggestOptions = ctx.isAdmin
-    ? (workMemberships ?? [])
+    ? workMemberships
         .map((m) => ({ value: m.user_id, label: members[m.user_id]?.name }))
         .filter((o): o is { value: string; label: string } => Boolean(o.label))
         .sort((a, b) => a.label.localeCompare(b.label))
@@ -91,15 +99,15 @@ export default async function DebugPage() {
         }
       />
       <DebugBoard
-        initialTasks={(tasks ?? []) as DebugTask[]}
-        projects={projects ?? []}
+        initialTasks={tasks as DebugTask[]}
+        projects={projects}
         members={members}
         meId={ctx.userId}
         isAdmin={ctx.isAdmin}
         showcase={ctx.showcase}
         suggestOptions={suggestOptions}
         focusItems={focusItems}
-        initialImages={(images ?? []) as DebugTaskImage[]}
+        initialImages={images as DebugTaskImage[]}
       />
     </>
   );

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { requireSection } from "@/lib/data/session";
+import { selectOrThrow } from "@/lib/data/query";
 import { CreatePage } from "@/components/ui/create";
 import { NewIdeaForm } from "@/components/work/new-idea-form";
 
@@ -16,12 +17,15 @@ export default async function NewProjectIdeaPage({
 
   // Resolve the project so the page can name it — and so an idea can't be filed
   // against a project that doesn't exist (or isn't visible in showcase).
-  const { data: project } = await ctx.supabase
-    .from("projects")
-    .select("id, name")
-    .eq("id", id)
-    .eq("is_demo", ctx.showcase)
-    .maybeSingle();
+  const { data: project } = await selectOrThrow(
+    ctx.supabase
+      .from("projects")
+      .select("id, name")
+      .eq("id", id)
+      .eq("is_demo", ctx.showcase)
+      .maybeSingle(),
+    "project"
+  );
   if (!project) notFound();
 
   return (

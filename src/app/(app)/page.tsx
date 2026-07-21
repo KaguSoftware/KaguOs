@@ -3,6 +3,7 @@ import Link from "next/link";
 import { ArrowUpRight, Plus } from "lucide-react";
 import { getSessionContext, canAccess } from "@/lib/data/session";
 import { getMembersMap } from "@/lib/data/members";
+import { rowsOrThrow, selectOrThrow } from "@/lib/data/query";
 import { getActivity } from "@/lib/data/activity";
 import { PageHeader } from "@/components/shell/page-header";
 import { Reminders } from "@/components/shell/reminders";
@@ -50,19 +51,25 @@ export default async function DashboardPage() {
   // Filtering on state can't catch them, because an archived task IS done.
   const debugStats = canAccess(ctx, "debug")
     ? Promise.all([
-        ctx.supabase
-          .from("debug_tasks")
-          .select("id", { count: "exact", head: true })
-          .eq("is_demo", ctx.showcase)
-          .is("archived_at", null)
-          .eq("state", "open"),
-        ctx.supabase
-          .from("debug_tasks")
-          .select("id", { count: "exact", head: true })
-          .eq("is_demo", ctx.showcase)
-          .is("archived_at", null)
-          .eq("assignee_id", ctx.userId)
-          .neq("state", "done"),
+        selectOrThrow(
+          ctx.supabase
+            .from("debug_tasks")
+            .select("id", { count: "exact", head: true })
+            .eq("is_demo", ctx.showcase)
+            .is("archived_at", null)
+            .eq("state", "open"),
+          "debug open count"
+        ),
+        selectOrThrow(
+          ctx.supabase
+            .from("debug_tasks")
+            .select("id", { count: "exact", head: true })
+            .eq("is_demo", ctx.showcase)
+            .is("archived_at", null)
+            .eq("assignee_id", ctx.userId)
+            .neq("state", "done"),
+          "debug mine count"
+        ),
       ])
     : null;
 
@@ -73,85 +80,115 @@ export default async function DashboardPage() {
   const attentionStats = canAccess(ctx, "debug")
     ? Promise.all([
         // Overdue: claimed by you, not done, deadline already passed.
-        ctx.supabase
-          .from("debug_tasks")
-          .select("id", { count: "exact", head: true })
-          .eq("is_demo", ctx.showcase)
-          .is("archived_at", null)
-          .eq("assignee_id", ctx.userId)
-          .neq("state", "done")
-          .lt("due_on", todayInIstanbul()),
+        selectOrThrow(
+          ctx.supabase
+            .from("debug_tasks")
+            .select("id", { count: "exact", head: true })
+            .eq("is_demo", ctx.showcase)
+            .is("archived_at", null)
+            .eq("assignee_id", ctx.userId)
+            .neq("state", "done")
+            .lt("due_on", todayInIstanbul()),
+          "overdue count"
+        ),
         // Suggested for you and still unclaimed — the nudge only counts while
         // nobody has taken it, matching how the board renders it.
-        ctx.supabase
-          .from("debug_tasks")
-          .select("id", { count: "exact", head: true })
-          .eq("is_demo", ctx.showcase)
-          .is("archived_at", null)
-          .eq("suggested_for", ctx.userId)
-          .is("assignee_id", null)
-          .neq("state", "done"),
+        selectOrThrow(
+          ctx.supabase
+            .from("debug_tasks")
+            .select("id", { count: "exact", head: true })
+            .eq("is_demo", ctx.showcase)
+            .is("archived_at", null)
+            .eq("suggested_for", ctx.userId)
+            .is("assignee_id", null)
+            .neq("state", "done"),
+          "suggested count"
+        ),
       ])
     : null;
 
   const workStats = canAccess(ctx, "work")
     ? Promise.all([
-        ctx.supabase
-          .from("projects")
-          .select("id", { count: "exact", head: true })
-          .eq("is_demo", ctx.showcase)
-          .eq("status", "active"),
-        ctx.supabase
-          .from("ideas")
-          .select("id", { count: "exact", head: true })
-          .eq("is_demo", ctx.showcase)
-          .eq("status", "open"),
+        selectOrThrow(
+          ctx.supabase
+            .from("projects")
+            .select("id", { count: "exact", head: true })
+            .eq("is_demo", ctx.showcase)
+            .eq("status", "active"),
+          "active projects count"
+        ),
+        selectOrThrow(
+          ctx.supabase
+            .from("ideas")
+            .select("id", { count: "exact", head: true })
+            .eq("is_demo", ctx.showcase)
+            .eq("status", "open"),
+          "open ideas count"
+        ),
       ])
     : null;
 
   const learnStats = canAccess(ctx, "learn")
     ? (() => {
         const today = todayInIstanbul();
-        return ctx.supabase
-          .from("sprints")
-          .select("id", { count: "exact", head: true })
-          .eq("is_demo", ctx.showcase)
-          .lte("starts_on", today)
-          .gte("ends_on", today);
+        return selectOrThrow(
+          ctx.supabase
+            .from("sprints")
+            .select("id", { count: "exact", head: true })
+            .eq("is_demo", ctx.showcase)
+            .lte("starts_on", today)
+            .gte("ends_on", today),
+          "active sprints count"
+        );
       })()
     : null;
 
   const managementStats = canAccess(ctx, "management")
     ? Promise.all([
-        ctx.supabase
-          .from("recurring_items")
-          .select("*")
-          .eq("is_demo", ctx.showcase)
-          .is("canceled_on", null),
-        ctx.supabase.from("fx_rates").select("currency, rate_to_try"),
+        selectOrThrow(
+          ctx.supabase
+            .from("recurring_items")
+            .select("*")
+            .eq("is_demo", ctx.showcase)
+            .is("canceled_on", null),
+          "recurring_items"
+        ),
+        selectOrThrow(
+          ctx.supabase.from("fx_rates").select("currency, rate_to_try"),
+          "fx_rates"
+        ),
       ])
     : null;
 
   const marketingStats = canAccess(ctx, "marketing")
-    ? ctx.supabase
-        .from("marketing_campaigns")
-        .select("id", { count: "exact", head: true })
-        .eq("is_demo", ctx.showcase)
-        .eq("status", "running")
+    ? selectOrThrow(
+        ctx.supabase
+          .from("marketing_campaigns")
+          .select("id", { count: "exact", head: true })
+          .eq("is_demo", ctx.showcase)
+          .eq("status", "running"),
+        "running campaigns count"
+      )
     : null;
 
   const commsStats = canAccess(ctx, "comms")
     ? Promise.all([
-        ctx.supabase
-          .from("contacts")
-          .select("id", { count: "exact", head: true })
-          .eq("is_demo", ctx.showcase)
-          .eq("kind", "lead"),
-        ctx.supabase
-          .from("contacts")
-          .select("id", { count: "exact", head: true })
-          .eq("is_demo", ctx.showcase)
-          .eq("kind", "client"),
+        selectOrThrow(
+          ctx.supabase
+            .from("contacts")
+            .select("id", { count: "exact", head: true })
+            .eq("is_demo", ctx.showcase)
+            .eq("kind", "lead"),
+          "leads count"
+        ),
+        selectOrThrow(
+          ctx.supabase
+            .from("contacts")
+            .select("id", { count: "exact", head: true })
+            .eq("is_demo", ctx.showcase)
+            .eq("kind", "client"),
+          "clients count"
+        ),
       ])
     : null;
 
@@ -182,19 +219,25 @@ export default async function DashboardPage() {
     // skipped in showcase mode — nothing real reaches a client being demoed.
     ctx.showcase
       ? null
-      : ctx.supabase
-          .from("reminders")
-          .select("*")
-          .order("done", { ascending: true })
-          .order("created_at", { ascending: false }),
+      : rowsOrThrow(
+          ctx.supabase
+            .from("reminders")
+            .select("*")
+            .order("done", { ascending: true })
+            .order("created_at", { ascending: false }),
+          "reminders"
+        ),
     ctx.showcase
       ? null
-      : ctx.supabase
-          .from("announcements")
-          .select("*")
-          .eq("active", true)
-          .order("created_at", { ascending: false })
-          .limit(1),
+      : rowsOrThrow(
+          ctx.supabase
+            .from("announcements")
+            .select("*")
+            .eq("active", true)
+            .order("created_at", { ascending: false })
+            .limit(1),
+          "announcements"
+        ),
   ]);
 
   // Assemble the stat row in a stable, deliberate order once the data landed.
@@ -320,8 +363,9 @@ export default async function DashboardPage() {
   if (canAccess(ctx, "management")) heavyRoutes.push("/management/finance");
   if (canAccess(ctx, "debug")) heavyRoutes.push("/debug");
 
-  const reminders = ((remindersRes?.data ?? []) as Reminder[]);
-  const announcement = ((annRes?.data ?? []) as Announcement[])[0] ?? null;
+  // Both are null in showcase mode (deliberately skipped), else a real array.
+  const reminders = (remindersRes ?? []) as Reminder[];
+  const announcement = ((annRes ?? []) as Announcement[])[0] ?? null;
 
   return (
     <>

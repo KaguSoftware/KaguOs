@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { requireSection } from "@/lib/data/session";
 import { getMembersMap } from "@/lib/data/members";
+import { rowsOrThrow, selectOrThrow } from "@/lib/data/query";
 import { PageHeader } from "@/components/shell/page-header";
 import { Panel, PanelHeader } from "@/components/ui/panel";
 import { Badge } from "@/components/ui/badge";
@@ -28,36 +29,44 @@ export default async function ContactPage({
   const { id } = await params;
   const ctx = await requireSection("comms");
 
-  const [{ data: contact }, { data: links }, { data: interactions }, members] =
-    await Promise.all([
+  const [{ data: contact }, links, interactions, members] = await Promise.all([
       // Gate the contact on the demo/real split — a real contact id is notFound
       // in showcase, so its real links/interactions never render in a demo.
-      ctx.supabase
-        .from("contacts")
-        .select("*")
-        .eq("id", id)
-        .eq("is_demo", ctx.showcase)
-        .maybeSingle(),
-      ctx.supabase
-        .from("contact_links")
-        .select("*")
-        .eq("contact_id", id)
-        .eq("is_demo", ctx.showcase)
-        .order("created_at", { ascending: true }),
-      ctx.supabase
-        .from("contact_interactions")
-        .select("*")
-        .eq("contact_id", id)
-        .eq("is_demo", ctx.showcase)
-        .order("happened_on", { ascending: false })
-        .order("created_at", { ascending: false }),
+      selectOrThrow(
+        ctx.supabase
+          .from("contacts")
+          .select("*")
+          .eq("id", id)
+          .eq("is_demo", ctx.showcase)
+          .maybeSingle(),
+        "contact"
+      ),
+      rowsOrThrow(
+        ctx.supabase
+          .from("contact_links")
+          .select("*")
+          .eq("contact_id", id)
+          .eq("is_demo", ctx.showcase)
+          .order("created_at", { ascending: true }),
+        "contact_links"
+      ),
+      rowsOrThrow(
+        ctx.supabase
+          .from("contact_interactions")
+          .select("*")
+          .eq("contact_id", id)
+          .eq("is_demo", ctx.showcase)
+          .order("happened_on", { ascending: false })
+          .order("created_at", { ascending: false }),
+        "contact_interactions"
+      ),
       getMembersMap(ctx.supabase),
     ]);
   if (!contact) notFound();
 
   const c = contact as Contact;
   const owner = c.owner_id ? members[c.owner_id] : null;
-  const interactionList = (interactions ?? []) as ContactInteraction[];
+  const interactionList = interactions as ContactInteraction[];
 
   return (
     <>
@@ -111,8 +120,8 @@ export default async function ContactPage({
         </Panel>
 
         <Panel>
-          <PanelHeader title={`Linked resources (${(links ?? []).length})`} />
-          <ContactLinks contactId={c.id} links={(links ?? []) as ContactLink[]} />
+          <PanelHeader title={`Linked resources (${links.length})`} />
+          <ContactLinks contactId={c.id} links={links as ContactLink[]} />
         </Panel>
 
         <div>

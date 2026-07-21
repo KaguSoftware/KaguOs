@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { FileUp } from "lucide-react";
 import { requireAdmin } from "@/lib/data/session";
+import { rowsOrThrow } from "@/lib/data/query";
 import { PageHeader } from "@/components/shell/page-header";
 import { Panel, PanelHeader } from "@/components/ui/panel";
 import { Button } from "@/components/ui/button";
@@ -14,19 +15,25 @@ export const metadata: Metadata = { title: "Admin" };
 export default async function AdminPage() {
   const ctx = await requireAdmin();
 
-  const [{ data: profiles }, { data: memberships }] = await Promise.all([
-    ctx.supabase.from("profiles").select("*").order("created_at"),
-    ctx.supabase.from("section_memberships").select("user_id, section"),
+  const [profiles, memberships] = await Promise.all([
+    rowsOrThrow(
+      ctx.supabase.from("profiles").select("*").order("created_at"),
+      "profiles"
+    ),
+    rowsOrThrow(
+      ctx.supabase.from("section_memberships").select("user_id, section"),
+      "section_memberships"
+    ),
   ]);
 
   const sectionsByUser = new Map<string, Section[]>();
-  for (const m of memberships ?? []) {
+  for (const m of memberships) {
     const list = sectionsByUser.get(m.user_id) ?? [];
     list.push(m.section as Section);
     sectionsByUser.set(m.user_id, list);
   }
 
-  const users: AdminUser[] = (profiles ?? []).map((p) => ({
+  const users: AdminUser[] = profiles.map((p) => ({
     id: p.id,
     email: p.email,
     full_name: p.full_name,

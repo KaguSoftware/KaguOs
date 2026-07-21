@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { getSessionContext } from "@/lib/data/session";
+import { rowsOrThrow } from "@/lib/data/query";
 import { PageHeader } from "@/components/shell/page-header";
 import { Panel, PanelHeader } from "@/components/ui/panel";
 import { NameForm, PasswordForm } from "@/components/account/account-forms";
@@ -14,12 +15,15 @@ export default async function AccountPage() {
   const ctx = await getSessionContext();
 
   // Everyone else's colors, so you can pick something that stands apart.
-  const { data: others } = await ctx.supabase
-    .from("profiles")
-    .select("id, full_name, email, color")
-    .neq("id", ctx.profile.id);
+  const others = await rowsOrThrow(
+    ctx.supabase
+      .from("profiles")
+      .select("id, full_name, email, color")
+      .neq("id", ctx.profile.id),
+    "profiles"
+  );
 
-  const teamColors = (others ?? []).map((p) => ({
+  const teamColors = others.map((p) => ({
     id: p.id,
     name: p.full_name || p.email,
     css: memberColorCss(p.id, p.color),

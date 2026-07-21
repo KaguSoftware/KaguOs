@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { ArrowLeft, Plus } from "lucide-react";
 import { requireSection } from "@/lib/data/session";
 import { getMembersMap } from "@/lib/data/members";
+import { rowsOrThrow, selectOrThrow } from "@/lib/data/query";
 import { PageHeader } from "@/components/shell/page-header";
 import { LinkButton } from "@/components/ui/link-button";
 import { LiveRefresh } from "@/components/shell/live-refresh";
@@ -23,21 +24,27 @@ export default async function ProjectIdeasPage({
   // One wave. The ideas query filters on the URL id and doesn't need the
   // project row first, so awaiting it separately would cost a round-trip for
   // nothing — same reasoning as the project detail page.
-  const [{ data: project }, { data: ideas }, members] = await Promise.all([
-    ctx.supabase
-      .from("projects")
-      .select("id, name")
-      .eq("id", id)
-      .eq("is_demo", ctx.showcase)
-      .maybeSingle(),
-    ctx.supabase
-      .from("ideas")
-      .select(
-        "id, title, created_by, created_at, idea_votes(user_id, value), idea_comments(count)"
-      )
-      .eq("project_id", id)
-      .eq("is_demo", ctx.showcase)
-      .order("created_at", { ascending: false }),
+  const [{ data: project }, ideas, members] = await Promise.all([
+    selectOrThrow(
+      ctx.supabase
+        .from("projects")
+        .select("id, name")
+        .eq("id", id)
+        .eq("is_demo", ctx.showcase)
+        .maybeSingle(),
+      "project"
+    ),
+    rowsOrThrow(
+      ctx.supabase
+        .from("ideas")
+        .select(
+          "id, title, created_by, created_at, idea_votes(user_id, value), idea_comments(count)"
+        )
+        .eq("project_id", id)
+        .eq("is_demo", ctx.showcase)
+        .order("created_at", { ascending: false }),
+      "project ideas"
+    ),
     getMembersMap(ctx.supabase),
   ]);
   if (!project) notFound();
@@ -66,7 +73,7 @@ export default async function ProjectIdeasPage({
       <div className="max-w-3xl">
         <ProjectIdeas
           projectId={id}
-          ideas={(ideas ?? []) as ProjectIdeaRow[]}
+          ideas={ideas as ProjectIdeaRow[]}
           members={members}
           currentUserId={ctx.userId}
         />

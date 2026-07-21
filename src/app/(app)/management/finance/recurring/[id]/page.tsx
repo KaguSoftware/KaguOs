@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { requireSection } from "@/lib/data/session";
+import { selectOrThrow } from "@/lib/data/query";
 import { CreatePage } from "@/components/ui/create";
 import { NewRecurringForm } from "@/components/management/finance-forms";
 import type { RecurringItem } from "@/lib/types";
@@ -15,11 +16,10 @@ export default async function EditRecurringPage({
   const { id } = await params;
   const ctx = await requireSection("management");
 
-  const { data: item } = await ctx.supabase
-    .from("recurring_items")
-    .select("*")
-    .eq("id", id)
-    .maybeSingle();
+  const { data: item } = await selectOrThrow(
+    ctx.supabase.from("recurring_items").select("*").eq("id", id).maybeSingle(),
+    "recurring_items"
+  );
   if (!item) notFound();
 
   return (

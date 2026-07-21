@@ -1,5 +1,6 @@
 import { cache } from "react";
 import { canAccess, type SessionContext } from "@/lib/data/session";
+import { selectOrThrow } from "@/lib/data/query";
 import { todayInIstanbul } from "@/lib/utils";
 import type { Section } from "@/lib/types";
 
@@ -43,10 +44,13 @@ export const getPulse = cache(async function getPulse(
   const today = todayInIstanbul();
   const demo = ctx.showcase;
 
+  // Each count throws on a failed query rather than quietly reporting 0 — a
+  // menu tile showing "0 open" when the query actually failed is the same
+  // silent lie the section pages used to tell.
   const count = (
     table: string,
     build: (q: ReturnType<typeof baseQuery>) => ReturnType<typeof baseQuery>
-  ) => build(baseQuery(table));
+  ) => selectOrThrow(build(baseQuery(table)), `pulse: ${table}`);
 
   function baseQuery(table: string) {
     return ctx.supabase

@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { requireAdmin } from "@/lib/data/session";
+import { rowsOrThrow, selectOrThrow } from "@/lib/data/query";
 import { PageHeader } from "@/components/shell/page-header";
 import { Panel, PanelHeader } from "@/components/ui/panel";
 import {
@@ -25,34 +26,44 @@ export default async function EditSprintPage({
   const { id } = await params;
   const ctx = await requireAdmin();
 
-  const [
-    { data: sprint },
-    { data: resources },
-    { data: participants },
-    { data: goals },
-    { data: learnMembers },
-  ] = await Promise.all([
-    ctx.supabase.from("sprints").select("*").eq("id", id).maybeSingle(),
-    ctx.supabase
-      .from("sprint_resources")
-      .select("*")
-      .eq("sprint_id", id)
-      .order("created_at"),
-    ctx.supabase.from("sprint_participants").select("user_id").eq("sprint_id", id),
-    ctx.supabase
-      .from("sprint_goals")
-      .select("*")
-      .eq("sprint_id", id)
-      .order("sort_order")
-      .order("created_at"),
-    ctx.supabase
-      .from("section_memberships")
-      .select("user_id, profiles(id, full_name, email)")
-      .eq("section", "learn"),
-  ]);
+  const [{ data: sprint }, resources, participants, goals, learnMembers] =
+    await Promise.all([
+      selectOrThrow(
+        ctx.supabase.from("sprints").select("*").eq("id", id).maybeSingle(),
+        "sprint"
+      ),
+      rowsOrThrow(
+        ctx.supabase
+          .from("sprint_resources")
+          .select("*")
+          .eq("sprint_id", id)
+          .order("created_at"),
+        "sprint_resources"
+      ),
+      rowsOrThrow(
+        ctx.supabase.from("sprint_participants").select("user_id").eq("sprint_id", id),
+        "sprint_participants"
+      ),
+      rowsOrThrow(
+        ctx.supabase
+          .from("sprint_goals")
+          .select("*")
+          .eq("sprint_id", id)
+          .order("sort_order")
+          .order("created_at"),
+        "sprint_goals"
+      ),
+      rowsOrThrow(
+        ctx.supabase
+          .from("section_memberships")
+          .select("user_id, profiles(id, full_name, email)")
+          .eq("section", "learn"),
+        "section_memberships"
+      ),
+    ]);
   if (!sprint) notFound();
 
-  const people = (learnMembers ?? [])
+  const people = learnMembers
     .map((m) => {
       const profile = m.profiles as unknown as {
         id: string;
@@ -66,7 +77,7 @@ export default async function EditSprintPage({
     .filter((p): p is { id: string; name: string } => p !== null)
     .sort((a, b) => a.name.localeCompare(b.name));
 
-  const participantIds = (participants ?? []).map((p) => p.user_id);
+  const participantIds = participants.map((p) => p.user_id);
 
   return (
     <>
@@ -97,13 +108,13 @@ export default async function EditSprintPage({
         <div className="grid gap-6">
           <Panel>
             <PanelHeader title="Goals" />
-            <GoalsEditor sprintId={id} goals={(goals ?? []) as SprintGoal[]} />
+            <GoalsEditor sprintId={id} goals={goals as SprintGoal[]} />
           </Panel>
           <Panel>
             <PanelHeader title="Resources" />
             <ResourcesEditor
               sprintId={id}
-              resources={(resources ?? []) as SprintResource[]}
+              resources={resources as SprintResource[]}
             />
           </Panel>
         </div>

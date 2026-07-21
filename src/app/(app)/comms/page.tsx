@@ -3,6 +3,7 @@ import Link from "next/link";
 import { Plus, Users } from "lucide-react";
 import { requireSection } from "@/lib/data/session";
 import { getMembersMap } from "@/lib/data/members";
+import { rowsOrThrow } from "@/lib/data/query";
 import { LiveRefresh } from "@/components/shell/live-refresh";
 import { EmptyState } from "@/components/ui/empty-state";
 import { LinkButton } from "@/components/ui/link-button";
@@ -17,47 +18,53 @@ export const metadata: Metadata = { title: "Comms" };
 export default async function CommsPage() {
   const ctx = await requireSection("comms");
 
-  const [
-    { data: contacts },
-    { data: interactions },
-    members,
-    { data: meetings },
-    { data: notes },
-  ] = await Promise.all([
-      ctx.supabase
-        .from("contacts")
-        .select("*")
-        .eq("is_demo", ctx.showcase)
-        .order("updated_at", { ascending: false }),
+  const [contacts, interactions, members, meetings, notes] = await Promise.all([
+      rowsOrThrow(
+        ctx.supabase
+          .from("contacts")
+          .select("*")
+          .eq("is_demo", ctx.showcase)
+          .order("updated_at", { ascending: false }),
+        "contacts"
+      ),
       // Every interaction, newest-first — reduced below to the latest per contact.
       // One extra query in the existing wave (~3ms), not a per-row round-trip.
-      ctx.supabase
-        .from("contact_interactions")
-        .select("contact_id, happened_on, summary")
-        .eq("is_demo", ctx.showcase)
-        .order("happened_on", { ascending: false })
-        .order("created_at", { ascending: false }),
+      rowsOrThrow(
+        ctx.supabase
+          .from("contact_interactions")
+          .select("contact_id, happened_on, summary")
+          .eq("is_demo", ctx.showcase)
+          .order("happened_on", { ascending: false })
+          .order("created_at", { ascending: false }),
+        "contact_interactions"
+      ),
       getMembersMap(ctx.supabase),
       // Internal comms rides the SAME wave — two extra queries here cost ~3ms,
       // whereas awaiting them after this block would be two more serial
       // round-trips to the Tokyo db (~305ms each).
-      ctx.supabase
-        .from("comms_meetings")
-        .select("*")
-        .eq("is_demo", ctx.showcase)
-        .order("held_on", { ascending: false })
-        .order("created_at", { ascending: false }),
-      ctx.supabase
-        .from("comms_notes")
-        .select("*")
-        .eq("is_demo", ctx.showcase)
-        .order("created_at", { ascending: false }),
+      rowsOrThrow(
+        ctx.supabase
+          .from("comms_meetings")
+          .select("*")
+          .eq("is_demo", ctx.showcase)
+          .order("held_on", { ascending: false })
+          .order("created_at", { ascending: false }),
+        "comms_meetings"
+      ),
+      rowsOrThrow(
+        ctx.supabase
+          .from("comms_notes")
+          .select("*")
+          .eq("is_demo", ctx.showcase)
+          .order("created_at", { ascending: false }),
+        "comms_notes"
+      ),
     ]);
 
-  const rows = (contacts ?? []) as Contact[];
+  const rows = contacts as Contact[];
   // First seen wins because the query is already sorted newest-first.
   const lastByContact = new Map<string, { happened_on: string; summary: string }>();
-  for (const it of interactions ?? []) {
+  for (const it of interactions) {
     if (!lastByContact.has(it.contact_id)) {
       lastByContact.set(it.contact_id, {
         happened_on: it.happened_on,
@@ -80,8 +87,8 @@ export default async function CommsPage() {
         ]}
       />
       <CommsWorkspace
-        meetings={(meetings ?? []) as CommsMeeting[]}
-        notes={(notes ?? []) as CommsNote[]}
+        meetings={meetings as CommsMeeting[]}
+        notes={notes as CommsNote[]}
         members={members}
         meId={ctx.userId}
         external={<ExternalContacts

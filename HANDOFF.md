@@ -68,6 +68,54 @@ Contracts w/ PDFs), **Debug** (everyone: per-project boards, self-claim-only, re
 
 ## Current status (2026-07-21)
 
+### 🟢 PHASE 0 — TRUTH & SAFETY: FAILED QUERIES NOW FAIL LOUDLY (2026-07-21) — BUILT + STATICALLY VERIFIED (tsc · lint · check:demo 86 reads · build) + **RUNTIME-PROVEN against prod**, live-drive by Parsa pending
+First phase of the improvement programme agreed after the 2026-07-21 review (~14 items across four
+categories, phased; plan file: `fix-these-impeccable-handoff-typed-hartmanis.md`, which carries the
+remaining phases — say **"plan next phase"** and it picks up from there). This one is not a feature:
+**it fixes the app lying when it fails.**
+
+**The bug.** Every list query destructured only `data` and fell back to `[]`, so a failed query —
+missing column, RLS block, schema drift — rendered as a **calm, believable empty state**. "No ideas
+yet" and "the database rejected that query" were indistinguishable. That is exactly how the
+un-pushed 0014 migration became a company-wide outage that looked like "no data". It had been the
+#1 roadmap item for several sessions.
+
+- **`selectOrThrow` / `rowsOrThrow`** (`src/lib/data/query.ts`, NEW). `rowsOrThrow` returns rows
+  (never null) for the common list case; `selectOrThrow` returns the whole result so `count` and
+  `maybeSingle()` rows survive. Both take a **label** — that's the point: the throw reads
+  `ideas: 42703 column ideas.project_id does not exist`, diagnosable without opening a log.
+- ⚠️ **They wrap a QUERY, never a WAVE, and that's deliberate.** The waves aren't uniform, and three
+  shapes had to survive: membership-gated `null` (a legitimate "not a member", NOT an error),
+  `Promise.resolve({data: []})` stand-ins (not Supabase builders, no `error` to check), and
+  head-only `count` queries (`data` is null BY DESIGN). A naive wave-level wrapper breaks all three.
+- ⚠️ **The one-wave-per-route shape is untouched.** Nothing was hoisted into an `await` above a
+  wave; every wrap happened in place. That rule is worth ~305ms per section against the Tokyo db.
+- **`(app)/error.tsx`** (NEW) — there was **no error boundary anywhere in the app**, so "throw" only
+  became safe once this existed. Shows the **`digest`**, not `error.message`: Next redacts the
+  message in production, so rendering it would print an empty string and read as a bug in the error
+  page itself. The digest is what cross-references the server log.
+- **Scope: ~19 files, ~60 queries** across every section page plus `lib/data/{activity,members,presence,pulse}.ts`.
+- ⚠️ **TWO DELIBERATE EXCEPTIONS — read the code comments before "fixing" either:**
+  1. **`session.ts` does NOT throw.** A failed session read means *signed out*; the correct response
+     is the existing `redirect("/login")`. Throwing would crash every route — including the way out.
+  2. **`activity.ts` uses `Promise.allSettled` + `console.error`.** It's a secondary dashboard
+     widget; letting one broken source throw would blank the whole dashboard, trading a partial feed
+     for no dashboard. Sources now drop out **and get logged** — the silence is fixed without the
+     collateral. (It was already `Promise.all`, so one rejection would have taken the page down.)
+- **Roadmap cleaned**: item `000` (0038) done, and item `00` — "migrate Supabase Tokyo → EU, the
+  single biggest remaining perf win" — **deleted as contradictory**: the 2026-07-17 entry records
+  *"the database STAYS in Tokyo. Permanently. Don't raise it again."* One of them had to go, and the
+  stale one sat where every new session read it first. **DB region is settled: Tokyo.**
+
+**Runtime-proven, not just built** (a green build proves nothing here — the bug is runtime
+behaviour). Ran both paths against the real prod database with a deliberately bad column:
+`OLD → rows rendered: []` (an empty section) · `NEW → threw "projects: 42703 column
+projects.definitely_not_a_real_column does not exist"` · healthy queries unaffected. Sabotage
+reverted and verified gone.
+
+**Still worth doing** (was bundled into the old roadmap item, NOT built): a CI guard that blocks
+deploying code referencing a column no applied migration has added.
+
 ### 🟢 DEBUG-BOARD BATCH: EXPIRED-PDF BUG + FILTER COUNTS + TITLE CLIP + BRAINSTORM SHOTS + PROJECT IDEAS (2026-07-21) — BUILT + STATICALLY VERIFIED (tsc · lint · check:demo 86 reads · build all green), **migrations 0038 + 0039 APPLIED to prod and schema-verified**, live-drive by Parsa pending
 Five items off the debug board plus one asked mid-session. **The headline is a real production bug
 that had nothing to do with what it looked like.**
@@ -953,7 +1001,13 @@ volume. They're insurance, not a speedup.
 - `src/components/comms/workspace.tsx` — Comms tablist (External / Meetings / Notes); contacts stay
   server-rendered and arrive as the `external` prop.
 - `src/components/comms/internal.tsx` — `MeetingList` + `NoteList` (the internal half).
+- `src/lib/data/query.ts` — **`selectOrThrow` / `rowsOrThrow`**. EVERY new query goes through one of
+  these with a label, so a failed query throws instead of rendering a fake empty state. Wrap the
+  query, never the wave; leave gated `null` branches alone.
+- `src/app/(app)/error.tsx` — the section error boundary those throws land on. Shows the `digest`
+  (Next redacts the real message in production).
 - `src/lib/data/session.ts` — cached session context + `requireSection`/`requireAdmin` guards.
+  ⚠️ Deliberately does NOT throw on a failed read — that means signed out, and it redirects.
 - `src/lib/actions/*.ts` — server actions per section (account, admin, debug, work, learn,
   management, marketing).
 - `src/lib/{types,options,colors,finance,utils}.ts` — domain types, dropdown vocabularies,
@@ -1073,17 +1127,17 @@ volume. They're insurance, not a speedup.
 DONE this session: notifications, announcements hero, ⌘K palette, task/idea editing, admin-row
 redesign, empty-state CTAs (a–c, f from the old list); **DB/save latency pass — double-auth killed via
 `getClaims()`, notifications deferred via `after()` (see Current status).** REMAINING:
-000. ⬅️ **ACTIVE / do this first — apply migration 0038** (`scripts/apply-migration.mjs`, the usual
-    helper). One CHECK widening; until it runs, the four new statuses (Eating / Not home / Chilling /
-    Sleeping) fail to save against prod. Everything else in that change is already on `main` (`b359351`).
-00. 🌏 **MIGRATE the Supabase project from Tokyo (`ap-northeast-1`) to an EU region** — confirmed the
-    single biggest remaining perf win (see Current status). Not in-place: new EU project → dump/restore
-    → swap ref/URL/keys in `.env.local` + Vercel + re-run migration history. Cheapest to do NOW while
-    the DB is near-empty. Do it with the team briefly offline.
-0a. ⚠️ **Fix the silent error-swallowing on list pages** (see gotcha) — check `error` on every
-    `.select()` and surface it, so the next schema/migration slip screams instead of showing a fake
-    empty state. Consider a shared `selectOrThrow` helper + a CI guard that blocks deploying code
-    which references a column no applied migration has added. **Still the #1 latent risk.**
+000. ~~apply migration 0038~~ — DONE 2026-07-21 (applied + CHECK verified against prod).
+00. ~~MIGRATE Supabase Tokyo → EU~~ — **REMOVED 2026-07-21. This item contradicted a decision made
+    four days after it was written.** The 2026-07-17 entry records: *"the database STAYS in Tokyo.
+    Permanently. Don't raise it again"* — moving compute to `hnd1` already captured most of the win.
+    The stale item sat at the top of the roadmap where every new session read it first. **The db
+    region is settled: Tokyo.** The only live rule is the `hnd1` one — if the db is ever moved,
+    change `vercel.json`'s region in the same commit or compute ends up stranded away from it.
+0a. ~~Fix the silent error-swallowing on list pages~~ — **DONE 2026-07-21 (Phase 0).**
+    `selectOrThrow`/`rowsOrThrow` (`lib/data/query.ts`) + `(app)/error.tsx`. See Current status.
+    The CI guard idea (block deploying code referencing a column no applied migration has added)
+    was NOT built and is still worth doing.
 0b. ~~Reconcile CLI migration history with hand-applied 0014~~ — DONE 2026-07-16 (`migration repair`).
 1. Disable "Allow new users to sign up" in Supabase dashboard (Auth → Sign In / Up).
 0. ⚠️ **push migration 0012** (`npx supabase db push`) — widens project_secrets RLS to Work members
@@ -1155,13 +1209,15 @@ surface; run `/impeccable audit` after the batch (design hook was silenced after
 | i18n | English only | next-intl (TR) | if requested |
 
 ## Gotchas / open issues
-- ⚠️ **List queries silently swallow errors.** Pages like `work/page.tsx` do
-  `const { data } = await supabase.from(...).select(...)` then `data ?? []` — the `error` field is
-  ignored, so a failed query (missing column, RLS block, schema drift) renders as a benign empty
-  state instead of throwing. This is what turned the un-pushed-0014 migration into a silent
-  company-wide outage that looked like "no data." **STILL UNFIXED (roadmap 0).** When touching any
-  list page, check `error` and surface it. This is the single biggest reason a schema/migration slip
-  is hard to diagnose here.
+- ✅ **List queries no longer swallow errors (FIXED 2026-07-21, Phase 0).** They used to do
+  `const { data } = await supabase…` then `data ?? []`, so a failed query rendered as a benign empty
+  state — that's what turned the un-pushed-0014 migration into a silent outage that looked like
+  "no data". **Standing rule now: every new query goes through `selectOrThrow`/`rowsOrThrow`
+  (`lib/data/query.ts`) with a label.** Two deliberate exceptions, both documented in code — read
+  them before "fixing" either: `session.ts` (a failed session read means *signed out*; it must
+  `redirect("/login")`, and throwing would crash every route including the way out) and
+  `activity.ts` (a secondary widget: it uses `allSettled` + `console.error` so one broken source
+  can't blank the whole dashboard).
 - ⚠️ **Idea auto-promote fans out to real teammates.** `setVote`→`maybeAutoPromote` calls
   `notifySection('work')` and creates a real project the instant an idea goes unanimous. It's gated behind
   `!ctx.showcase` (demo ideas never auto-promote) and `required_count ≥ 2`, but on real data a single vote

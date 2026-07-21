@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { GraduationCap, Plus, Users } from "lucide-react";
 import { requireSection } from "@/lib/data/session";
+import { rowsOrThrow } from "@/lib/data/query";
 import { PageHeader } from "@/components/shell/page-header";
 import { LiveRefresh } from "@/components/shell/live-refresh";
 import { Badge } from "@/components/ui/badge";
@@ -40,25 +41,31 @@ const GROUPS: { phase: Phase; label: string }[] = [
 export default async function LearnPage() {
   const ctx = await requireSection("learn");
 
-  const [{ data: sprints }, { data: allProgress }] = await Promise.all([
-    ctx.supabase
-      .from("sprints")
-      .select(
-        "id, title, description, starts_on, ends_on, sprint_participants(user_id), sprint_goals(count)"
-      )
-      .eq("is_demo", ctx.showcase)
-      .order("starts_on", { ascending: false }),
+  const [sprints, allProgress] = await Promise.all([
+    rowsOrThrow(
+      ctx.supabase
+        .from("sprints")
+        .select(
+          "id, title, description, starts_on, ends_on, sprint_participants(user_id), sprint_goals(count)"
+        )
+        .eq("is_demo", ctx.showcase)
+        .order("starts_on", { ascending: false }),
+      "sprints"
+    ),
     // Everyone's ticks, not just mine — the rows feed both the personal bar
     // and the team completion figure. Same wave, still two queries.
-    ctx.supabase
-      .from("sprint_goal_progress")
-      .select("goal_id, user_id, sprint_goals!inner(sprint_id)")
-      .eq("is_demo", ctx.showcase),
+    rowsOrThrow(
+      ctx.supabase
+        .from("sprint_goal_progress")
+        .select("goal_id, user_id, sprint_goals!inner(sprint_id)")
+        .eq("is_demo", ctx.showcase),
+      "sprint_goal_progress"
+    ),
   ]);
 
   const myDoneBySprint = new Map<string, number>();
   const doneBySprint = new Map<string, { user_id: string }[]>();
-  for (const row of allProgress ?? []) {
+  for (const row of allProgress) {
     const sprintId = (row.sprint_goals as unknown as { sprint_id: string }).sprint_id;
     if (row.user_id === ctx.userId) {
       myDoneBySprint.set(sprintId, (myDoneBySprint.get(sprintId) ?? 0) + 1);
@@ -69,7 +76,7 @@ export default async function LearnPage() {
   }
 
   const today = todayInIstanbul();
-  const rows = (sprints ?? []) as SprintRow[];
+  const rows = sprints as SprintRow[];
   const groups = GROUPS.map((group) => ({
     ...group,
     sprints: rows
