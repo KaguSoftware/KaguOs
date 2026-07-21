@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, User, Users, X } from "lucide-react";
+import { CalendarDays, Plus, User, Users, X } from "lucide-react";
 import {
   addReminder,
   deleteReminder,
@@ -11,8 +11,9 @@ import {
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
+import { DatePicker } from "@/components/ui/date-picker";
 import { useAction } from "@/lib/use-action";
-import { cn } from "@/lib/utils";
+import { cn, formatDate, todayInIstanbul } from "@/lib/utils";
 import type { MembersMap, Reminder } from "@/lib/types";
 
 /**
@@ -51,6 +52,20 @@ export function Reminders({
   const openCount = items.filter((r) => !r.done).length;
 
   /**
+   * Dated first, soonest first; undated keep their existing order at the end.
+   *
+   * `todayInIstanbul()` (not the device clock) decides overdue — two people
+   * looking at the same team reminder must agree on whether it has slipped.
+   */
+  const today = todayInIstanbul();
+  const sorted = [...items].sort((a, b) => {
+    if (a.due_on && b.due_on) return a.due_on.localeCompare(b.due_on);
+    if (a.due_on) return -1;
+    if (b.due_on) return 1;
+    return 0;
+  });
+
+  /**
    * Who the next reminder is for, chosen BEFORE typing.
    *
    * It used to be inferred from which button you pressed — same input, two
@@ -61,13 +76,19 @@ export function Reminders({
    */
   const [scope, setScope] = useState<"personal" | "team">("personal");
 
+  /** Optional deadline for the reminder being composed. "" = undated. */
+  const [due, setDue] = useState("");
+  const [dateOpen, setDateOpen] = useState(false);
+
   function submit() {
     const text = draft.trim();
     if (!text) return;
     setDraft("");
+    setDue("");
+    setDateOpen(false);
     // Adds still refresh (we need the server-generated id), but the input is
     // already cleared so it doesn't feel blocking.
-    run(() => addReminder(text, scope), {
+    run(() => addReminder(text, scope, due || null), {
       success: scope === "team" ? "Shared with the team." : undefined,
       onSuccess: () => router.refresh(),
     });
@@ -163,6 +184,43 @@ export function Reminders({
             `primary` ALSO resized it, because outline carries a 1px border and
             primary doesn't — 2px of shift on every toggle, passed straight to
             the flex-1 input. The chip beside it already says who it's for. */}
+        {/* Optional deadline. A FIXED-WIDTH trigger showing either the date or
+            a calendar glyph — the same anti-shift rule as the scope chips above:
+            a control that resizes when it gains a value would move the flex-1
+            input beside it. Most reminders stay undated; this is a shortcut, not
+            a required field. */}
+        <div className="relative shrink-0">
+          <button
+            type="button"
+            onClick={() => setDateOpen((v) => !v)}
+            aria-expanded={dateOpen}
+            aria-label={due ? `Due ${due}` : "Set a due date"}
+            title={due ? `Due ${due}` : "Set a due date"}
+            className={cn(
+              "inline-flex h-8 w-19 items-center justify-center gap-1 rounded-md border text-xs transition-colors duration-150",
+              due
+                ? "border-primary/40 bg-primary/10 text-ink"
+                : "border-line text-faint hover:border-line-strong hover:text-muted"
+            )}
+          >
+            <CalendarDays className="size-3 shrink-0" aria-hidden />
+            {due ? formatDate(due) : "No date"}
+          </button>
+          {dateOpen && (
+            <div className="absolute right-0 top-full z-20 mt-1">
+              <DatePicker
+                key={due || "empty"}
+                name="reminder_due"
+                defaultValue={due}
+                placeholder="Pick a date"
+                onChange={(iso) => {
+                  setDue(iso);
+                  setDateOpen(false);
+                }}
+              />
+            </div>
+          )}
+        </div>
         <Button
           type="submit"
           size="sm"
@@ -187,11 +245,13 @@ export function Reminders({
         </p>
       ) : (
         <ul className="divide-y divide-line">
-          {items.map((item) => {
+          {sorted.map((item) => {
             const sharer =
               item.scope === "team" && item.created_by
                 ? members[item.created_by]
                 : null;
+            // A done reminder can't be late — closing it is the point.
+            const overdue = !item.done && !!item.due_on && item.due_on < today;
             return (
               <li key={item.id} className="group flex items-center gap-2.5 px-4 py-2">
                 <Checkbox
@@ -208,6 +268,23 @@ export function Reminders({
                   >
                     {item.text}
                   </span>
+                  {/* Due date. `danger` once past — the same state vocabulary
+                      the debug board uses for an overdue task, not a new one. */}
+                  {item.due_on && (
+                    <span
+                      title={overdue ? `Was due ${item.due_on}` : `Due ${item.due_on}`}
+                      className={cn(
+                        "shrink-0 whitespace-nowrap font-mono text-[10px]",
+                        item.done
+                          ? "text-faint"
+                          : overdue
+                            ? "text-danger"
+                            : "text-faint"
+                      )}
+                    >
+                      {formatDate(item.due_on)}
+                    </span>
+                  )}
                   {item.scope === "team" && (
                     <span
                       title={sharer ? `Shared by ${sharer.name}` : "Team reminder"}

@@ -9,7 +9,9 @@ export type ReminderScope = "personal" | "team";
 
 export async function addReminder(
   text: string,
-  scope: ReminderScope
+  scope: ReminderScope,
+  /** Optional deadline (ISO date). Omitted/empty = an undated note. */
+  dueOn?: string | null
 ): Promise<ActionResult> {
   const ctx = await getSessionContext();
   const clean = text.trim().slice(0, 300);
@@ -19,6 +21,7 @@ export async function addReminder(
     scope,
     owner_id: scope === "personal" ? ctx.userId : null,
     text: clean,
+    due_on: dueOn || null,
     created_by: ctx.userId,
   });
   if (error) return { ok: false, message: error.message };

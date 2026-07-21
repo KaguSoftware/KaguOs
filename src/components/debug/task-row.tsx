@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import {
   Copy,
   Hand,
@@ -546,14 +547,32 @@ export function TaskRow({
             {/* An audit's output IS a list of tasks — filing them is the way
                 this kind of work gets finished. */}
             {task.kind === "audit" && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setFiling((v) => !v)}
-              >
-                <ListPlus className="size-3.5" aria-hidden />
-                {foundCount > 0 ? `Found ${foundCount}` : "Log findings"}
-              </Button>
+              <>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setFiling((v) => !v)}
+                >
+                  <ListPlus className="size-3.5" aria-hidden />
+                  Log findings
+                </Button>
+                {/* The count is its OWN link, not part of the button above.
+                    The button opens the composer — overloading it would mean
+                    one control doing two unrelated things. Before this, an
+                    audit could say "Found 7" with no way to see which seven. */}
+                {foundCount > 0 && (
+                  <Link
+                    href={`/debug?f=${task.id}`}
+                    title={`Show the ${foundCount} task${foundCount === 1 ? "" : "s"} this audit found`}
+                    className="inline-flex items-center gap-1 rounded-md border border-line px-2 py-1 text-[13px] text-muted transition-colors duration-150 hover:border-line-strong hover:bg-raised hover:text-ink"
+                  >
+                    <span className="font-mono text-[11px] tabular-nums text-ink">
+                      {foundCount}
+                    </span>
+                    found
+                  </Link>
+                )}
+              </>
             )}
             <Button variant="ghost" size="sm" onClick={copyTask}>
               <Copy className="size-3.5" aria-hidden />

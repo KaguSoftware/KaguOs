@@ -31,6 +31,14 @@ export type BoardFilterState = {
   assignee: string[];
   q: string;
   sort: string;
+  /**
+   * Show only the tasks a given AUDIT turned up (`debug_tasks.found_by`).
+   *
+   * A single id, not an array — you inspect one audit's yield at a time. This
+   * is what makes an audit's "Found 7" badge answerable: before it, the count
+   * was a number with no way to see which seven.
+   */
+  foundBy: string;
 };
 
 /**
@@ -49,6 +57,7 @@ export const BOARD_DEFAULTS: BoardFilterState = {
   assignee: [],
   q: "",
   sort: "smart",
+  foundBy: "",
 };
 
 /** Short query keys — these end up in shared links, so they stay terse. */
@@ -60,6 +69,7 @@ const KEYS: Record<keyof BoardFilterState, string> = {
   assignee: "a",
   q: "q",
   sort: "sort",
+  foundBy: "f",
 };
 
 /** Same members, any order — filters are sets, not sequences. */
@@ -98,6 +108,7 @@ export function readBoardFilters(params: URLSearchParams): BoardFilterState {
     assignee: parseList(params.get(KEYS.assignee)) ?? BOARD_DEFAULTS.assignee,
     q: params.get(KEYS.q) ?? BOARD_DEFAULTS.q,
     sort: params.get(KEYS.sort) ?? BOARD_DEFAULTS.sort,
+    foundBy: params.get(KEYS.foundBy) ?? BOARD_DEFAULTS.foundBy,
   };
 }
 

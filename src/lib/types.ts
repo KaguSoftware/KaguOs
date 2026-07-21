@@ -403,6 +403,8 @@ export type Reminder = {
   owner_id: string | null;
   text: string;
   done: boolean;
+  /** Optional deadline. null = a note to self, which is most of them. */
+  due_on: string | null;
   created_by: string | null;
   created_at: string;
 };

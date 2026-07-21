@@ -13,7 +13,7 @@ import { AnnouncementHero } from "@/components/shell/announcement-hero";
 import { PrefetchHeavy } from "@/components/shell/prefetch-heavy";
 import { ShowcaseToggle } from "@/components/shell/showcase";
 import { formatTRY, isActiveRecurring, monthlyAmount, toTRY, type FxRates } from "@/lib/finance";
-import { cn, todayInIstanbul } from "@/lib/utils";
+import { addDays, cn, todayInIstanbul } from "@/lib/utils";
 import { SECTION_LABELS, type Announcement, type Reminder, type Section } from "@/lib/types";
 
 /**
@@ -107,6 +107,112 @@ export default async function DashboardPage() {
       ])
     : null;
 
+  // ---- the rest of "Needs you" ----
+  // The strip used to answer the attention question for DEBUG ONLY, while
+  // PRODUCT.md's first principle is that every screen answers "what needs my
+  // attention?" first. These three widen it. All ride the SAME wave — see the
+  // rule at the top of this file; a second wave costs a full round-trip.
+
+  // Learn: goals you haven't ticked in the sprint running RIGHT NOW.
+  // ⚠️ Not "goals due" — `sprint_goals` has no due date (it's ordered, not
+  // scheduled). The sprint's own ends_on supplies the urgency instead.
+  const learnAttention = canAccess(ctx, "learn")
+    ? (async () => {
+        const today = todayInIstanbul();
+        const { data: sprint } = await selectOrThrow(
+          ctx.supabase
+            .from("sprints")
+            .select("id, title, ends_on")
+            .eq("is_demo", ctx.showcase)
+            .lte("starts_on", today)
+            .gte("ends_on", today)
+            .order("ends_on", { ascending: true })
+            .limit(1)
+            .maybeSingle(),
+          "active sprint"
+        );
+        if (!sprint) return null;
+        const [goals, mine] = await Promise.all([
+          rowsOrThrow(
+            ctx.supabase
+              .from("sprint_goals")
+              .select("id")
+              .eq("sprint_id", sprint.id)
+              .eq("is_demo", ctx.showcase),
+            "sprint goals"
+          ),
+          rowsOrThrow(
+            ctx.supabase
+              .from("sprint_goal_progress")
+              .select("goal_id")
+              .eq("user_id", ctx.userId),
+            "my goal progress"
+          ),
+        ]);
+        const ticked = new Set(mine.map((m) => m.goal_id));
+        const left = goals.filter((g) => !ticked.has(g.id)).length;
+        return left > 0 ? { sprintId: sprint.id, left } : null;
+      })()
+    : null;
+
+  // Your own reminders that have slipped. Skipped in showcase for the same
+  // reason the reminders panel is: they're real personal notes.
+  const reminderAttention = ctx.showcase
+    ? null
+    : selectOrThrow(
+        ctx.supabase
+          .from("reminders")
+          .select("id", { count: "exact", head: true })
+          .eq("done", false)
+          .lt("due_on", todayInIstanbul()),
+        "overdue reminders count"
+      );
+
+  // Contracts running out inside 30 days — the one management signal with a
+  // real deadline attached.
+  const contractAttention = canAccess(ctx, "management")
+    ? selectOrThrow(
+        ctx.supabase
+          .from("contracts")
+          .select("id", { count: "exact", head: true })
+          .eq("is_demo", ctx.showcase)
+          .eq("status", "active")
+          .gte("ends_on", todayInIstanbul())
+          .lte("ends_on", addDays(todayInIstanbul(), 30)),
+        "expiring contracts count"
+      )
+    : null;
+
+  // Open company ideas you haven't voted on. Auto-promote needs EVERYONE with
+  // Work access to upvote, so one person forgetting parks an idea forever —
+  // this is the only prompt that exists. Deliberately a count on the dashboard
+  // and NOT a notification: a recurring "you haven't voted" ping is how people
+  // learn to ignore notifications entirely.
+  const voteAttention = canAccess(ctx, "work")
+    ? (async () => {
+        const [open, mine] = await Promise.all([
+          rowsOrThrow(
+            ctx.supabase
+              .from("ideas")
+              .select("id")
+              .eq("is_demo", ctx.showcase)
+              .eq("status", "open")
+              .is("project_id", null),
+            "open ideas"
+          ),
+          rowsOrThrow(
+            ctx.supabase
+              .from("idea_votes")
+              .select("idea_id")
+              .eq("user_id", ctx.userId),
+            "my idea votes"
+          ),
+        ]);
+        const voted = new Set(mine.map((v) => v.idea_id));
+        return open.filter((i) => !voted.has(i.id)).length;
+      })()
+    : null;
+
   const workStats = canAccess(ctx, "work")
     ? Promise.all([
         selectOrThrow(
@@ -194,6 +300,10 @@ export default async function DashboardPage() {
 
   const [
     attentionRes,
+    learnAttentionRes,
+    reminderAttentionRes,
+    contractAttentionRes,
+    voteAttentionRes,
     debugRes,
     workRes,
     learnRes,
@@ -206,6 +316,10 @@ export default async function DashboardPage() {
     annRes,
   ] = await Promise.all([
     attentionStats,
+    learnAttention,
+    reminderAttention,
+    contractAttention,
+    voteAttention,
     debugStats,
     workStats,
     learnStats,
@@ -331,6 +445,19 @@ export default async function DashboardPage() {
   const [overdueRes, suggestedRes] = attentionRes ?? [];
   const overdueCount = overdueRes?.count ?? 0;
   const suggestedCount = suggestedRes?.count ?? 0;
+  const goalsLeft = learnAttentionRes?.left ?? 0;
+  const dueReminders = reminderAttentionRes?.count ?? 0;
+  const expiringContracts = contractAttentionRes?.count ?? 0;
+  const unvotedIdeas = voteAttentionRes ?? 0;
+  // The strip renders only when it has something to say. A permanent bar
+  // reading all zeros is furniture, not an answer to "what needs me".
+  const needsYou =
+    overdueCount > 0 ||
+    suggestedCount > 0 ||
+    goalsLeft > 0 ||
+    dueReminders > 0 ||
+    expiringContracts > 0 ||
+    unvotedIdeas > 0;
 
   // Quick actions — the one-click primitives, gated by what you can reach.
   const actions: QuickAction[] = [];
@@ -388,14 +515,20 @@ export default async function DashboardPage() {
       {/* What needs YOU, before anything else on the page. Each count links
           straight to the matching view rather than to the section's front door,
           so the number is actionable and not just informative. */}
-      {canAccess(ctx, "debug") && (overdueCount > 0 || suggestedCount > 0) && (
+      {needsYou && (
         <div className="mb-6 flex flex-wrap items-center gap-2 rounded-lg border border-line bg-surface px-4 py-2.5">
           <span className="text-[11px] font-medium uppercase tracking-wide text-faint">
             Needs you
           </span>
           {overdueCount > 0 && (
             <Link
-              href="/debug?preset=mine&sort=deadline"
+              // ⚠️ Was `?preset=mine&sort=deadline` — but there is no `preset`
+              // param. The board reads `b`/`s`/`p`/`k`/`a`/`q`/`sort`
+              // (lib/use-board-filters.ts), so the old link silently landed on
+              // an unfiltered board: the one deep-link the app had, filtering
+              // nothing. `a` is the assignee filter (an array param, so a single
+              // id is valid).
+              href={`/debug?a=${ctx.userId}&sort=deadline`}
               className="inline-flex items-center gap-1.5 rounded-md border border-danger/30 bg-danger/10 px-2 py-1 text-[13px] text-danger transition-colors duration-150 hover:bg-danger/15"
             >
               <span className="font-mono font-medium">{overdueCount}</span>
@@ -411,6 +544,44 @@ export default async function DashboardPage() {
                 {suggestedCount}
               </span>
               suggested for you
+            </Link>
+          )}
+          {dueReminders > 0 && (
+            <Link
+              href="/#reminders"
+              className="inline-flex items-center gap-1.5 rounded-md border border-danger/30 bg-danger/10 px-2 py-1 text-[13px] text-danger transition-colors duration-150 hover:bg-danger/15"
+            >
+              <span className="font-mono font-medium">{dueReminders}</span>
+              reminder{dueReminders === 1 ? "" : "s"} due
+            </Link>
+          )}
+          {goalsLeft > 0 && learnAttentionRes && (
+            <Link
+              href={`/learn/${learnAttentionRes.sprintId}`}
+              className="inline-flex items-center gap-1.5 rounded-md border border-line px-2 py-1 text-[13px] text-muted transition-colors duration-150 hover:border-line-strong hover:bg-raised hover:text-ink"
+            >
+              <span className="font-mono font-medium text-ink">{goalsLeft}</span>
+              goal{goalsLeft === 1 ? "" : "s"} to tick
+            </Link>
+          )}
+          {unvotedIdeas > 0 && (
+            <Link
+              href="/work?tab=ideas"
+              className="inline-flex items-center gap-1.5 rounded-md border border-line px-2 py-1 text-[13px] text-muted transition-colors duration-150 hover:border-line-strong hover:bg-raised hover:text-ink"
+            >
+              <span className="font-mono font-medium text-ink">
+                {unvotedIdeas}
+              </span>
+              need{unvotedIdeas === 1 ? "s" : ""} your vote
+            </Link>
+          )}
+          {expiringContracts > 0 && (
+            <Link
+              href="/management/finance?tab=contracts"
+              className="inline-flex items-center gap-1.5 rounded-md border border-amber/30 bg-amber/10 px-2 py-1 text-[13px] text-amber transition-colors duration-150 hover:bg-amber/15"
+            >
+              <span className="font-mono font-medium">{expiringContracts}</span>
+              contract{expiringContracts === 1 ? "" : "s"} ending
             </Link>
           )}
         </div>

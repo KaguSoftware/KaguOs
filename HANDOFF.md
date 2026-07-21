@@ -68,6 +68,52 @@ Contracts w/ PDFs), **Debug** (everyone: per-project boards, self-claim-only, re
 
 ## Current status (2026-07-21)
 
+### 🟢 PHASE 3 — REACH & ATTENTION: NEEDS-YOU WIDENED + A BROKEN DEEP-LINK FIXED + REMINDER DUE DATES (2026-07-21) — BUILT + STATICALLY VERIFIED (tsc · lint unchanged · check:demo **92** · build), **migration 0040 APPLIED + column verified**, live-drive by Parsa PENDING
+Fifth phase of the improvement programme (**6 phases: 0 · 1 · 2 · 2a · 3 · 4** — only Phase 4 left).
+PRODUCT.md's first principle is that every screen answers *"what needs my attention?"* first; the
+dashboard's **Needs you** strip is that answer and it covered **debug only**.
+
+1. 🐛 **The strip's one deep-link was broken, and had been.** It pointed at
+   `/debug?preset=mine&sort=deadline` — but there is no `preset` param. The board reads
+   `b`/`s`/`p`/`k`/`a`/`q`/`sort` (`lib/use-board-filters.ts`), so **the link silently landed on an
+   unfiltered board**: it looked like a filtered deep-link and filtered nothing. Now
+   `?a=<userId>&sort=deadline`. Proven by parsing both forms through the real reader — old →
+   `assignee: []`, new → `assignee: [<you>]`.
+2. **Strip widened with four signals**, each membership-gated and each **inside the existing single
+   `Promise.all` wave** (the file's own rule — a second wave costs a full round-trip):
+   - **Reminders due** (danger tint) · **goals to tick** · **needs your vote** · **contracts ending**
+     (amber, within 30 days).
+   - ⚠️ **"Sprint goals due" was NOT buildable as the roadmap wrote it.** `sprint_goals` is
+     `id · sprint_id · title · sort_order · created_at` — goals are **ordered, not scheduled**.
+     Parsa's call: the honest signal is *goals YOU haven't ticked in the sprint running now*, with
+     the sprint's own `ends_on` supplying urgency. **Don't add a per-goal due date without deciding
+     that as a product question first.**
+   - The strip still **renders nothing when every count is zero** — a permanent bar reading all
+     zeros is furniture, not an answer.
+3. **An audit's "Found N" is now inspectable.** New URL param **`f`** (`found_by`, a single audit id)
+   in the board filter hook + one clause in the `visible` chain, and a chip above the list naming the
+   audit with a "Show everything" escape.
+   ⚠️ **The count is its OWN link, NOT part of the "Log findings" button** — that button opens the
+   filing composer, and overloading it would make one control do two unrelated things.
+   ⚠️ **`f` is adopted DURING RENDER when the URL changes**, unlike every other filter which is only
+   seeded once at mount. It arrives from a `<Link>` that navigates client-side **without remounting
+   the board**, so a mount-only read would leave the state behind and the link would appear to do
+   nothing.
+4. **Reminder due dates** — **migration 0040** adds nullable `reminders.due_on` (+ a partial index).
+   Applied and the column verified via `information_schema` (a 201 alone is not proof). Nullable
+   carries the meaning: `null` = a note to self, which is what every existing row is and what most
+   should stay. Dated reminders sort first and read `danger` once past, using the same state
+   vocabulary as an overdue debug task.
+   ⚠️ **No notifications** (Parsa's call) — reminders are personal notes, and a system that pings you
+   about them is how people learn to ignore the app's notifications.
+   ⚠️ The composer's **anti-shift layout is intact**: the date control is a FIXED-WIDTH trigger
+   (`w-19`, matching the scope chips) so gaining a value can't move the `flex-1` input beside it.
+   Read the comments in `reminders.tsx` before touching that row.
+
+**Not driven by a human yet.** Best checks: click the strip's overdue count and confirm the board is
+actually filtered to you; view as someone lacking Learn/Management and confirm those signals are
+absent rather than zero.
+
 ### 🟢 PHASE 2a — BRAINSTORM DETAILS: WIZARD → LIST (2026-07-21) — BUILT + STATICALLY VERIFIED (tsc · lint unchanged · check:demo 86 · build), **live-drive by Parsa PENDING**
 Fourth phase of the improvement programme (**6 phases: 0 · 1 · 2 · 2a · 3 · 4**; two remain).
 Split out of Phase 2 at Parsa's call — fix the counters first, reshape the flow separately.
@@ -1148,7 +1194,10 @@ volume. They're insurance, not a speedup.
 - `src/components/comms/internal.tsx` — `MeetingList` + `NoteList` (the internal half).
 - `src/lib/use-board-filters.ts` — URL-backed debug board filters (array-aware sibling of
   `useWorkFilters`). ⚠️ The `NONE` sentinel is load-bearing: an empty `state` array is the "All"
-  preset, not an absent filter.
+  preset, not an absent filter. ⚠️ `f` (`foundBy`) is the ONE param the board adopts on URL change
+  rather than at mount only — it arrives via a `<Link>` that doesn't remount the board.
+  **Any dashboard/deep link into `/debug` must use these keys** — a made-up param (there was a
+  `?preset=` once) silently yields an unfiltered board.
 - `src/lib/data/query.ts` — **`selectOrThrow` / `rowsOrThrow`**. EVERY new query goes through one of
   these with a label, so a failed query throws instead of rendering a fake empty state. Wrap the
   query, never the wave; leave gated `null` branches alone.
@@ -1334,11 +1383,11 @@ surface; run `/impeccable audit` after the batch (design hook was silenced after
 | Debug board keyboard | **DONE 2026-07-21 (Phase 1)** — j/k · c · 1/2/3 · x · / · ? · Esc, with a typing guard. PRODUCT.md's keyboard promise is now met | row-level shortcuts inside the expanded panel (edit, attach) | later |
 | Debug bulk actions | **DONE 2026-07-21 (Phase 1)** — `updateTasks(ids, patch)`: state · priority · board · claim/unclaim, with honest partial-success reporting | bulk delete (needs its own confirm design — deliberately excluded) | later |
 | Debug brainstorm | **DONE 2026-07-21** — capture list → details as an **expandable list** (save-on-collapse w/ dirty check, per-row done ticks, "4 of 14 detailed"); both counter bugs fixed earlier the same day | keyboard nav through the rows, as the board has | later |
-| Debug audits UI | "Found N" badge (done) | make the count **clickable** → filter the board to `found_by = <audit>`; today there's no way to see which N | not started |
+| Debug audits UI | **DONE 2026-07-21 (Phase 3)** — the count is its own link → `/debug?f=<audit>`, board filters on `found_by`, a chip names the audit with a "Show everything" escape | audit templates; "close the audit when all findings are done" | later |
 | Debug focus editor | **DE-MODALLED 2026-07-21** → `CreateOverlay`, the same full-screen surface every create flow uses (container swap; internals untouched) | focus items still lose board attribution once an admin types custom wording | later |
-| Dashboard shape | **"Needs you" strip (overdue + suggested) + one dense stat row + full-width activity w/ per-kind filter and show-more** (done 2026-07-19) | strip currently covers **debug only** — sprint goals due, unticked reminders, and contracts expiring belong in it; counts should deep-link to filtered views once URL filters land | later |
+| Dashboard shape | **"Needs you" WIDENED 2026-07-21 (Phase 3)** — overdue · suggested · reminders due · goals to tick · needs-your-vote · contracts ending, all membership-gated, all in the one wave; the overdue deep-link now actually filters (it never did) | a per-section "nothing needs you" affirmative state, if the empty strip ever feels like a gap | later |
 | Dashboard charts | numbers only (done) | **one** sparkline: net recurring over 12 months (`lastMonths()` + recharts both exist). Agreed with Parsa 2026-07-19 that the other five stats are single-state counts with nothing to plot — charting them would be decoration | next |
-| Reminder due dates | text + scope + done only | optional `due_on` via `DatePicker`, sort/dim by it. **Needs a migration** (`reminders` has no date column) — deferred rather than rushed at the end of a session | not started |
+| Reminder due dates | **DONE 2026-07-21 (Phase 3, migration 0040)** — optional `due_on`, fixed-width date trigger in the composer, dated-first sort, danger tint when past, counted in "Needs you" | recurring reminders, if ever asked. **Notifications were deliberately declined** | — |
 | Mobile | **drawer menu + status reachable** (2026-07-19); layout padding and tables were already responsive; **dashboard stat row now fills its row at every breakpoint for partial-access members (2026-07-20)** | teammates' presence is still desktop-only (deliberate — browsing affordance); the rest of the app has NOT been driven on a real phone yet, only reasoned from the code + build. **Debug row and filter popover still need a real-device pass** | needs a live pass |
 | Comms split (Kemal, 2026-07-19) | **DONE 2026-07-19** — three tabs (External / Meetings / Notes), migration 0037. Meetings = title, date, attendees, summary, notes. Notes = body + pin. Both shared section-wide | Follow-ups if asked: link a meeting to a contact or project · attendees from an actual calendar · search across notes | — |
 | Task screenshots (2026-07-19) | 6/task, 5MB each, from create form + row + editor + brainstorm; Copy downloads them and names them in the text; **PASTE-TO-UPLOAD done 2026-07-21** (everywhere, incl. the create form) | annotation/crop · thumbnails via a transform URL rather than full-size `unoptimized` (**Phase 4**) | later |

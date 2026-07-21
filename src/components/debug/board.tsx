@@ -13,6 +13,7 @@ import {
   Download,
   ListPlus,
   Search,
+  SearchCheck,
   SlidersHorizontal,
   Trash2,
   X,
@@ -233,6 +234,23 @@ export function DebugBoard({
   const [kindFilter, setKindFilter] = useState<string[]>(initialFilters.kind);
   const [taskQuery, setTaskQuery] = useState(initialFilters.q);
   const [sort, setSort] = useState<Sort>(initialFilters.sort as Sort);
+  // Set from an audit's "Found N" link — narrows the board to that audit's yield.
+  const [foundBy, setFoundBy] = useState(initialFilters.foundBy);
+
+  // ⚠️ Adopt `f` when it changes IN THE URL, not just at mount.
+  //
+  // Every other filter is only ever set from inside this component, so seeding
+  // once from `initialFilters` is enough. `f` is different: it arrives from a
+  // <Link> on an audit row, which navigates CLIENT-SIDE without remounting the
+  // board — so the query string would change while the state sat still, and the
+  // link would appear to do nothing. Compared during render (not in an effect)
+  // so the filtered list paints on the first pass rather than one frame later.
+  const urlFoundBy = searchParams.get("f") ?? "";
+  const [seenFoundBy, setSeenFoundBy] = useState(urlFoundBy);
+  if (seenFoundBy !== urlFoundBy) {
+    setSeenFoundBy(urlFoundBy);
+    setFoundBy(urlFoundBy);
+  }
   // Three states, not two. The old boolean could only say "live" or
   // "connecting…", so a socket that never came back said "connecting…" forever
   // — the board looked merely slow while silently showing stale data.
@@ -275,6 +293,7 @@ export function DebugBoard({
       assignee,
       q: taskQuery,
       sort,
+      foundBy,
     });
   }, [
     writeFilterUrl,
@@ -285,6 +304,7 @@ export function DebugBoard({
     assignee,
     taskQuery,
     sort,
+    foundBy,
   ]);
 
   // Server refreshes (revalidatePath after actions) re-send props — adopt them.
@@ -517,6 +537,10 @@ export function DebugBoard({
     if (kindFilter.length > 0)
       list = list.filter((t) => kindFilter.includes(t.kind));
 
+    // One audit's findings. Set by the "Found N" link on an audit row; the chip
+    // above the list names it, so the narrowing is never unexplained.
+    if (foundBy) list = list.filter((t) => t.found_by === foundBy);
+
     const q = taskQuery.trim().toLowerCase();
     if (q) {
       list = list.filter(
@@ -535,7 +559,7 @@ export function DebugBoard({
       }
     }
     return list;
-  }, [liveTasks, board, assignee, priority, stateFilter, kindFilter, taskQuery, sort, sessionIds]);
+  }, [liveTasks, board, assignee, priority, stateFilter, kindFilter, taskQuery, sort, sessionIds, foundBy]);
 
   // Keep the keyboard cursor inside the list DURING RENDER as it shrinks —
   // filtering or a realtime delete can drop the row you were on. Doing this in
@@ -1205,6 +1229,30 @@ export function DebugBoard({
           >
             <X className="size-3" aria-hidden />
             Clear
+          </button>
+        </div>
+      )}
+
+      {/* Naming the audit filter. A board narrowed to seven rows with nothing
+          saying why reads as a bug — this makes the narrowing visible and
+          removable, the same reasoning as the Filters count badge. */}
+      {foundBy && (
+        <div className="flex flex-wrap items-center gap-2 rounded-lg border border-primary/20 bg-primary/5 px-3 py-2 text-[13px]">
+          <SearchCheck className="size-3.5 shrink-0 text-primary-dim" aria-hidden />
+          <span className="min-w-0 text-muted">
+            Showing what{" "}
+            <span className="text-ink">
+              {tasks.find((t) => t.id === foundBy)?.title ?? "an audit"}
+            </span>{" "}
+            found
+          </span>
+          <button
+            type="button"
+            onClick={() => setFoundBy("")}
+            className="ml-auto inline-flex items-center gap-1 text-[11px] text-muted transition-colors duration-150 hover:text-ink"
+          >
+            <X className="size-3" aria-hidden />
+            Show everything
           </button>
         </div>
       )}
