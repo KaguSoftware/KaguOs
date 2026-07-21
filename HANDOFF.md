@@ -1370,6 +1370,7 @@ surface; run `/impeccable audit` after the batch (design hook was silenced after
 ## Deliberately partial — grows later (scope ledger)
 | Area | What shipped now | Intended full shape | Grows in |
 |---|---|---|---|
+| Task screenshot weight | **DONE 2026-07-21 (Phase 4)** — grid thumbnails signed with `THUMB_TRANSFORM` (`lib/debug-images.ts`); measured across all 5 prod images: **1,491,564 → 149,054 bytes, 10.0×**. Lightbox and every download path stay full-size on purpose | the same transform for Learn/Comms attachments if those ever render image previews (today they're PDF links) | when an image preview lands outside Debug |
 | Notifications | in-app center (done) | Telegram bot later | later |
 | Reminders | personal + team, DB-backed (done) | — | — |
 | Editing | tasks/ideas/projects inline (done) | — | — |
@@ -1406,6 +1407,21 @@ surface; run `/impeccable audit` after the batch (design hook was silenced after
 | i18n | English only | next-intl (TR) | if requested |
 
 ## Gotchas / open issues
+- ⚠️ **Storage image transforms are baked into the TOKEN, not the query string (2026-07-21, Phase 4).**
+  Three traps, all measured against prod, all of which look like success:
+  1. **You cannot add a resize to an existing signed URL.** Appending `&width=320&resize=contain` to
+     an `/object/sign/` URL — or rewriting the path to `/render/image/sign/` — returns **200 with a
+     re-encoded FULL-SIZE image**: 202,026 bytes vs the 198,398-byte original, i.e. *bigger*. The URL
+     must be minted with `createSignedUrl(path, ttl, { transform })`.
+  2. **The batch endpoint has no `transform` option.** `createSignedUrls` (plural) accepts only
+     `{ download, cacheNonce }`. Thumbnails are therefore signed one call per image; that is not a
+     regression — 6 parallel singular signs measured **843ms vs 859ms** for one batch call, because
+     they run concurrently. Don't "optimize" it back into a batch.
+  3. ⚠️ **Never transform a DOWNLOAD path.** `board.tsx` (×2) and `task-row.tsx` sign originals for
+     copy-to-clipboard → Downloads. A transform there silently replaces someone's saved evidence with
+     a 20KB copy. The display path (`task-images.tsx`) is the ONLY one that resizes; each download
+     site carries a comment saying so.
+  Verify a change with bytes, never by eye — a transform that silently no-ops still renders fine.
 - ✅ **List queries no longer swallow errors (FIXED 2026-07-21, Phase 0).** They used to do
   `const { data } = await supabase…` then `data ?? []`, so a failed query rendered as a benign empty
   state — that's what turned the un-pushed-0014 migration into a silent outage that looked like

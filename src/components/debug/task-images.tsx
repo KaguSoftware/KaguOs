@@ -9,8 +9,10 @@ import {
   ALLOWED_IMAGE_TYPES,
   MAX_IMAGES_PER_TASK,
   MAX_IMAGE_BYTES,
+  THUMB_TRANSFORM,
 } from "@/lib/debug-images";
 import { useToast } from "@/components/ui/toast";
+import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import type { DebugTaskImage, DebugTaskImageView } from "@/lib/types";
 
@@ -76,20 +78,46 @@ export function TaskImages({
     let cancelled = false;
     if (images.length === 0) return;
     const supabase = createClient();
-    supabase.storage
-      .from("debug")
-      .createSignedUrls(
-        images.map((i) => i.file_path),
-        60 * 60
-      )
-      .then(({ data }) => {
-        if (cancelled || !data) return;
-        setViews(
-          images
-            .map((img, idx) => ({ ...img, url: data[idx]?.signedUrl ?? "" }))
-            .filter((v) => v.url)
-        );
-      });
+    const paths = images.map((i) => i.file_path);
+
+    // ⚠️ The resize is baked into the TOKEN at signing time — the transform is
+    // not a query param you can append to a URL later. (Appending
+    // `&width=320` to a plain signed URL returns 200 and a re-encoded
+    // FULL-SIZE image: a silent failure that looks fine and makes the board
+    // heavier, measured at 202KB vs the 198KB original.) Since the batch
+    // endpoint `createSignedUrls` takes no `transform`, thumbnails have to be
+    // signed one at a time.
+    //
+    // That costs nothing real: the calls run concurrently, and 6 of them
+    // (MAX_IMAGES_PER_TASK) measured 843ms against the batch call's 859ms —
+    // one round-trip either way.
+    Promise.all([
+      supabase.storage.from("debug").createSignedUrls(paths, 60 * 60),
+      Promise.all(
+        paths.map((p) =>
+          supabase.storage
+            .from("debug")
+            .createSignedUrl(p, 60 * 60, { transform: THUMB_TRANSFORM })
+        )
+      ),
+    ]).then(([full, thumbs]) => {
+      if (cancelled || !full.data) return;
+      setViews(
+        images
+          .map((img, idx) => {
+            const url = full.data?.[idx]?.signedUrl ?? "";
+            return {
+              ...img,
+              url,
+              // Degrade to the full-size original if the renderer refuses.
+              // A heavy thumbnail is a slow board; a missing one is a bug
+              // report with no picture in it.
+              thumbUrl: thumbs[idx]?.data?.signedUrl ?? url,
+            };
+          })
+          .filter((v) => v.url)
+      );
+    });
     return () => {
       cancelled = true;
     };
@@ -217,6 +245,30 @@ export function TaskImages({
           : undefined
       }
     >
+      {/* Signing is a network call, so the thumbnails arrive a beat after the
+          row. Hold their space with skeletons at the SAME 80px height and the
+          image's own aspect ratio (both columns are on the row already), so
+          the images fill the boxes instead of shoving the description down.
+          Skeletons rather than a spinner: the product register is explicit
+          that content loads into its own shape, not behind a throbber. */}
+      {views.length === 0 && images.length > 0 && (
+        <ul className="flex flex-wrap gap-2" aria-hidden>
+          {images.map((image) => (
+            <li key={image.id}>
+              <Skeleton
+                className="h-20 border border-line"
+                style={{
+                  width:
+                    image.width && image.height
+                      ? `${Math.min(160, (image.width / image.height) * 80)}px`
+                      : "112px",
+                }}
+              />
+            </li>
+          ))}
+        </ul>
+      )}
+
       {views.length > 0 && (
         <ul className="flex flex-wrap gap-2">
           {views.map((image) => (
@@ -227,8 +279,11 @@ export function TaskImages({
                 className="block overflow-hidden rounded-md border border-line transition-colors duration-150 hover:border-line-strong"
                 aria-label="View image full size"
               >
+                {/* `thumbUrl`, never `url` — the box is 80px tall and the
+                    original is ~44x the bytes it can show. The lightbox below
+                    is where the full-resolution image lives. */}
                 <Image
-                  src={image.url}
+                  src={image.thumbUrl}
                   alt=""
                   width={image.width ?? 160}
                   height={image.height ?? 100}

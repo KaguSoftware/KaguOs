@@ -298,6 +298,10 @@ export function TaskRow({
           [task],
           { [task.id]: images },
           async (paths) => {
+            // ⚠️ NO `transform` here, unlike the thumbnails in TaskImages.
+            // These bytes land in someone's Downloads as the record of a bug —
+            // handing them a downscaled copy loses the evidence they were
+            // saving. Display can be cheap; an export cannot.
             const { data } = await supabase.storage
               .from("debug")
               .createSignedUrls(paths, 60 * 5);

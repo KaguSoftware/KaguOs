@@ -352,7 +352,18 @@ export type DebugTaskImage = {
 };
 
 /** An image plus the short-lived signed URL that actually renders it. */
-export type DebugTaskImageView = DebugTaskImage & { url: string };
+/**
+ * A task screenshot with its short-lived signed URLs.
+ *
+ * TWO urls, deliberately: `url` is the stored original and is what the lightbox
+ * and any download must use, `thumbUrl` is the resized copy for the grid box.
+ * They are separate because a downscaled screenshot is fine to glance at and
+ * useless as evidence — see THUMB_TRANSFORM in lib/debug-images.ts.
+ */
+export type DebugTaskImageView = DebugTaskImage & {
+  url: string;
+  thumbUrl: string;
+};
 
 export type CampaignStatus = "idea" | "planned" | "running" | "done";
 export type PostStatus = "draft" | "scheduled" | "published";
