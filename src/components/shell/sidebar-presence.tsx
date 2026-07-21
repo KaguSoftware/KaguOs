@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import { Phone, Smile, X } from "lucide-react";
 import { updateMyStatus } from "@/lib/actions/account";
 import { Input } from "@/components/ui/input";
+import { EmojiPicker } from "@/components/ui/emoji-picker";
 import { Button } from "@/components/ui/button";
 import { useAction } from "@/lib/use-action";
 import { useLivePresence, type LiveState } from "@/lib/use-live-presence";
@@ -432,17 +433,19 @@ function StatusModal({ me, now, pending, onSet, onClose }: EditorProps) {
               Or write your own
             </p>
             <div className="flex items-center gap-2">
-              <Input
+              {/* Was a bare 4-char text input — the last un-typed control in the
+                  app, and the worst field to type into on a phone. The grid
+                  carries every preset emoji plus the ones people actually reach
+                  for; anything else still arrives via the OS emoji keyboard
+                  into the note field beside it. */}
+              <EmojiPicker
                 value={draft.emoji}
-                onChange={(e) =>
+                onChange={(emoji) =>
                   set({
-                    emoji: e.target.value.slice(0, 4),
+                    emoji,
                     kind: draft.kind === "none" ? "custom" : draft.kind,
                   })
                 }
-                placeholder="🙂"
-                aria-label="Status emoji"
-                className="w-12 shrink-0 px-0 text-center text-base"
               />
               <Input
                 value={draft.note}

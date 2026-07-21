@@ -11,6 +11,7 @@ import { Dropdown } from "@/components/ui/dropdown";
 import { DatePicker } from "@/components/ui/date-picker";
 import { useToast } from "@/components/ui/toast";
 import { TaskImages } from "@/components/debug/task-images";
+import { MAX_TASKS_PER_BATCH, overflowNote } from "@/lib/debug-limits";
 import { useAction } from "@/lib/use-action";
 import { cn } from "@/lib/utils";
 import type { DebugPriority, DebugTask, DebugTaskImage } from "@/lib/types";
@@ -89,6 +90,9 @@ export function Brainstorm({
     ...projects.map((p) => ({ value: p.id, label: p.name })),
   ];
 
+  /** More titles than one batch accepts — the overflow won't post. */
+  const overBatchCap = titles.length > MAX_TASKS_PER_BATCH;
+
   function addLines(raw: string[]) {
     const clean = raw.map((l) => l.trim().slice(0, 200)).filter(Boolean);
     if (clean.length > 0) setTitles((prev) => [...prev, ...clean]);
@@ -115,6 +119,10 @@ export function Brainstorm({
             res.tasks.length,
             project ? (projects.find((p) => p.id === project)?.name ?? null) : null
           ).catch(() => {});
+          // The server is the authority on what actually landed. If it capped
+          // the batch, say so here too — the details pass is about to show
+          // fewer tasks than were typed, and that must not look like a glitch.
+          if (res.dropped) toastError(res.message);
           setTasks(res.tasks);
           setIdx(0);
           setDraft(draftFrom(res.tasks[0]));
@@ -127,17 +135,25 @@ export function Brainstorm({
       .finally(() => setPosting(false));
   }
 
-  function finish(savedCount: number) {
+  function finish(saved: number) {
     toastSuccess(
       `${tasks.length} task${tasks.length === 1 ? "" : "s"} posted${
-        savedCount > 0 ? `, ${savedCount} detailed` : ""
+        saved > 0 ? `, ${saved} detailed` : ""
       }.`
     );
     router.push("/debug");
   }
 
-  // How many tasks got a real details save (for the finish toast).
-  const [savedCount, setSavedCount] = useState(0);
+  /**
+   * WHICH tasks got a details save — a Set of ids, not a counter.
+   *
+   * ⚠️ It used to be `savedCount + 1` on every save, with no memory of which
+   * task it was. Walking Back and re-saving the same task counted it twice, so
+   * a 14-task session could finish claiming "14 posted, 17 detailed" — a number
+   * that can't be true and is obviously wrong to the person who just did it.
+   * A set makes re-saving idempotent, so the tally can never exceed the tasks.
+   */
+  const [savedIds, setSavedIds] = useState<Set<string>>(new Set());
 
   function advance(nextSaved: number) {
     if (idx + 1 >= tasks.length) {
@@ -165,7 +181,8 @@ export function Brainstorm({
       project_id: draft.project_id || null,
       suggested_for: draft.suggested_for || null,
     };
-    const nextSaved = savedCount + 1;
+    // Re-saving a task you already detailed doesn't grow the tally.
+    const nextSaved = savedIds.has(task.id) ? savedIds.size : savedIds.size + 1;
     run(() => updateTask(task.id, fields), {
       optimistic: () => {
         setTasks((prev) =>
@@ -183,7 +200,7 @@ export function Brainstorm({
               : t
           )
         );
-        setSavedCount(nextSaved);
+        setSavedIds((prev) => new Set(prev).add(task.id));
         advance(nextSaved);
       },
     });
@@ -296,7 +313,12 @@ export function Brainstorm({
             <ArrowRight className="size-4" aria-hidden />
           </Button>
           {titles.length > 0 && (
-            <span className="font-mono text-xs text-muted">
+            <span
+              className={cn(
+                "font-mono text-xs",
+                overBatchCap ? "text-amber" : "text-muted"
+              )}
+            >
               {titles.length} task{titles.length === 1 ? "" : "s"}
             </span>
           )}
@@ -304,6 +326,16 @@ export function Brainstorm({
             Cancel
           </Button>
         </div>
+
+        {/* Warn BEFORE the trip, not after. The cap used to apply silently on
+            the server, so the overflow simply vanished; saying it here means you
+            can still split the batch while the titles are in front of you. */}
+        {overBatchCap && (
+          <p role="status" className="mt-3 text-[13px] text-amber">
+            Only the first {MAX_TASKS_PER_BATCH} will post —{" "}
+            {overflowNote(titles.length - MAX_TASKS_PER_BATCH)}
+          </p>
+        )}
       </div>
     );
   }
@@ -434,7 +466,7 @@ export function Brainstorm({
         <div className="ml-auto flex flex-wrap items-center gap-2">
           <Button
             variant="ghost"
-            onClick={() => finish(savedCount)}
+            onClick={() => finish(savedIds.size)}
             className={cn(last && "hidden")}
           >
             Leave the rest as-is
@@ -442,7 +474,7 @@ export function Brainstorm({
           <Button
             variant="outline"
             disabled={pending}
-            onClick={() => advance(savedCount)}
+            onClick={() => advance(savedIds.size)}
           >
             Skip
           </Button>

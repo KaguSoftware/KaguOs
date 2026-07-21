@@ -68,6 +68,51 @@ Contracts w/ PDFs), **Debug** (everyone: per-project boards, self-claim-only, re
 
 ## Current status (2026-07-21)
 
+### 🟢 PHASE 2 — FLOW POLISH: TWO LYING COUNTERS FIXED + PASTE-TO-UPLOAD + EMOJI PICKER + FOCUS DE-MODALLED (2026-07-21) — BUILT + STATICALLY VERIFIED (tsc · lint unchanged · check:demo 86 · build), **live-drive by Parsa PENDING**
+Third phase of the improvement programme (**now 6 phases: 0 · 1 · 2 · 2a · 3 · 4** — Parsa split the
+brainstorm rebuild into its own **Phase 2a**, keeping this one to bug fixes + polish). Two of the four
+items are defects in the same family Phase 0 attacked: **code that reports something untrue.**
+
+1. **`savedCount` double-counted — brainstorm could claim more tasks detailed than posted.**
+   `saveAndNext` did a blind `savedCount + 1` with no memory of WHICH task, so Back-then-re-save
+   counted the same one twice. Verified with the exact path (save A → Back → save A → save B → save
+   C over 3 tasks): **old = "3 posted, 4 detailed"** (arithmetically impossible), new = 3. Now a
+   `Set<string>` of saved ids, so re-saving is idempotent and the tally can't exceed the tasks.
+2. **The 50-item batch cap was SILENT — pasting 60 brainstorm titles lost 10 without a word.**
+   `quickAddTasks` and `logAuditFindings` both `.slice(0, 50)` with no report. New
+   **`lib/debug-limits.ts`** (`MAX_TASKS_PER_BATCH` + a shared `overflowNote()`), placed there for the
+   same reason as `debug-images.ts` — a `"use server"` module can't export a const, and both sides
+   must name the same number. Now announced in **three** places: an amber warning in capture
+   **before** the trip (while the titles are still in front of you), the server's own message on the
+   way back, and the audit composer's toast.
+   ⚠️ **Also fixed a second lie found while doing it:** `task-row.tsx`'s findings toast hardcoded
+   `Filed ${lines.length}`, which would have claimed all 60 were filed when 50 were. It now repeats
+   the SERVER's message.
+3. **Paste-to-upload screenshots** — `Ctrl+V` after `Win+Shift+S`, instead of save→browse→pick.
+   Feeds the clipboard's files into the EXISTING `upload()` / `stage()`, so caps, MIME whitelist,
+   size checks and the announce-don't-truncate behaviour all come for free. Works on the expanded
+   row, the row editor, the brainstorm details pass (all via `TaskImages`) **and the create form**
+   (its own staged path — Parsa asked mid-build whether debug tasks were covered; they are).
+   ⚠️ Handlers are scoped to the images container, **never `document`** — a global paste listener
+   would hijack Ctrl+V app-wide, including the board search and every text field. A paste carrying
+   no files falls through so pasting text still behaves. A "or paste a screenshot" hint sits beside
+   the button, because an invisible affordance is no affordance.
+4. **Curated emoji picker** (`components/ui/emoji-picker.tsx`, NEW) replaces the bare 4-char text
+   input — the last un-typed control in an app whose rule is that every control is custom and typed,
+   and the worst field to type into on a phone. ~40 work-relevant emoji in 4 groups; the first group
+   **mirrors `STATUS_PRESETS`**, so keep the two in sync or the picker and the chips will disagree
+   about what "Working" looks like. Deliberately not the full Unicode table (a large payload plus a
+   search box, for a field holding one character).
+5. **Debug focus editor de-modalled** → `CreateOverlay`. DESIGN.md line 52 says modals are for
+   destructive confirms only; this was an 856-line **authoring** surface in a `max-w-lg` box — the
+   one place the app argued with its own design doc. **Container swap only**: the ranked list, the
+   board-chip picker with its ≥5-project search, the "Narrow it" row and the live sentence with its
+   `edited` latch are untouched. The Phase 1 `?` shortcuts overlay stays a modal — transient help
+   isn't authoring.
+
+**Not driven by a human yet.** Worth checking: the focus editor still latches custom wording (chips
+stop overwriting once you type), and `Ctrl+V` in the board's search box still pastes TEXT.
+
 ### 🟢 PHASE 1 — DEBUG BOARD POWER TOOLS: URL FILTERS + KEYBOARD + BULK ACTIONS (2026-07-21) — BUILT + STATICALLY VERIFIED (tsc · lint unchanged at the 2 known errors · check:demo 86 · build), **live-drive by Parsa PENDING**
 Second phase of the improvement programme (**5 phases, 0–4**; plan file
 `fix-these-impeccable-handoff-typed-hartmanis.md` carries the rest — say **"plan next phase"**).
@@ -1042,6 +1087,10 @@ volume. They're insurance, not a speedup.
   written to disk and the path written into the clipboard — change one, change both.
 - `src/lib/debug-images.ts` — image caps (6/task, 5MB, allowed MIME). Lives outside
   `actions/debug.ts` because a `"use server"` module may only export async functions.
+- `src/lib/debug-limits.ts` — `MAX_TASKS_PER_BATCH` (50) + `overflowNote()`, same reasoning.
+  ⚠️ Anything truncating against it MUST say what it dropped; the silent version was a real bug.
+- `src/components/ui/emoji-picker.tsx` — curated status-emoji grid. Its first group mirrors
+  `STATUS_PRESETS` (types.ts); change one and change the other.
 - `src/components/debug/task-images.tsx` — upload / thumbnails / lightbox, signed URLs batched in
   one call per row. Used by the expanded row AND the row editor.
 - `src/components/ui/signed-file-link.tsx` — opens a private-bucket file by signing a **60s** URL in
@@ -1238,17 +1287,17 @@ surface; run `/impeccable audit` after the batch (design hook was silenced after
 | Debug filters | multi-select behind one Filters popover w/ counts; Active/Mine/Done/All are presets that write those filters; boards ctrl/⌘-click multi · **URL-BACKED as of 2026-07-21 (Phase 1)** — shareable, refresh-proof | saved views (a named filter set you can recall) | later |
 | Debug board keyboard | **DONE 2026-07-21 (Phase 1)** — j/k · c · 1/2/3 · x · / · ? · Esc, with a typing guard. PRODUCT.md's keyboard promise is now met | row-level shortcuts inside the expanded panel (edit, attach) | later |
 | Debug bulk actions | **DONE 2026-07-21 (Phase 1)** — `updateTasks(ids, patch)`: state · priority · board · claim/unclaim, with honest partial-success reporting | bulk delete (needs its own confirm design — deliberately excluded) | later |
-| Debug brainstorm | 2-phase capture → linear details wizard (done) | the details pass as an **inline-expandable list** (can't jump to item 7 of 14 today); `savedCount` double-counts on Back+re-save; the 50-item `quickAddTasks` cap is silent | not started |
+| Debug brainstorm | 2-phase capture → linear details wizard; **both counter bugs FIXED 2026-07-21** (savedCount is a Set; the 50-cap is announced in capture, from the server, and in the audit toast) | the details pass as an **inline-expandable list** — can't jump to item 7 of 14 today | **Phase 2a** (split out 2026-07-21, needs its own planning pass) |
 | Debug audits UI | "Found N" badge (done) | make the count **clickable** → filter the board to `found_by = <audit>`; today there's no way to see which N | not started |
-| Debug focus editor | modal composer (done) | de-modal it — DESIGN.md says modals are for destructive confirms only; also focus items lose board attribution once an admin types custom wording | not started |
+| Debug focus editor | **DE-MODALLED 2026-07-21** → `CreateOverlay`, the same full-screen surface every create flow uses (container swap; internals untouched) | focus items still lose board attribution once an admin types custom wording | later |
 | Dashboard shape | **"Needs you" strip (overdue + suggested) + one dense stat row + full-width activity w/ per-kind filter and show-more** (done 2026-07-19) | strip currently covers **debug only** — sprint goals due, unticked reminders, and contracts expiring belong in it; counts should deep-link to filtered views once URL filters land | later |
 | Dashboard charts | numbers only (done) | **one** sparkline: net recurring over 12 months (`lastMonths()` + recharts both exist). Agreed with Parsa 2026-07-19 that the other five stats are single-state counts with nothing to plot — charting them would be decoration | next |
 | Reminder due dates | text + scope + done only | optional `due_on` via `DatePicker`, sort/dim by it. **Needs a migration** (`reminders` has no date column) — deferred rather than rushed at the end of a session | not started |
 | Mobile | **drawer menu + status reachable** (2026-07-19); layout padding and tables were already responsive; **dashboard stat row now fills its row at every breakpoint for partial-access members (2026-07-20)** | teammates' presence is still desktop-only (deliberate — browsing affordance); the rest of the app has NOT been driven on a real phone yet, only reasoned from the code + build. **Debug row and filter popover still need a real-device pass** | needs a live pass |
 | Comms split (Kemal, 2026-07-19) | **DONE 2026-07-19** — three tabs (External / Meetings / Notes), migration 0037. Meetings = title, date, attendees, summary, notes. Notes = body + pin. Both shared section-wide | Follow-ups if asked: link a meeting to a contact or project · attendees from an actual calendar · search across notes | — |
-| Task screenshots (2026-07-19) | 6 images/task, 5MB each, attach from create form + row + editor; Copy downloads them and writes filenames into the text | Paste-to-upload (Ctrl+V a screenshot straight onto a task) · annotation/crop · thumbnails via a transform CDN rather than full-size `unoptimized` | later |
+| Task screenshots (2026-07-19) | 6/task, 5MB each, from create form + row + editor + brainstorm; Copy downloads them and names them in the text; **PASTE-TO-UPLOAD done 2026-07-21** (everywhere, incl. the create form) | annotation/crop · thumbnails via a transform URL rather than full-size `unoptimized` (**Phase 4**) | later |
 | ⌘K search | nav actions + content (tasks/projects/ideas/contacts/sprints), loaded-once client-filter (done) | live/fresh results, ranking, recents | later |
-| Presence | **REDESIGNED 2026-07-19 (`a26ff0f`)**: three signals — LIVE online/away/offline dot via presence channels + status (emoji+note, presets are shortcuts) + available-to-call; **simple durations (30m/1h/2h/12h)** auto-expiry; **centered modal editor** w/ live preview + **Save button** (draft, not auto-save); **teammate hover cards** (full status); always-on last-seen column; status-change notify to work team kept (done). **2026-07-20: 9 presets, a 3×3 grid** — added 🍜 Eating · 🚶 Not home · 🛋️ Chilling · 😴 Sleeping (migration **0038, NOT yet applied**) | real emoji picker (currently a text field); open/close delay on hover cards; per-section activity; **per-preset default durations were considered and deliberately declined** (Parsa: expiry stays manual) | later |
+| Presence | **REDESIGNED 2026-07-19 (`a26ff0f`)**: three signals — LIVE online/away/offline dot via presence channels + status (emoji+note, presets are shortcuts) + available-to-call; **simple durations (30m/1h/2h/12h)** auto-expiry; **centered modal editor** w/ live preview + **Save button** (draft, not auto-save); **teammate hover cards** (full status); always-on last-seen column; status-change notify to work team kept (done). **2026-07-20: 9 presets, a 3×3 grid** — added 🍜 Eating · 🚶 Not home · 🛋️ Chilling · 😴 Sleeping (migration **0038 APPLIED 2026-07-21**). **Emoji picker done 2026-07-21** — a curated grid replaced the 4-char text input | open/close delay on hover cards; per-section activity; **per-preset default durations were considered and deliberately declined** (Parsa: expiry stays manual) | later |
 | Realtime | **live updates on every tab via `useRealtimeRefresh`→router.refresh(); debug board in-place (done 2026-07-19)** | in-place patching on more tabs (currently only debug patches; others refresh) | later |
 | Email (Resend) | **NONE — scoped then dropped by Parsa 2026-07-19 ("forget resend for now")**. `resend` not installed | announcements→everyone, task-assign→assignee, admin digests, role-polarized | when Parsa revives it |
 | Debug brainstorm | /debug/brainstorm: capture → one-trip post → per-task details pass + board trail + collapsed notify (done 2026-07-18, v2 after Parsa rejected the inline-bar v1) | — | — |

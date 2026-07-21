@@ -230,7 +230,18 @@ export function NewTaskForm({
         label="Screenshots"
         hint="Optional — a picture of the bug says more than the description will."
       >
-        <div>
+        <div
+          // Ctrl+V a screenshot straight into the form. Same contract as
+          // TaskImages: scoped to this container (never `document`, which would
+          // hijack paste in the title and description fields), and a paste with
+          // no files falls through so pasting text still works.
+          onPaste={(e) => {
+            const files = e.clipboardData?.files;
+            if (!files || files.length === 0) return;
+            e.preventDefault();
+            stage(files);
+          }}
+        >
           {staged.length > 0 && (
             <ul className="mb-2 flex flex-wrap gap-2">
               {staged.map((item, i) => (
@@ -279,6 +290,9 @@ export function NewTaskForm({
                 <ImagePlus className="size-3.5" aria-hidden />
                 {staged.length > 0 ? "Add another" : "Attach image"}
               </button>
+              <span className="ml-2 text-[11px] text-faint">
+                or paste a screenshot
+              </span>
             </>
           )}
         </div>

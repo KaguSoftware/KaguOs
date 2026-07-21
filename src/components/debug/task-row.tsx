@@ -257,13 +257,17 @@ export function TaskRow({
   function fileFindings() {
     const lines = findingLines;
     if (lines.length === 0) return;
+    // ⚠️ The toast repeats the SERVER's message rather than asserting
+    // `lines.length` — the batch is capped, and a hardcoded count would claim
+    // all 60 findings were filed when only 50 were. Report what happened.
     run(
       async () => {
         const res = await logAuditFindings(task.id, lines);
-        return res.ok ? { ok: true, message: res.message } : res;
+        if (!res.ok) return res;
+        toastSuccess(res.message);
+        return { ok: true, message: res.message };
       },
       {
-        success: `Filed ${lines.length} task${lines.length === 1 ? "" : "s"}.`,
         onSuccess: () => {
           setFindings("");
           setFiling(false);

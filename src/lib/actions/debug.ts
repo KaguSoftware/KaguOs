@@ -9,6 +9,7 @@ import {
 } from "@/lib/data/session";
 import { notifySection, notifyUser } from "@/lib/actions/notify";
 import { MAX_IMAGES_PER_TASK } from "@/lib/debug-images";
+import { MAX_TASKS_PER_BATCH, overflowNote } from "@/lib/debug-limits";
 import type { ActionResult } from "@/lib/actions/account";
 import type { DebugKind, DebugPriority, DebugState, DebugTask } from "@/lib/types";
 
@@ -89,15 +90,22 @@ export async function createTask(
 export async function quickAddTasks(
   titles: string[],
   projectId: string | null
-): Promise<{ ok: boolean; message: string; tasks?: DebugTask[] }> {
+): Promise<{
+  ok: boolean;
+  message: string;
+  /** How many titles exceeded the batch cap and were NOT posted. */
+  dropped?: number;
+  tasks?: DebugTask[];
+}> {
   const showcaseStop = await blockIfShowcase();
   if (showcaseStop) return showcaseStop;
   const ctx = await requireSection("debug");
 
-  const clean = titles
-    .map((t) => t.trim().slice(0, 200))
-    .filter(Boolean)
-    .slice(0, 50); // sanity cap per call — a paste, not an import pipeline
+  // Sanity cap per call — a paste, not an import pipeline. What gets dropped is
+  // REPORTED, never silently truncated (see MAX_TASKS_PER_BATCH).
+  const usable = titles.map((t) => t.trim().slice(0, 200)).filter(Boolean);
+  const clean = usable.slice(0, MAX_TASKS_PER_BATCH);
+  const dropped = usable.length - clean.length;
   if (clean.length === 0) return { ok: false, message: "Nothing to add." };
 
   const { data, error } = await ctx.supabase
@@ -115,7 +123,10 @@ export async function quickAddTasks(
   revalidatePath("/debug");
   return {
     ok: true,
-    message: `Added ${clean.length}.`,
+    message: dropped
+      ? `Added ${clean.length} — ${overflowNote(dropped)}`
+      : `Added ${clean.length}.`,
+    dropped,
     tasks: (data ?? []) as DebugTask[],
   };
 }
@@ -132,15 +143,22 @@ export async function quickAddTasks(
 export async function logAuditFindings(
   auditId: string,
   titles: string[]
-): Promise<{ ok: boolean; message: string; tasks?: DebugTask[] }> {
+): Promise<{
+  ok: boolean;
+  message: string;
+  /** How many findings exceeded the batch cap and were NOT filed. */
+  dropped?: number;
+  tasks?: DebugTask[];
+}> {
   const showcaseStop = await blockIfShowcase();
   if (showcaseStop) return showcaseStop;
   const ctx = await requireSection("debug");
 
-  const clean = titles
-    .map((t) => t.trim().slice(0, 200))
-    .filter(Boolean)
-    .slice(0, 50); // same sanity cap as quickAddTasks — a sweep, not an import
+  // Same sanity cap as quickAddTasks — a sweep, not an import. Reported, not
+  // silent: an audit that quietly loses findings is worse than one that files none.
+  const usable = titles.map((t) => t.trim().slice(0, 200)).filter(Boolean);
+  const clean = usable.slice(0, MAX_TASKS_PER_BATCH);
+  const dropped = usable.length - clean.length;
   if (clean.length === 0) return { ok: false, message: "Nothing to file." };
 
   // Inherit the audit's board so findings land beside the thing audited.
@@ -176,7 +194,10 @@ export async function logAuditFindings(
   revalidatePath("/debug");
   return {
     ok: true,
-    message: `Filed ${clean.length}.`,
+    message: dropped
+      ? `Filed ${clean.length} — ${overflowNote(dropped)}`
+      : `Filed ${clean.length}.`,
+    dropped,
     tasks: (data ?? []) as DebugTask[],
   };
 }

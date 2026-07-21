@@ -196,7 +196,27 @@ export function TaskImages({
   if (images.length === 0 && !canEdit) return null;
 
   return (
-    <div className="mt-2.5">
+    <div
+      className="mt-2.5"
+      // Ctrl+V a screenshot straight onto the task. `Win+Shift+S` → paste is
+      // how a screenshot actually reaches a bug report; the alternative is
+      // save-to-disk, browse, pick.
+      //
+      // ⚠️ Scoped to this container, NOT `document`. A global paste listener
+      // would hijack Ctrl+V app-wide — including the board's search box and
+      // every text field — and start uploading when someone meant to paste text.
+      // A paste carrying no files falls through untouched for the same reason.
+      onPaste={
+        canEdit
+          ? (e) => {
+              const files = e.clipboardData?.files;
+              if (!files || files.length === 0) return;
+              e.preventDefault();
+              upload(files);
+            }
+          : undefined
+      }
+    >
       {views.length > 0 && (
         <ul className="flex flex-wrap gap-2">
           {views.map((image) => (
@@ -265,6 +285,9 @@ export function TaskImages({
             )}
             {busy ? "Uploading…" : "Attach image"}
           </button>
+          {/* Paste is invisible unless it's named. The hint sits on the same
+              line as the button so the two read as one affordance. */}
+          <span className="ml-2 text-[11px] text-faint">or paste a screenshot</span>
         </>
       )}
 

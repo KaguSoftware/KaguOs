@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { ArrowDown, ArrowUp, Pencil, Plus, Search, Target, X } from "lucide-react";
 import {
@@ -12,6 +11,7 @@ import {
 } from "@/lib/actions/debug-focus";
 import { Textarea } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { CreateOverlay } from "@/components/ui/create";
 import { useAction } from "@/lib/use-action";
 import { cn } from "@/lib/utils";
 import type { DebugFocus, DebugFocusParts } from "@/lib/types";
@@ -473,36 +473,28 @@ function FocusModal({
     });
   }
 
-  return createPortal(
-    <div
-      role="dialog"
-      aria-modal="true"
-      aria-label="Board focus"
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+  /**
+   * A full-screen CreateOverlay, NOT a centred modal.
+   *
+   * DESIGN.md: "modals only for destructive confirms — everything else inline."
+   * This is an authoring surface (compose the focus, pick boards, write the
+   * wording), so a modal was the one place the app argued with its own design
+   * doc — and the composer had outgrown a `max-w-lg` box anyway. CreateOverlay
+   * is the same surface every other create flow uses, and brings the Esc
+   * handling, the close button and `animate-overlay-in` with it.
+   *
+   * ⚠️ Container swap only. Everything inside — the ranked list, the board-chip
+   * picker with its ≥5-project search, the "Narrow it" row, the live sentence
+   * and its `edited` latch — is unchanged and must stay that way.
+   */
+  return (
+    <CreateOverlay
+      open
+      onClose={onClose}
+      title="What the board is focusing on"
+      hint="Several items can be active at once — one per board, or one shared across boards."
     >
-      <button
-        type="button"
-        aria-label="Close"
-        onClick={onClose}
-        className="absolute inset-0 cursor-default bg-bg/70 backdrop-blur-sm motion-safe:animate-[overlay-in_150ms_var(--ease-mac)_both]"
-      />
-
-      <div className="relative flex max-h-[90vh] w-full max-w-lg origin-center flex-col animate-pop-in rounded-xl border border-line-strong bg-raised/90 shadow-2xl backdrop-blur-md">
-        <div className="flex items-center justify-between px-5 pb-3 pt-5">
-          <h2 className="text-[15px] font-semibold tracking-tight text-ink">
-            What the board is focusing on
-          </h2>
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Close"
-            className="rounded-md p-1 text-muted transition-colors duration-150 hover:bg-raised hover:text-ink"
-          >
-            <X className="size-4" aria-hidden />
-          </button>
-        </div>
-
-        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 py-1">
+      <div className="space-y-4">
           {/* The list as it stands. Focus is usually a small edit to this. */}
           {order.length > 0 && (
             <ul className="space-y-1.5">
@@ -822,35 +814,33 @@ function FocusModal({
           )}
         </div>
 
-        <div className="flex items-center gap-2 border-t border-line px-5 py-4">
-          {order.length > 0 && (
-            <button
-              type="button"
-              disabled={pending}
-              onClick={() =>
-                run(() => clearAllDebugFocus(), {
-                  success: "Focus cleared.",
-                  optimistic: () => setOrder([]),
-                  onSuccess: onChanged,
-                })
-              }
-              className="text-[13px] text-faint transition-colors duration-150 hover:text-danger"
-            >
-              Clear all
-            </button>
-          )}
-          <Button
+      <div className="mt-6 flex items-center gap-2 border-t border-line pt-4">
+        {order.length > 0 && (
+          <button
             type="button"
-            variant="ghost"
-            size="sm"
-            className="ml-auto"
-            onClick={onClose}
+            disabled={pending}
+            onClick={() =>
+              run(() => clearAllDebugFocus(), {
+                success: "Focus cleared.",
+                optimistic: () => setOrder([]),
+                onSuccess: onChanged,
+              })
+            }
+            className="text-[13px] text-faint transition-colors duration-150 hover:text-danger"
           >
-            Done
-          </Button>
-        </div>
+            Clear all
+          </button>
+        )}
+        <Button
+          type="button"
+          variant="primary"
+          size="sm"
+          className="ml-auto"
+          onClick={onClose}
+        >
+          Done
+        </Button>
       </div>
-    </div>,
-    document.body
+    </CreateOverlay>
   );
 }
