@@ -68,6 +68,50 @@ Contracts w/ PDFs), **Debug** (everyone: per-project boards, self-claim-only, re
 
 ## Current status (2026-07-21)
 
+### 🟢 PHASE 2a — BRAINSTORM DETAILS: WIZARD → LIST (2026-07-21) — BUILT + STATICALLY VERIFIED (tsc · lint unchanged · check:demo 86 · build), **live-drive by Parsa PENDING**
+Fourth phase of the improvement programme (**6 phases: 0 · 1 · 2 · 2a · 3 · 4**; two remain).
+Split out of Phase 2 at Parsa's call — fix the counters first, reshape the flow separately.
+
+**The problem.** The details pass was a linear wizard: one task on screen, `N / M`, Back / Skip /
+Save & next. Two consequences of that one choice — **you couldn't jump** (item 7 of 14 cost six
+clicks through tasks you didn't care about) and **you couldn't see the pass** ("which ones did I
+skip?" had no answer at any point, including the end — the toast could say *how many* were detailed
+but never *which*).
+
+**Now it's a list**, the same shape as the capture list directly above it: scan the rows, open the
+ones that deserve attention. Collapsed rows read `title · board · priority · done mark`.
+
+- **Rows save when they COLLAPSE** (`commit`), so there's no per-row Save button and nothing is lost
+  by navigating away. One row open at a time — opening another closes, and therefore saves, the
+  previous one. `openRow(id)` is the single path all of that runs through.
+- ⚠️ **The dirty check in `commit` is load-bearing, not an optimisation.** Opening a row to *read*
+  it also collapses it, so without the comparison, browsing the list would fire an `updateTask` per
+  row and mark every one "detailed" — exactly the untrue reporting Phases 0 and 2 were spent
+  removing. Verified against 8 cases, including the two that matter: a freshly-posted task (all
+  nulls) opened and closed untouched writes **nothing**, while clearing a previously-set deadline
+  **does** write.
+- **Progress is per-row ticks + a header count** ("4 of 14 detailed"), reusing the `savedIds` Set
+  from Phase 2 — already idempotent, so the tick is just `savedIds.has(id)`. This is the thing the
+  wizard structurally could not show: skipped rows are *visible*, not merely counted.
+- ⚠️ **New `DetailRow` component exists because of a real id collision.** The wizard hardcoded
+  `id="bs-title"`, `id="bs-project"` etc. and passed them to `Field`'s `htmlFor` — fine for one task
+  on screen, **broken the moment two rows render**: duplicate DOM ids mean every label points at the
+  first row's input, so clicking a label focuses the wrong task's field. Ids now come from
+  `useId()`, the same pattern as `ui/dropdown.tsx`. `Field` does NOT generate ids itself — the
+  caller must.
+- ⚠️ `DatePicker` keeps `key={task.id}` — it's uncontrolled with a `defaultValue`, so without a
+  per-row key a reopened row would show the previous row's date.
+- Removed: the `N / M` counter, the progress bar, Back / Skip / Save & next. Wizard furniture beside
+  a list is two navigation models arguing.
+- Unchanged and deliberate: capture still posts **every title in ONE trip** before details begin
+  (bailing mid-pass loses nothing; the session trail is already in `sessionStorage`), and images
+  still live **outside** the draft because `TaskImages` uploads on pick while the draft commits on
+  collapse.
+
+**Not driven by a human yet.** The checks that matter: open a row, change nothing, collapse — it must
+NOT gain a tick; and with several rows rendered, click a field's label and confirm focus lands in
+**that** row.
+
 ### 🟢 PHASE 2 — FLOW POLISH: TWO LYING COUNTERS FIXED + PASTE-TO-UPLOAD + EMOJI PICKER + FOCUS DE-MODALLED (2026-07-21) — BUILT + STATICALLY VERIFIED (tsc · lint unchanged · check:demo 86 · build), **live-drive by Parsa PENDING**
 Third phase of the improvement programme (**now 6 phases: 0 · 1 · 2 · 2a · 3 · 4** — Parsa split the
 brainstorm rebuild into its own **Phase 2a**, keeping this one to bug fixes + polish). Two of the four
@@ -719,10 +763,12 @@ helper + schema/grant-verified.** Not runtime-driven by Claude (same prod reason
       notification (`notifyDebugBatch`, "14 new tasks on Pet App") + writes the trail ids to
       `sessionStorage["kagu-debug-brainstorm"]` IMMEDIATELY — so the dump is durable and
       trail-marked even if the user bails mid-details.
-    - **Details pass**: card per task (title/board/priority/deadline/suggest-for(admin)/details),
-      "N / M" + thin progress bar, Back / **Skip** (leaves it as-is) / **Save & next**
-      (`updateTask`, optimistic) / **"Leave the rest as-is"** escape hatch / "Save & finish".
-      Finish → `/debug` with a toast ("14 posted, 9 detailed").
+    - **Details pass — a LIST since 2026-07-21 (Phase 2a), no longer a wizard**: every posted task
+      as a collapsed row (`title · board · priority · done tick`), expanding in place into
+      title/board/priority/deadline/suggest-for(admin)/details/screenshots (`DetailRow`, ids via
+      `useId()` — see the Phase 2a entry for why hardcoded ids broke here). **A row saves when it
+      COLLAPSES**, guarded by a dirty check so merely opening a row to read it writes nothing.
+      Header reads "4 of 14 detailed" off the `savedIds` Set. Done → `/debug` with the toast.
   - **Board**: "Batch add" button replaced by a **Brainstorm** Link; the session trail (tint +
     pin-to-top + "N added this session" header + Clear) now seeds from sessionStorage — adopted
     in a post-paint rAF inside the mount effect (a sync set trips `set-state-in-effect`; a lazy
@@ -1287,7 +1333,7 @@ surface; run `/impeccable audit` after the batch (design hook was silenced after
 | Debug filters | multi-select behind one Filters popover w/ counts; Active/Mine/Done/All are presets that write those filters; boards ctrl/⌘-click multi · **URL-BACKED as of 2026-07-21 (Phase 1)** — shareable, refresh-proof | saved views (a named filter set you can recall) | later |
 | Debug board keyboard | **DONE 2026-07-21 (Phase 1)** — j/k · c · 1/2/3 · x · / · ? · Esc, with a typing guard. PRODUCT.md's keyboard promise is now met | row-level shortcuts inside the expanded panel (edit, attach) | later |
 | Debug bulk actions | **DONE 2026-07-21 (Phase 1)** — `updateTasks(ids, patch)`: state · priority · board · claim/unclaim, with honest partial-success reporting | bulk delete (needs its own confirm design — deliberately excluded) | later |
-| Debug brainstorm | 2-phase capture → linear details wizard; **both counter bugs FIXED 2026-07-21** (savedCount is a Set; the 50-cap is announced in capture, from the server, and in the audit toast) | the details pass as an **inline-expandable list** — can't jump to item 7 of 14 today | **Phase 2a** (split out 2026-07-21, needs its own planning pass) |
+| Debug brainstorm | **DONE 2026-07-21** — capture list → details as an **expandable list** (save-on-collapse w/ dirty check, per-row done ticks, "4 of 14 detailed"); both counter bugs fixed earlier the same day | keyboard nav through the rows, as the board has | later |
 | Debug audits UI | "Found N" badge (done) | make the count **clickable** → filter the board to `found_by = <audit>`; today there's no way to see which N | not started |
 | Debug focus editor | **DE-MODALLED 2026-07-21** → `CreateOverlay`, the same full-screen surface every create flow uses (container swap; internals untouched) | focus items still lose board attribution once an admin types custom wording | later |
 | Dashboard shape | **"Needs you" strip (overdue + suggested) + one dense stat row + full-width activity w/ per-kind filter and show-more** (done 2026-07-19) | strip currently covers **debug only** — sprint goals due, unticked reminders, and contracts expiring belong in it; counts should deep-link to filtered views once URL filters land | later |

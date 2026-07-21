@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useId, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, ArrowRight, Check, ListPlus, X } from "lucide-react";
+import { ArrowRight, Check, ChevronDown, ListPlus, X } from "lucide-react";
 import { notifyDebugBatch, quickAddTasks, updateTask } from "@/lib/actions/debug";
 import { Button } from "@/components/ui/button";
 import { Input, Textarea } from "@/components/ui/input";
@@ -77,18 +77,24 @@ export function Brainstorm({
 
   // ---- details state ----
   const [tasks, setTasks] = useState<DebugTask[]>([]);
-  const [idx, setIdx] = useState(0);
+  // Which row is expanded, or null for "all collapsed". ONE at a time: opening
+  // another closes (and therefore saves) the current one, which keeps the page
+  // short and makes "where am I" unambiguous.
+  const [openId, setOpenId] = useState<string | null>(null);
   const [draft, setDraft] = useState<Draft | null>(null);
   // Screenshots per task id. Kept OUTSIDE `draft` because images are saved the
   // moment they're picked (TaskImages uploads and records them itself), while
-  // the draft is only committed on "Save & next" — folding them together would
-  // make Skip look like it discards attachments it has in fact already stored.
+  // the draft only commits when the row collapses — folding them together would
+  // make an open row look like it discards attachments it has already stored.
   const [images, setImages] = useState<Record<string, DebugTaskImage[]>>({});
 
   const projectOptions = [
     { value: "", label: "General", hint: "Not tied to a project" },
     ...projects.map((p) => ({ value: p.id, label: p.name })),
   ];
+
+  /** id → name, so a collapsed row can name its board without a lookup loop. */
+  const projectNames = Object.fromEntries(projects.map((p) => [p.id, p.name]));
 
   /** More titles than one batch accepts — the overflow won't post. */
   const overBatchCap = titles.length > MAX_TASKS_PER_BATCH;
@@ -124,8 +130,10 @@ export function Brainstorm({
           // fewer tasks than were typed, and that must not look like a glitch.
           if (res.dropped) toastError(res.message);
           setTasks(res.tasks);
-          setIdx(0);
-          setDraft(draftFrom(res.tasks[0]));
+          // Nothing expanded at the start — the list is the view, and you open
+          // only the rows that deserve attention.
+          setOpenId(null);
+          setDraft(null);
           setPhase("details");
         } else {
           toastError(res.message || "Couldn't post the tasks.");
@@ -135,7 +143,8 @@ export function Brainstorm({
       .finally(() => setPosting(false));
   }
 
-  function finish(saved: number) {
+  function finish() {
+    const saved = savedIds.size;
     toastSuccess(
       `${tasks.length} task${tasks.length === 1 ? "" : "s"} posted${
         saved > 0 ? `, ${saved} detailed` : ""
@@ -152,37 +161,39 @@ export function Brainstorm({
    * a 14-task session could finish claiming "14 posted, 17 detailed" — a number
    * that can't be true and is obviously wrong to the person who just did it.
    * A set makes re-saving idempotent, so the tally can never exceed the tasks.
+   *
+   * It now doubles as the per-row done mark: a tick is `savedIds.has(id)`.
    */
   const [savedIds, setSavedIds] = useState<Set<string>>(new Set());
 
-  function advance(nextSaved: number) {
-    if (idx + 1 >= tasks.length) {
-      finish(nextSaved);
-      return;
-    }
-    setIdx(idx + 1);
-    setDraft(draftFrom(tasks[idx + 1]));
-  }
-
-  function goBack() {
-    if (idx === 0) return;
-    setIdx(idx - 1);
-    setDraft(draftFrom(tasks[idx - 1]));
-  }
-
-  function saveAndNext() {
-    const task = tasks[idx];
-    if (!task || !draft) return;
+  /**
+   * Commit one row's draft, if it actually changed.
+   *
+   * ⚠️ The dirty check is load-bearing, not an optimisation. Rows save when they
+   * COLLAPSE, and opening a row to read it collapses it again — without this,
+   * merely scrolling through the list would fire an `updateTask` per row and
+   * mark every one of them "detailed", which is precisely the kind of untrue
+   * report the last two phases were spent removing.
+   */
+  function commit(task: DebugTask, next: Draft) {
     const fields = {
-      title: draft.title.trim() || task.title,
-      description: draft.description,
-      priority: draft.priority,
-      due_on: draft.due_on || null,
-      project_id: draft.project_id || null,
-      suggested_for: draft.suggested_for || null,
+      title: next.title.trim() || task.title,
+      description: next.description,
+      priority: next.priority,
+      due_on: next.due_on || null,
+      project_id: next.project_id || null,
+      suggested_for: next.suggested_for || null,
     };
-    // Re-saving a task you already detailed doesn't grow the tally.
-    const nextSaved = savedIds.has(task.id) ? savedIds.size : savedIds.size + 1;
+    const before = draftFrom(task);
+    const unchanged =
+      fields.title === before.title.trim() &&
+      fields.description === before.description &&
+      fields.priority === before.priority &&
+      (fields.due_on ?? "") === before.due_on &&
+      (fields.project_id ?? "") === before.project_id &&
+      (fields.suggested_for ?? "") === before.suggested_for;
+    if (unchanged) return;
+
     run(() => updateTask(task.id, fields), {
       optimistic: () => {
         setTasks((prev) =>
@@ -201,9 +212,24 @@ export function Brainstorm({
           )
         );
         setSavedIds((prev) => new Set(prev).add(task.id));
-        advance(nextSaved);
       },
     });
+  }
+
+  /**
+   * Open a row — which first saves whichever row is currently open.
+   *
+   * Collapsing IS saving (no per-row Save button), so this one function covers
+   * every way a row closes: opening another, toggling the same one shut, or
+   * finishing the pass.
+   */
+  function openRow(id: string | null) {
+    if (openId && draft) {
+      const current = tasks.find((t) => t.id === openId);
+      if (current) commit(current, draft);
+    }
+    setOpenId(id);
+    setDraft(id ? draftFrom(tasks.find((t) => t.id === id)!) : null);
   }
 
   // ---------------------------------------------------------------- capture
@@ -341,158 +367,240 @@ export function Brainstorm({
   }
 
   // ---------------------------------------------------------------- details
-  const task = tasks[idx];
-  if (!task || !draft) return null;
-  const last = idx === tasks.length - 1;
-
+  //
+  // A LIST, not a wizard. It used to be one task on screen with `N / M` and
+  // Back / Skip / Save & next — so reaching item 7 of 14 cost six clicks
+  // through tasks you didn't care about, and "which ones did I skip?" had no
+  // answer at any point, including the end.
+  //
+  // Now it's the same shape as the capture list directly above it: scan the
+  // rows, open the ones that deserve attention. Rows SAVE WHEN THEY COLLAPSE
+  // (see `commit`), so there's no per-row Save button and nothing is lost by
+  // navigating away.
   return (
     <div className="mx-auto max-w-2xl">
       <header className="mb-4 flex items-start justify-between gap-3">
         <div>
           <h1 className="text-[22px] font-semibold tracking-tight">Add details</h1>
           <p className="mt-1 text-sm text-muted">
-            All {tasks.length} are posted already — this pass just fills them in.
+            All {tasks.length} are posted already — open the ones worth filling in.
           </p>
         </div>
-        <span className="shrink-0 font-mono text-sm text-muted">
-          {idx + 1} / {tasks.length}
+        <span className="shrink-0 font-mono text-sm tabular-nums text-muted">
+          {savedIds.size} of {tasks.length} detailed
         </span>
       </header>
 
-      {/* Thin progress bar — how far through the pass you are. */}
-      <div className="mb-6 h-1 overflow-hidden rounded-full bg-raised" aria-hidden>
-        <div
-          className="h-full rounded-full bg-primary/60 transition-[width] duration-200 ease-mac"
-          style={{ width: `${((idx + 1) / tasks.length) * 100}%` }}
-        />
-      </div>
-
-      <div className="space-y-4 rounded-lg border border-line bg-surface p-4">
-        <Field label="Title" htmlFor="bs-title">
-          <Input
-            id="bs-title"
-            value={draft.title}
-            maxLength={200}
-            onChange={(e) => setDraft((d) => d && { ...d, title: e.target.value })}
-          />
-        </Field>
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Board" htmlFor="bs-project">
-            <Dropdown
-              id="bs-project"
-              value={draft.project_id}
-              options={projectOptions}
-              onChange={(v) => setDraft((d) => d && { ...d, project_id: v })}
-            />
-          </Field>
-          <Field label="Priority" htmlFor="bs-priority">
-            <Dropdown
-              id="bs-priority"
-              value={draft.priority}
-              options={PRIORITY_OPTIONS}
-              onChange={(v) =>
-                setDraft((d) => d && { ...d, priority: v as DebugPriority })
-              }
-            />
-          </Field>
-        </div>
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Deadline" htmlFor="bs-due" hint="Optional.">
-            <DatePicker
-              key={task.id}
-              id="bs-due"
-              name="due_on"
-              defaultValue={draft.due_on}
-              placeholder="No deadline"
-              onChange={(iso) => setDraft((d) => d && { ...d, due_on: iso })}
-            />
-          </Field>
-          {suggestOptions.length > 0 && (
-            <Field
-              label="Suggest for"
-              htmlFor="bs-suggested"
-              hint="A nudge, not a claim."
-            >
-              <Dropdown
-                id="bs-suggested"
-                value={draft.suggested_for}
-                placeholder="No suggestion"
-                options={[{ value: "", label: "No suggestion" }, ...suggestOptions]}
-                onChange={(v) => setDraft((d) => d && { ...d, suggested_for: v })}
-              />
-            </Field>
-          )}
-        </div>
-        <Field
-          label="Details"
-          htmlFor="bs-description"
-          hint="Steps, links, context — whatever helps whoever claims it."
-        >
-          <Textarea
-            id="bs-description"
-            rows={4}
-            value={draft.description}
-            onChange={(e) =>
-              setDraft((d) => d && { ...d, description: e.target.value })
+      <ul className="divide-y divide-line rounded-lg border border-line bg-surface">
+        {tasks.map((t, i) => (
+          <DetailRow
+            key={t.id}
+            task={t}
+            index={i}
+            open={openId === t.id}
+            done={savedIds.has(t.id)}
+            draft={openId === t.id ? draft : null}
+            onDraftChange={setDraft}
+            onToggle={() => openRow(openId === t.id ? null : t.id)}
+            projectOptions={projectOptions}
+            suggestOptions={suggestOptions}
+            projectNames={projectNames}
+            images={images[t.id] ?? EMPTY_IMAGES}
+            onImagesChange={(next) =>
+              setImages((prev) => ({ ...prev, [t.id]: next }))
             }
           />
-        </Field>
-        {/* Screenshots. The task already exists by this phase (capture posted
-            every title), so this needs none of the create form's staged-upload
-            machinery — it's the same TaskImages the expanded row uses, saving
-            straight to the task. */}
-        <Field label="Screenshots" hint="A picture beats a paragraph for a bug.">
-          <TaskImages
-            taskId={task.id}
-            images={images[task.id] ?? []}
-            canEdit
-            onChange={(next) =>
-              setImages((prev) => ({ ...prev, [task.id]: next }))
-            }
-          />
-        </Field>
-      </div>
+        ))}
+      </ul>
 
-      <div className="mt-5 flex flex-wrap items-center gap-2">
+      <div className="mt-5 flex items-center gap-3">
+        <p className="text-[13px] text-faint">
+          Anything you leave closed stays exactly as posted.
+        </p>
         <Button
-          variant="ghost"
-          size="sm"
-          disabled={idx === 0 || pending}
-          onClick={goBack}
+          variant="primary"
+          disabled={pending}
+          className="ml-auto"
+          onClick={() => {
+            // Collapsing IS saving, and finishing collapses everything — so
+            // flush whatever is open before leaving.
+            openRow(null);
+            finish();
+          }}
         >
-          <ArrowLeft className="size-3.5" aria-hidden />
-          Back
+          <Check className="size-4" aria-hidden />
+          Done
         </Button>
-        <div className="ml-auto flex flex-wrap items-center gap-2">
-          <Button
-            variant="ghost"
-            onClick={() => finish(savedIds.size)}
-            className={cn(last && "hidden")}
-          >
-            Leave the rest as-is
-          </Button>
-          <Button
-            variant="outline"
-            disabled={pending}
-            onClick={() => advance(savedIds.size)}
-          >
-            Skip
-          </Button>
-          <Button variant="primary" disabled={pending} onClick={saveAndNext}>
-            {last ? (
-              <>
-                <Check className="size-4" aria-hidden />
-                Save & finish
-              </>
-            ) : (
-              <>
-                Save & next
-                <ArrowRight className="size-4" aria-hidden />
-              </>
-            )}
-          </Button>
-        </div>
       </div>
     </div>
+  );
+}
+
+/** Stable empty array — a fresh `[]` each render would remount TaskImages. */
+const EMPTY_IMAGES: DebugTaskImage[] = [];
+
+/**
+ * One task in the details list: a collapsed summary that expands into the
+ * full editor.
+ *
+ * ⚠️ Field ids come from `useId()`, NOT hardcoded strings. The wizard could get
+ * away with `id="bs-title"` because exactly one task was ever on screen; in a
+ * list that yields duplicate DOM ids, and every `<label htmlFor>` would point at
+ * the FIRST row's input — clicking a label would focus the wrong task's field.
+ * Same reasoning as the `useId` in ui/dropdown.tsx.
+ */
+function DetailRow({
+  task,
+  index,
+  open,
+  done,
+  draft,
+  onDraftChange,
+  onToggle,
+  projectOptions,
+  suggestOptions,
+  projectNames,
+  images,
+  onImagesChange,
+}: {
+  task: DebugTask;
+  index: number;
+  open: boolean;
+  /** Already saved in this pass — the mark a wizard structurally couldn't show. */
+  done: boolean;
+  /** The live draft while open; null when collapsed. */
+  draft: Draft | null;
+  onDraftChange: (next: Draft) => void;
+  onToggle: () => void;
+  projectOptions: { value: string; label: string; hint?: string }[];
+  suggestOptions: { value: string; label: string }[];
+  projectNames: Record<string, string>;
+  images: DebugTaskImage[];
+  onImagesChange: (next: DebugTaskImage[]) => void;
+}) {
+  const uid = useId();
+  const set = (patch: Partial<Draft>) => {
+    if (draft) onDraftChange({ ...draft, ...patch });
+  };
+
+  const boardLabel = task.project_id
+    ? (projectNames[task.project_id] ?? "Project")
+    : "General";
+
+  return (
+    <li>
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-expanded={open}
+        className="flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors duration-150 hover:bg-raised/60"
+      >
+        <span className="w-6 shrink-0 text-right font-mono text-[11px] text-faint">
+          {index + 1}
+        </span>
+        <span className="w-4 shrink-0" aria-hidden>
+          {done && <Check className="size-3.5 text-primary-dim" />}
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-sm text-ink">{task.title}</span>
+          <span className="mt-0.5 block truncate text-xs text-faint">
+            {boardLabel} · {task.priority}
+            {task.due_on ? ` · due ${task.due_on}` : ""}
+          </span>
+        </span>
+        <ChevronDown
+          className={cn(
+            "size-4 shrink-0 text-faint transition-transform duration-150",
+            open && "rotate-180"
+          )}
+          aria-hidden
+        />
+      </button>
+
+      {open && draft && (
+        <div className="space-y-4 border-t border-line px-4 py-4">
+          <Field label="Title" htmlFor={`${uid}-title`}>
+            <Input
+              id={`${uid}-title`}
+              value={draft.title}
+              maxLength={200}
+              onChange={(e) => set({ title: e.target.value })}
+            />
+          </Field>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field label="Board" htmlFor={`${uid}-project`}>
+              <Dropdown
+                id={`${uid}-project`}
+                value={draft.project_id}
+                options={projectOptions}
+                onChange={(v) => set({ project_id: v })}
+              />
+            </Field>
+            <Field label="Priority" htmlFor={`${uid}-priority`}>
+              <Dropdown
+                id={`${uid}-priority`}
+                value={draft.priority}
+                options={PRIORITY_OPTIONS}
+                onChange={(v) => set({ priority: v as DebugPriority })}
+              />
+            </Field>
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field label="Deadline" htmlFor={`${uid}-due`} hint="Optional.">
+              {/* `key` per task: DatePicker is uncontrolled with a defaultValue,
+                  so without it a reopened row would show the previous date. */}
+              <DatePicker
+                key={task.id}
+                id={`${uid}-due`}
+                name="due_on"
+                defaultValue={draft.due_on}
+                placeholder="No deadline"
+                onChange={(iso) => set({ due_on: iso })}
+              />
+            </Field>
+            {suggestOptions.length > 0 && (
+              <Field
+                label="Suggest for"
+                htmlFor={`${uid}-suggested`}
+                hint="A nudge, not a claim."
+              >
+                <Dropdown
+                  id={`${uid}-suggested`}
+                  value={draft.suggested_for}
+                  placeholder="No suggestion"
+                  options={[{ value: "", label: "No suggestion" }, ...suggestOptions]}
+                  onChange={(v) => set({ suggested_for: v })}
+                />
+              </Field>
+            )}
+          </div>
+          <Field
+            label="Details"
+            htmlFor={`${uid}-description`}
+            hint="Steps, links, context — whatever helps whoever claims it."
+          >
+            <Textarea
+              id={`${uid}-description`}
+              rows={4}
+              value={draft.description}
+              onChange={(e) => set({ description: e.target.value })}
+            />
+          </Field>
+          {/* Screenshots. The task already exists by this phase (capture posted
+              every title), so this needs none of the create form's staged-upload
+              machinery — it's the same TaskImages the expanded row uses. Images
+              live OUTSIDE the draft: they upload on pick, while the draft only
+              commits on collapse. */}
+          <Field label="Screenshots" hint="A picture beats a paragraph for a bug.">
+            <TaskImages
+              taskId={task.id}
+              images={images}
+              canEdit
+              onChange={onImagesChange}
+            />
+          </Field>
+        </div>
+      )}
+    </li>
   );
 }
