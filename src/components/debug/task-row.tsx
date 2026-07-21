@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Copy,
   Hand,
@@ -122,6 +122,7 @@ const STATE_LABEL: Record<DebugState, string> = {
 
 export function TaskRow({
   task,
+  cursored,
   members,
   meId,
   isAdmin,
@@ -141,6 +142,8 @@ export function TaskRow({
   onRestore,
 }: {
   task: DebugTask;
+  /** The keyboard cursor is on this row — mark it and scroll it into view. */
+  cursored?: boolean;
   members: MembersMap;
   meId: string;
   isAdmin: boolean;
@@ -193,6 +196,14 @@ export function TaskRow({
       return !wasOpen;
     });
   }
+  // Keep the keyboard cursor on screen as j/k walks past the fold. `nearest`
+  // (not `center`) so a row already in view doesn't jump under the reader —
+  // the same restraint the expand-scroll above shows.
+  useEffect(() => {
+    if (!cursored) return;
+    rowRef.current?.scrollIntoView({ block: "nearest" });
+  }, [cursored]);
+
   const [editing, setEditing] = useState(false);
   // Audit only: the "what I found" composer, one finding per line.
   const [filing, setFiling] = useState(false);
@@ -348,7 +359,11 @@ export function TaskRow({
       // so an opened panel never sits flush against the window edge.
       className={cn(
         "scroll-mb-6 px-4 py-3 transition-colors duration-150",
-        highlight && "bg-primary/5"
+        highlight && "bg-primary/5",
+        // The keyboard cursor. An inset ring rather than an outline so it can't
+        // be clipped by the list's own overflow, and it reads as "this row is
+        // focused" without competing with the state colours on the row itself.
+        cursored && "bg-raised/60 ring-1 ring-inset ring-primary-dim/60"
       )}
     >
       {/* A grid, not a flex-wrap. Four columns that always mean the same thing:

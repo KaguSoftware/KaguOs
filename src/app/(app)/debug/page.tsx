@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Suspense } from "react";
 import { Plus } from "lucide-react";
 import { requireSection } from "@/lib/data/session";
 import { getMembersMap } from "@/lib/data/members";
@@ -98,17 +99,22 @@ export default async function DebugPage() {
           </LinkButton>
         }
       />
-      <DebugBoard
-        initialTasks={tasks as DebugTask[]}
-        projects={projects}
-        members={members}
-        meId={ctx.userId}
-        isAdmin={ctx.isAdmin}
-        showcase={ctx.showcase}
-        suggestOptions={suggestOptions}
-        focusItems={focusItems}
-        initialImages={images as DebugTaskImage[]}
-      />
+      {/* The board seeds its filters from the query string (shareable views),
+          so it reads useSearchParams and needs a Suspense boundary — same as
+          the Work page's filter panels. */}
+      <Suspense>
+        <DebugBoard
+          initialTasks={tasks as DebugTask[]}
+          projects={projects}
+          members={members}
+          meId={ctx.userId}
+          isAdmin={ctx.isAdmin}
+          showcase={ctx.showcase}
+          suggestOptions={suggestOptions}
+          focusItems={focusItems}
+          initialImages={images as DebugTaskImage[]}
+        />
+      </Suspense>
     </>
   );
 }

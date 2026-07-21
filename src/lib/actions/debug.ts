@@ -325,6 +325,120 @@ export async function unclaimTask(taskId: string): Promise<ActionResult> {
   return { ok: true, message: "Unclaimed." };
 }
 
+/** What a bulk edit can change. Every field is optional; omitted = untouched. */
+export type BulkPatch = {
+  state?: DebugState;
+  priority?: DebugPriority;
+  /** "" clears the board (moves to General). */
+  project_id?: string | null;
+  /** "claim" takes the tasks for yourself; "unclaim" releases them. */
+  claim?: "claim" | "unclaim";
+};
+
+export type BulkResult = ActionResult & {
+  /** How many rows actually changed. */
+  changed?: number;
+  /** How many were skipped because they no longer qualified. */
+  skipped?: number;
+};
+
+/**
+ * Apply one patch to MANY tasks in a single trip.
+ *
+ * ⚠️ PARTIAL SUCCESS IS THE CONTRACT, not an edge case. This is a shared,
+ * realtime board: between the moment you select ten tasks and the moment you
+ * hit Claim, a teammate can take three of them. The two ownership guards are
+ * therefore preserved exactly as the single-task actions have them —
+ *
+ *   claim   → `.is("assignee_id", null)`        (first click wins; see claimTask)
+ *   unclaim → `.eq("assignee_id", ctx.userId)`  unless admin (see unclaimTask,
+ *             and `private.debug_guard_unclaim()` from migration 0035, which
+ *             enforces the same rule in the database)
+ *
+ * — so the update simply doesn't match the rows that no longer qualify. We then
+ * report the split (`changed` / `skipped`) instead of claiming a blanket
+ * success. Reporting "Done" for a batch where three rows silently did nothing
+ * is the same class of silent lie that Phase 0 removed from the read path.
+ */
+export async function updateTasks(
+  ids: string[],
+  patch: BulkPatch
+): Promise<BulkResult> {
+  const showcaseStop = await blockIfShowcase();
+  if (showcaseStop) return showcaseStop;
+  const ctx = await requireSection("debug");
+
+  const unique = [...new Set(ids)].filter(Boolean);
+  if (unique.length === 0) return { ok: false, message: "Nothing selected." };
+
+  // Build the update from whitelisted values only — same gate as updateTask.
+  const update: Record<string, unknown> = {};
+  if (patch.state !== undefined) {
+    if (!STATES.includes(patch.state)) return { ok: false, message: "Invalid state." };
+    update.state = patch.state;
+  }
+  if (patch.priority !== undefined) {
+    if (!PRIORITIES.includes(patch.priority)) {
+      return { ok: false, message: "Invalid priority." };
+    }
+    update.priority = patch.priority;
+  }
+  if (patch.project_id !== undefined) update.project_id = patch.project_id || null;
+  if (patch.claim === "claim") update.assignee_id = ctx.userId;
+  if (patch.claim === "unclaim") update.assignee_id = null;
+
+  if (Object.keys(update).length === 0) {
+    return { ok: false, message: "Nothing to change." };
+  }
+
+  const query = ctx.supabase.from("debug_tasks").update(update).in("id", unique);
+  // The ownership guards — see the block comment above.
+  if (patch.claim === "claim") query.is("assignee_id", null);
+  if (patch.claim === "unclaim" && !ctx.isAdmin) {
+    query.eq("assignee_id", ctx.userId);
+  }
+
+  const { data, error } = await query.select("id");
+  if (error) return { ok: false, message: error.message };
+
+  const changed = data?.length ?? 0;
+  const skipped = unique.length - changed;
+
+  revalidatePath("/debug");
+
+  if (changed === 0) {
+    return {
+      ok: false,
+      message:
+        patch.claim === "claim"
+          ? "Those are all taken already."
+          : patch.claim === "unclaim"
+            ? "None of those are yours to unclaim."
+            : "Nothing changed.",
+      changed,
+      skipped,
+    };
+  }
+
+  // Name the split when some rows didn't qualify — "Claimed 7 — 3 were already
+  // taken" tells you what happened; "Done" would not.
+  const verb =
+    patch.claim === "claim"
+      ? "Claimed"
+      : patch.claim === "unclaim"
+        ? "Unclaimed"
+        : "Updated";
+  const tail =
+    skipped > 0
+      ? patch.claim === "claim"
+        ? ` — ${skipped} ${skipped === 1 ? "was" : "were"} already taken.`
+        : patch.claim === "unclaim"
+          ? ` — ${skipped} ${skipped === 1 ? "wasn't" : "weren't"} yours.`
+          : ` — ${skipped} unchanged.`
+      : ".";
+  return { ok: true, message: `${verb} ${changed}${tail}`, changed, skipped };
+}
+
 /**
  * Remove the stored screenshots for these tasks.
  *

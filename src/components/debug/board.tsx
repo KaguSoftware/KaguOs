@@ -1,7 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import {
   Archive,
   Bug,
@@ -16,7 +18,14 @@ import {
   X,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
-import { deleteTasks } from "@/lib/actions/debug";
+import {
+  claimTask,
+  deleteTasks,
+  setTaskState,
+  unclaimTask,
+  updateTasks,
+  type BulkPatch,
+} from "@/lib/actions/debug";
 import { TaskRow } from "@/components/debug/task-row";
 import { DebugFocusHero } from "@/components/debug/focus-hero";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -25,6 +34,7 @@ import { Button, ConfirmButton } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/components/ui/toast";
 import { useAction } from "@/lib/use-action";
+import { readBoardFilters, useBoardFilterUrl } from "@/lib/use-board-filters";
 import {
   downloadBlob,
   downloadTaskImages,
@@ -198,26 +208,31 @@ export function DebugBoard({
 }) {
   const [tasks, setTasks] = useState<DebugTask[]>(initialTasks);
   const [images, setImages] = useState<DebugTaskImage[]>(initialImages);
+
+  // Filters are seeded FROM THE URL so a shared/bookmarked link reproduces the
+  // exact view, then mirrored back to it on every change (see the effect below).
+  // Read once via a lazy initialiser — re-reading on each render would fight the
+  // user's own edits, since we rewrite the URL as they filter.
+  const searchParams = useSearchParams();
+  const [initialFilters] = useState(() => readBoardFilters(searchParams));
+
   // ["all"], or one-or-more of "general" / project ids. Pure client-side
   // switching, zero delay. Plain click replaces the selection, ctrl/cmd-click
   // adds to it, so the common case stays one click.
-  const [board, setBoard] = useState<string[]>(["all"]);
+  const [board, setBoard] = useState<string[]>(initialFilters.board);
   const [boardQuery, setBoardQuery] = useState("");
   // Filters are multi-select: an EMPTY array means "no filter" (show all), and
   // several picks are OR'd together — "urgent or high", "Pet app or Site".
   // That's the shape people actually want on a shared board; a single-value
   // filter forces you to look at one project at a time when the real question
   // is usually "these two".
-  const [assignee, setAssignee] = useState<string[]>([]); // "unassigned" · user ids
-  const [priority, setPriority] = useState<string[]>([]);
+  const [assignee, setAssignee] = useState<string[]>(initialFilters.assignee); // "unassigned" · user ids
+  const [priority, setPriority] = useState<string[]>(initialFilters.priority);
   // Opens on the "Active" preset — the board's job is what's left to do.
-  const [stateFilter, setStateFilter] = useState<string[]>([
-    "open",
-    "in_progress",
-  ]);
-  const [kindFilter, setKindFilter] = useState<string[]>([]);
-  const [taskQuery, setTaskQuery] = useState("");
-  const [sort, setSort] = useState<Sort>("smart");
+  const [stateFilter, setStateFilter] = useState<string[]>(initialFilters.state);
+  const [kindFilter, setKindFilter] = useState<string[]>(initialFilters.kind);
+  const [taskQuery, setTaskQuery] = useState(initialFilters.q);
+  const [sort, setSort] = useState<Sort>(initialFilters.sort as Sort);
   // Three states, not two. The old boolean could only say "live" or
   // "connecting…", so a socket that never came back said "connecting…" forever
   // — the board looked merely slow while silently showing stale data.
@@ -230,10 +245,47 @@ export function DebugBoard({
   // pick tasks to copy or download as a plain-text file.
   const [selectMode, setSelectMode] = useState(false);
   const [picked, setPicked] = useState<Set<string>>(new Set());
+  const [bulkPending, setBulkPending] = useState(false);
+  // Keyboard cursor: an index into `visible`, or -1 for "not navigating".
+  // PRODUCT.md commits to full keyboard operability for claim/tick flows; this
+  // is what delivers it. See the key handler below for the full map.
+  const [cursor, setCursor] = useState(-1);
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const searchRef = useRef<HTMLInputElement>(null);
   const { success: toastSuccess, error: toastError } = useToast();
   // Brainstorm session trail: ids of tasks made in /debug/brainstorm, handed
   // over via sessionStorage. Highlighted + pinned to the top until cleared.
   const [sessionIds, setSessionIds] = useState<Set<string>>(new Set());
+
+  // Mirror the live filters into the query string, so the view is shareable and
+  // survives a refresh. One-way on purpose: the board owns the state (presets
+  // write the real filters), and the URL only reflects it — making the URL a
+  // second source of truth would recreate the two-rival-systems bug that the
+  // Active/Mine/Done strip had before it was rewritten as presets.
+  //
+  // The writer no-ops when the resulting URL is unchanged, so the realtime
+  // traffic that re-renders this board doesn't rewrite history on every tick.
+  const writeFilterUrl = useBoardFilterUrl();
+  useEffect(() => {
+    writeFilterUrl({
+      board,
+      state: stateFilter,
+      priority,
+      kind: kindFilter,
+      assignee,
+      q: taskQuery,
+      sort,
+    });
+  }, [
+    writeFilterUrl,
+    board,
+    stateFilter,
+    priority,
+    kindFilter,
+    assignee,
+    taskQuery,
+    sort,
+  ]);
 
   // Server refreshes (revalidatePath after actions) re-send props — adopt them.
   //
@@ -485,6 +537,159 @@ export function DebugBoard({
     return list;
   }, [liveTasks, board, assignee, priority, stateFilter, kindFilter, taskQuery, sort, sessionIds]);
 
+  // Keep the keyboard cursor inside the list DURING RENDER as it shrinks —
+  // filtering or a realtime delete can drop the row you were on. Doing this in
+  // an effect would trip `react-hooks/set-state-in-effect` (an ERROR in this
+  // repo) and paint one frame pointing at nothing. Same during-render clamp
+  // Dropdown/MultiDropdown already use.
+  const [seenLen, setSeenLen] = useState(visible.length);
+  if (seenLen !== visible.length) {
+    setSeenLen(visible.length);
+    if (cursor > visible.length - 1) setCursor(visible.length - 1);
+  }
+
+  /**
+   * Board keyboard shortcuts — the delivery of PRODUCT.md's "full keyboard
+   * operability for claim/tick flows", which the board did not have.
+   *
+   * ⚠️ THE CRITICAL RULE: every shortcut must no-op while the user is TYPING.
+   * These are bare keys, so without the guard below, `c` would claim a task
+   * while you typed "crash" into the search box and `/` would never reach it at
+   * all. The ⌘K palette is meta-scoped so it doesn't collide, but this board's
+   * own search field absolutely would.
+   */
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      // Never hijack a modified chord (⌘K, ⌘R, ctrl+C…).
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+
+      const el = e.target as HTMLElement | null;
+      const typing =
+        !!el &&
+        (el.tagName === "INPUT" ||
+          el.tagName === "TEXTAREA" ||
+          el.tagName === "SELECT" ||
+          el.isContentEditable);
+
+      if (typing) {
+        // Escape is the one key that still means something while typing: it
+        // gets you back out of the search box to the board.
+        if (e.key === "Escape") el.blur();
+        return;
+      }
+
+      if (shortcutsOpen && e.key !== "?" && e.key !== "Escape") return;
+
+      const move = (delta: number) => {
+        e.preventDefault();
+        if (visible.length === 0) return;
+        setCursor((c) => {
+          const next = c < 0 ? (delta > 0 ? 0 : visible.length - 1) : c + delta;
+          return Math.max(0, Math.min(visible.length - 1, next));
+        });
+      };
+
+      const current = cursor >= 0 ? visible[cursor] : null;
+
+      switch (e.key) {
+        case "j":
+        case "ArrowDown":
+          move(1);
+          break;
+        case "k":
+        case "ArrowUp":
+          move(-1);
+          break;
+        case "/":
+          e.preventDefault();
+          searchRef.current?.focus();
+          break;
+        case "?":
+          e.preventDefault();
+          setShortcutsOpen((v) => !v);
+          break;
+        case "Escape":
+          e.preventDefault();
+          if (shortcutsOpen) setShortcutsOpen(false);
+          else if (selectMode) setSelectMode(false);
+          else setCursor(-1);
+          break;
+        case "x":
+          if (!current) break;
+          e.preventDefault();
+          // Selecting implies wanting select mode — don't make people turn it
+          // on first just to use the key that turns things on.
+          setSelectMode(true);
+          setPicked((prev) => {
+            const next = new Set(prev);
+            if (next.has(current.id)) next.delete(current.id);
+            else next.add(current.id);
+            return next;
+          });
+          break;
+        case "c": {
+          if (!current) break;
+          e.preventDefault();
+          const mine = current.assignee_id === meId;
+          // Unclaim only your own (admins may release anyone's) — the same rule
+          // the row buttons and the DB trigger enforce.
+          if (current.assignee_id && !mine && !isAdmin) {
+            toastError("That task isn't yours to unclaim.");
+            break;
+          }
+          if (current.assignee_id) {
+            patchTask(current.id, { assignee_id: null });
+            unclaimTask(current.id).then((r) => {
+              if (r && !r.ok) {
+                patchTask(current.id, { assignee_id: current.assignee_id });
+                toastError(r.message);
+              }
+            });
+          } else {
+            patchTask(current.id, { assignee_id: meId });
+            claimTask(current.id).then((r) => {
+              if (r && !r.ok) {
+                patchTask(current.id, { assignee_id: null });
+                toastError(r.message);
+              }
+            });
+          }
+          break;
+        }
+        case "1":
+        case "2":
+        case "3": {
+          if (!current) break;
+          e.preventDefault();
+          const next = (["open", "in_progress", "done"] as DebugState[])[
+            Number(e.key) - 1
+          ];
+          if (!next || current.state === next) break;
+          const before = current.state;
+          patchTask(current.id, { state: next });
+          setTaskState(current.id, next).then((r) => {
+            if (r && !r.ok) {
+              patchTask(current.id, { state: before });
+              toastError(r.message);
+            }
+          });
+          break;
+        }
+      }
+    }
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [
+    visible,
+    cursor,
+    selectMode,
+    shortcutsOpen,
+    meId,
+    isAdmin,
+    patchTask,
+    toastError,
+  ]);
+
   const openCount = liveTasks.filter((t) => t.state === "open").length;
 
   // Batch select operates over the currently-visible rows only — what you see
@@ -566,6 +771,48 @@ export function DebugBoard({
           : `Downloaded ${n} task${n === 1 ? "" : "s"}.`
       );
     });
+  }
+
+  /**
+   * Apply one change to every picked row.
+   *
+   * Optimistic on the rows the guards can't reject (state / priority / board),
+   * but NOT on claim — a claim can legitimately lose the race to a teammate, and
+   * painting it as claimed before the server agrees would show a lie for a beat
+   * and then snap back. The action reports the split and the toast says it.
+   *
+   * Rows that were skipped stay picked, so you can see which ones didn't take.
+   */
+  function applyBulk(patch: BulkPatch, optimistic?: (t: DebugTask) => DebugTask) {
+    const ids = pickedVisible.map((t) => t.id);
+    if (ids.length === 0) return;
+    const idSet = new Set(ids);
+    const before = tasks;
+    if (optimistic) {
+      setTasks((prev) => prev.map((t) => (idSet.has(t.id) ? optimistic(t) : t)));
+    }
+    // Called directly rather than through `useAction().run`, because that helper
+    // only surfaces a message on FAILURE — and here the success message is the
+    // whole point ("Claimed 7 — 3 were already taken"). A partial success that
+    // toasted nothing would be the silent lie this feature exists to avoid.
+    setBulkPending(true);
+    updateTasks(ids, patch)
+      .then((result) => {
+        if (!result?.ok) {
+          if (optimistic) setTasks(before);
+          toastError(result?.message ?? "Couldn't apply that.");
+          return;
+        }
+        toastSuccess(result.message);
+        // Clear the selection only when everything took. A skipped row stays
+        // picked so the selection itself shows you what didn't happen.
+        if (!result.skipped) setPicked(new Set());
+      })
+      .catch(() => {
+        if (optimistic) setTasks(before);
+        toastError("Something went wrong. Please try again.");
+      })
+      .finally(() => setBulkPending(false));
   }
 
   // Assignee filter options: only people who actually hold a task, so the list
@@ -688,6 +935,9 @@ export function DebugBoard({
 
   return (
     <div className="space-y-3">
+      {shortcutsOpen && (
+        <ShortcutsOverlay onClose={() => setShortcutsOpen(false)} />
+      )}
       <DebugFocusHero
         items={focusItems}
         isAdmin={isAdmin}
@@ -828,6 +1078,17 @@ export function DebugBoard({
           )}
         </div>
         <div className="flex items-center gap-3">
+          {/* Without this the shortcuts only exist for people who already know
+              to press "?" — which is nobody, the first time. */}
+          <button
+            type="button"
+            onClick={() => setShortcutsOpen(true)}
+            aria-label="Keyboard shortcuts"
+            title="Keyboard shortcuts"
+            className="hidden rounded-md border border-line px-2 py-1 font-mono text-[11px] text-faint transition-colors duration-150 hover:border-line-strong hover:text-ink md:inline-flex"
+          >
+            ?
+          </button>
           <button
             type="button"
             onClick={toggleSelectMode}
@@ -890,9 +1151,10 @@ export function DebugBoard({
             aria-hidden
           />
           <input
+            ref={searchRef}
             value={taskQuery}
             onChange={(e) => setTaskQuery(e.target.value)}
-            placeholder="Search tasks…"
+            placeholder="Search tasks…  (press /)"
             aria-label="Search tasks"
             className="h-9 w-full rounded-md border border-line bg-raised pl-8 pr-3 text-sm text-ink placeholder:text-muted transition-colors duration-150 hover:border-line-strong focus-visible:border-line-strong"
           />
@@ -960,6 +1222,85 @@ export function DebugBoard({
                 : `Select all (${visible.length})`
             }
           />
+          {/* Write actions. They act on `pickedVisible` — what you can SEE is
+              what you change, so a filtered-away row can never be caught in a
+              batch you didn't look at. */}
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Dropdown's trigger text is a VALUE, not a label, so each one is
+                wrapped with an explicit accessible name. */}
+            <span aria-label="Set state for selected tasks">
+              <Dropdown
+                className="w-32"
+                id="bulk-state"
+                value=""
+                placeholder="Set state"
+                disabled={pickedVisible.length === 0 || bulkPending}
+                options={STATE_FILTER_OPTIONS}
+                onChange={(v) =>
+                  applyBulk({ state: v as DebugState }, (t) => ({
+                    ...t,
+                    state: v as DebugState,
+                  }))
+                }
+              />
+            </span>
+            <span aria-label="Set priority for selected tasks">
+              <Dropdown
+                className="w-32"
+                id="bulk-priority"
+                value=""
+                placeholder="Set priority"
+                disabled={pickedVisible.length === 0 || bulkPending}
+                options={PRIORITY_FILTER_OPTIONS}
+                onChange={(v) =>
+                  applyBulk({ priority: v as DebugTask["priority"] }, (t) => ({
+                    ...t,
+                    priority: v as DebugTask["priority"],
+                  }))
+                }
+              />
+            </span>
+            <span aria-label="Move selected tasks to another board">
+              <Dropdown
+                className="w-32"
+                id="bulk-board"
+                value=""
+                placeholder="Move to…"
+                disabled={pickedVisible.length === 0 || bulkPending}
+                searchThreshold={BOARD_SEARCH_THRESHOLD}
+                options={[
+                  { value: "", label: "General" },
+                  ...projects.map((p) => ({ value: p.id, label: p.name })),
+                ]}
+                onChange={(v) =>
+                  applyBulk({ project_id: v || null }, (t) => ({
+                    ...t,
+                    project_id: v || null,
+                  }))
+                }
+              />
+            </span>
+            {/* Claim is NOT optimistic — it can lose the race to a teammate on
+                this shared board, and showing it as yours before the server
+                agrees would flash a lie. */}
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={pickedVisible.length === 0 || bulkPending}
+              onClick={() => applyBulk({ claim: "claim" })}
+            >
+              Claim
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={pickedVisible.length === 0 || bulkPending}
+              onClick={() => applyBulk({ claim: "unclaim" })}
+            >
+              Unclaim
+            </Button>
+          </div>
+
           <div className="ml-auto flex items-center gap-2">
             <Button
               variant="outline"
@@ -1021,10 +1362,11 @@ export function DebugBoard({
           )
         ) : (
           <ul className="divide-y divide-line">
-            {visible.map((task) => (
+            {visible.map((task, index) => (
               <TaskRow
                 key={task.id}
                 task={task}
+                cursored={index === cursor}
                 members={members}
                 meId={meId}
                 isAdmin={isAdmin}
@@ -1232,6 +1574,79 @@ function FiltersPopover({
         </div>
       )}
     </div>
+  );
+}
+
+/** The board's keyboard map, and the source of the `?` overlay below. */
+const SHORTCUTS: { keys: string[]; label: string }[] = [
+  { keys: ["j", "k"], label: "Move down / up" },
+  { keys: ["c"], label: "Claim or release the task" },
+  { keys: ["1", "2", "3"], label: "Open · In progress · Done" },
+  { keys: ["x"], label: "Select the task" },
+  { keys: ["/"], label: "Search" },
+  { keys: ["?"], label: "This list" },
+  { keys: ["Esc"], label: "Back out" },
+];
+
+/**
+ * The `?` shortcuts overlay.
+ *
+ * A modal is right here even though DESIGN.md reserves them for destructive
+ * confirms: this is transient HELP, not an authoring surface — it holds no
+ * state, changes nothing, and every path out dismisses it. Same shell language
+ * as the focus composer and the status editor.
+ */
+function ShortcutsOverlay({ onClose }: { onClose: () => void }) {
+  return createPortal(
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="Keyboard shortcuts"
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+    >
+      <button
+        type="button"
+        aria-label="Close"
+        onClick={onClose}
+        className="absolute inset-0 cursor-default bg-bg/70 backdrop-blur-sm motion-safe:animate-[overlay-in_150ms_var(--ease-mac)_both]"
+      />
+      <div className="relative w-full max-w-sm origin-center animate-pop-in rounded-xl border border-line-strong bg-raised/90 shadow-2xl backdrop-blur-md">
+        <div className="flex items-center justify-between px-5 pb-3 pt-5">
+          <h2 className="text-[15px] font-semibold tracking-tight text-ink">
+            Keyboard shortcuts
+          </h2>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close"
+            className="rounded-md p-1 text-muted transition-colors duration-150 hover:bg-raised hover:text-ink"
+          >
+            <X className="size-4" aria-hidden />
+          </button>
+        </div>
+        <ul className="space-y-2 px-5 pb-5">
+          {SHORTCUTS.map((s) => (
+            <li
+              key={s.label}
+              className="flex items-center justify-between gap-4 text-[13px]"
+            >
+              <span className="text-muted">{s.label}</span>
+              <span className="flex shrink-0 items-center gap-1">
+                {s.keys.map((k) => (
+                  <kbd
+                    key={k}
+                    className="rounded border border-line-strong bg-surface px-1.5 py-0.5 font-mono text-[11px] text-ink"
+                  >
+                    {k}
+                  </kbd>
+                ))}
+              </span>
+            </li>
+          ))}
+        </ul>
+      </div>
+    </div>,
+    document.body
   );
 }
 

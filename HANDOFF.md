@@ -68,6 +68,56 @@ Contracts w/ PDFs), **Debug** (everyone: per-project boards, self-claim-only, re
 
 ## Current status (2026-07-21)
 
+### 🟢 PHASE 1 — DEBUG BOARD POWER TOOLS: URL FILTERS + KEYBOARD + BULK ACTIONS (2026-07-21) — BUILT + STATICALLY VERIFIED (tsc · lint unchanged at the 2 known errors · check:demo 86 · build), **live-drive by Parsa PENDING**
+Second phase of the improvement programme (**5 phases, 0–4**; plan file
+`fix-these-impeccable-handoff-typed-hartmanis.md` carries the rest — say **"plan next phase"**).
+All three items land in `components/debug/board.tsx`, the surface the team lives in.
+
+1. **URL-backed filters** (`lib/use-board-filters.ts`, NEW). Board · state · priority · kind ·
+   assignee · search · sort now live in the query string, so a filtered board is shareable,
+   bookmarkable and survives a refresh. Modelled on `useWorkFilters` but **array-aware** — every
+   debug filter is a `string[]`, so the Work hook could not be reused. Seeded once via a lazy
+   initialiser, mirrored back in an effect; writes use `replaceState`, **never `router.push`** (a
+   push would add a server round-trip and stack one history entry per keystroke).
+   ⚠️ **`?s=none` is a real value, not a bug.** For `state` an EMPTY array is a CHOSEN value (the
+   "All" preset) while its default is non-empty (`["open","in_progress"]`). A round-trip test caught
+   the first build emitting `?s=` and then parsing it back to the *default* — All silently snapped
+   to Active on refresh. Hence the explicit `NONE` sentinel. **Don't "clean up" that dangling-looking
+   param.**
+   ⚠️ `/debug/page.tsx` now wraps `<DebugBoard>` in `<Suspense>` — `useSearchParams` requires it or
+   the build fails (same as the Work page).
+   NOT in the URL, deliberately: select mode, expanded rows, archived toggle, board-tab search —
+   momentary states whose presence would make the back button replay UI fidgets.
+2. **Keyboard operability** — `j`/`k` move · `c` claim/release · `1`/`2`/`3` state · `x` select ·
+   `/` search · `?` shortcuts · `Esc` back out. This finally delivers PRODUCT.md's standing promise
+   of *"full keyboard operability for claim/tick flows"*, which the board had never met.
+   ⚠️ **The load-bearing detail is the typing guard**: every shortcut no-ops when the event target
+   is an input/textarea/select/contenteditable, or any modifier is held. Without it `c` would claim
+   a task while you typed "crash" in the search box. Escape is the one key that still acts while
+   typing (it blurs). The ⌘K palette is meta-scoped, so no collision there.
+   Cursor is an index into `visible`, **clamped during render** (not in an effect — that trips
+   `react-hooks/set-state-in-effect`, an ERROR here). `c` respects the ownership rule client-side
+   too, and every optimistic patch rolls back if the server rejects.
+   `?` overlay is a portaled dialog — a legitimate modal under DESIGN.md because it's transient help,
+   not an authoring surface. A `?` button sits in the toolbar, since a shortcut nobody can discover
+   is a shortcut nobody uses.
+3. **Bulk actions** — `updateTasks(ids, patch)` in `actions/debug.ts`: **state · priority · move to
+   board · claim / unclaim**, acting on `pickedVisible` (what you can SEE is what you change).
+   ⚠️ **PARTIAL SUCCESS IS THE CONTRACT.** Both single-task guards are preserved —
+   `.is("assignee_id", null)` for claim (first click wins) and `.eq("assignee_id", ctx.userId)` for
+   unclaim unless admin, backed by `private.debug_guard_unclaim()` (migration 0035). So on a shared
+   realtime board some rows legitimately don't take, and the action returns `{changed, skipped}` for
+   a toast that says **"Claimed 7 — 3 were already taken."** Skipped rows STAY selected so the
+   selection shows you what didn't happen. Deliberately called outside `useAction().run` — that
+   helper only surfaces a message on failure, and here the success message is the entire point.
+   Claim is **not** optimistic (it can lose the race; painting it yours first would flash a lie);
+   state/priority/board are.
+   ⚠️ **No bulk delete** — destructive batch ops need their own confirm design, and the archived
+   cleanup section already covers "get rid of these".
+
+**Not driven by a human yet.** The regression that matters most: type in the board's search box and
+confirm `j`, `c`, `3` insert characters rather than firing actions.
+
 ### 🟢 PHASE 0 — TRUTH & SAFETY: FAILED QUERIES NOW FAIL LOUDLY (2026-07-21) — BUILT + STATICALLY VERIFIED (tsc · lint · check:demo 86 reads · build) + **RUNTIME-PROVEN against prod**, live-drive by Parsa pending
 First phase of the improvement programme agreed after the 2026-07-21 review (~14 items across four
 categories, phased; plan file: `fix-these-impeccable-handoff-typed-hartmanis.md`, which carries the
@@ -1001,6 +1051,9 @@ volume. They're insurance, not a speedup.
 - `src/components/comms/workspace.tsx` — Comms tablist (External / Meetings / Notes); contacts stay
   server-rendered and arrive as the `external` prop.
 - `src/components/comms/internal.tsx` — `MeetingList` + `NoteList` (the internal half).
+- `src/lib/use-board-filters.ts` — URL-backed debug board filters (array-aware sibling of
+  `useWorkFilters`). ⚠️ The `NONE` sentinel is load-bearing: an empty `state` array is the "All"
+  preset, not an absent filter.
 - `src/lib/data/query.ts` — **`selectOrThrow` / `rowsOrThrow`**. EVERY new query goes through one of
   these with a label, so a failed query throws instead of rendering a fake empty state. Wrap the
   query, never the wave; leave gated `null` branches alone.
@@ -1182,9 +1235,9 @@ surface; run `/impeccable audit` after the batch (design hook was silenced after
 | Debug kind tag | `fix`/`feature`/**`audit`** on every task + create/edit + multi-select filter + copy/export text (done 2026-07-19) | — | — |
 | Debug audits | `audit` kind + `found_by` link + "Log findings" one-per-line composer filing N tasks in one trip + "Found N" / "found by X" (done 2026-07-19) | audit templates (a reusable checklist per project); "close the audit when all findings are done"; audit yield on the dashboard | later |
 | Debug focus | **a LIST of items, each covering MANY boards** (`project_ids[]`; empty = whole board) with kind/priority/state/order qualifiers, hand-ranked, searchable chip composer in a status-style modal (done 2026-07-19) | **"Apply" — snap the board's filters to a focus item, making it a shared saved view instead of only words**; expiry/auto-clear; who set it + when on the banner | not scoped with Parsa yet |
-| Debug filters | assignee/kind/state/priority all MULTI-select **behind one Filters popover w/ count**; Active/Mine/Done/All are **presets that write those filters** (no longer a rival system); project boards ctrl/⌘-click multi (done 2026-07-19) | saved views, **URL-backed filter state** (still resets on navigation — and it's the prerequisite for the dashboard "Needs you" counts deep-linking to a filtered board rather than plain `/debug`) | later |
-| Debug board keyboard | none — the board is mouse-only | **j/k row nav, `c` claim, 1/2/3 state, `/` search, `?` overlay.** PRODUCT.md promises "full keyboard operability for claim/tick flows"; that promise is currently unmet | not started |
-| Debug bulk actions | select mode copies / downloads .txt only (done) | bulk state / priority / board / claim via an `updateTasks(ids, patch)` action — the selection infrastructure already exists, it just has no write actions | not started |
+| Debug filters | multi-select behind one Filters popover w/ counts; Active/Mine/Done/All are presets that write those filters; boards ctrl/⌘-click multi · **URL-BACKED as of 2026-07-21 (Phase 1)** — shareable, refresh-proof | saved views (a named filter set you can recall) | later |
+| Debug board keyboard | **DONE 2026-07-21 (Phase 1)** — j/k · c · 1/2/3 · x · / · ? · Esc, with a typing guard. PRODUCT.md's keyboard promise is now met | row-level shortcuts inside the expanded panel (edit, attach) | later |
+| Debug bulk actions | **DONE 2026-07-21 (Phase 1)** — `updateTasks(ids, patch)`: state · priority · board · claim/unclaim, with honest partial-success reporting | bulk delete (needs its own confirm design — deliberately excluded) | later |
 | Debug brainstorm | 2-phase capture → linear details wizard (done) | the details pass as an **inline-expandable list** (can't jump to item 7 of 14 today); `savedCount` double-counts on Back+re-save; the 50-item `quickAddTasks` cap is silent | not started |
 | Debug audits UI | "Found N" badge (done) | make the count **clickable** → filter the board to `found_by = <audit>`; today there's no way to see which N | not started |
 | Debug focus editor | modal composer (done) | de-modal it — DESIGN.md says modals are for destructive confirms only; also focus items lose board attribution once an admin types custom wording | not started |
