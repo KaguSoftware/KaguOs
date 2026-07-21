@@ -379,13 +379,20 @@ export function TaskRow({
           title (elastic) · badges · state · assignee. The old single wrapping
           row reflowed unpredictably below ~1100px — the state control would drop
           under the title and the badges would orphan. Here the collapse is
-          declared instead: under `md` the row becomes two lines, badges moving
-          to their own line beneath the title, and the state control narrows. */}
+          declared instead.
+
+          ⚠️ ON A PHONE THIS IS ONE COLUMN, not two. It used to be
+          `grid-cols-[minmax(0,1fr)_auto]`, which sounds harmless but isn't: the
+          state switcher ("Open · In progress · Done") is intrinsically ~200px,
+          so `auto` claimed half of a 390px screen and the title was squeezed
+          into the rest — "remember the order of task that user selected" wrapped
+          to FOUR lines beside a column of empty space. Single column below `md`
+          means the title gets the whole width. */}
       <div
         className={cn(
           "grid items-center gap-x-3 gap-y-2",
-          "grid-cols-[minmax(0,1fr)_auto] md:grid-cols-[minmax(0,1fr)_auto_auto_auto]",
-          selectable && "grid-cols-[auto_minmax(0,1fr)_auto] md:grid-cols-[auto_minmax(0,1fr)_auto_auto_auto]"
+          "grid-cols-1 md:grid-cols-[minmax(0,1fr)_auto_auto_auto]",
+          selectable && "grid-cols-[auto_minmax(0,1fr)] md:grid-cols-[auto_minmax(0,1fr)_auto_auto_auto]"
         )}
       >
         {selectable && (
@@ -420,6 +427,35 @@ export function TaskRow({
             )}
           >
             {task.title}
+          </span>
+          {/* On a phone the state switcher and the claim button are hidden
+              until the row is opened, so the two facts they carry — what state
+              this is in and who holds it — are restated here as plain words.
+              `md:hidden` because from `md` up the real controls are on the row
+              and repeating them would be noise. */}
+          <span className="mt-0.5 block truncate text-xs text-faint md:hidden">
+            <span
+              className={cn(
+                "font-medium",
+                task.state === "done"
+                  ? "text-primary-dim"
+                  : task.state === "in_progress"
+                    ? "text-amber"
+                    : "text-muted"
+              )}
+            >
+              {STATE_LABEL[task.state]}
+            </span>
+            {task.assignee_id ? (
+              <>
+                {" · "}
+                <span style={{ color: members[task.assignee_id]?.color }}>
+                  {mine ? "You" : (members[task.assignee_id]?.name ?? "Someone")}
+                </span>
+              </>
+            ) : (
+              " · Unclaimed"
+            )}
           </span>
           <span className="mt-0.5 block truncate text-xs text-faint">
             {formatDate(task.created_at)}
@@ -462,9 +498,16 @@ export function TaskRow({
           <Badge tone={PRIORITY_TONE[task.priority]}>{task.priority}</Badge>
         </div>
 
-        {/* One-click state switch */}
+        {/* One-click state switch.
+            Hidden on a COLLAPSED phone row (the state is already shown as a
+            word in the meta line above) and revealed when the row is expanded —
+            on desktop it is always visible. This is the difference between 4
+            rows and 6 rows of vertical space per task on a phone. */}
         <div
-          className="flex overflow-hidden rounded-md border border-line"
+          className={cn(
+            "overflow-hidden rounded-md border border-line md:flex",
+            expanded ? "flex" : "hidden"
+          )}
           role="group"
           aria-label="State"
         >
@@ -491,8 +534,17 @@ export function TaskRow({
         </div>
 
         {/* Assignee / claim. Fixed 10rem from `md` up so the column aligns down
-            the list; fluid below that, where 160px is nearly half the screen. */}
-        <div className="flex items-center justify-end gap-1.5 md:w-40">
+            the list; fluid below that, where 160px is nearly half the screen.
+            Like the state switcher, this only appears on a phone once the row is
+            open — collapsed, "Claim" used to float in dead space under the state
+            pills, belonging to nothing. Left-aligned on mobile (it starts a line
+            of its own) and right-aligned in its column on desktop. */}
+        <div
+          className={cn(
+            "items-center gap-1.5 md:flex md:w-40 md:justify-end",
+            expanded ? "flex" : "hidden"
+          )}
+        >
           {pending && (
             <Loader2 className="size-3.5 animate-spin text-faint" aria-hidden />
           )}

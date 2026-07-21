@@ -968,8 +968,13 @@ export function DebugBoard({
         projects={projects}
       />
 
+      {/* Desktop only. The tab rail directly below already scrolls horizontally
+          and is the primary way to switch boards; on a phone this box was a
+          SECOND way to do the same thing, costing a full row of the screen
+          before you reach a single task. It stays on desktop, where the row is
+          free and typing beats scrolling a long rail. */}
       {showBoardSearch && (
-        <div className="relative max-w-xs">
+        <div className="relative hidden max-w-xs sm:block">
           <Search
             className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-faint"
             aria-hidden
@@ -1183,10 +1188,14 @@ export function DebugBoard({
             className="h-9 w-full rounded-md border border-line bg-raised pl-8 pr-3 text-sm text-ink placeholder:text-muted transition-colors duration-150 hover:border-line-strong focus-visible:border-line-strong"
           />
         </div>
+        {/* ⚠️ These three SHARE one line on a phone. Assignee and Sort used to
+            be `w-full` below `sm`, which sounds tidy and cost two extra rows:
+            with the board search, the tab rail, the presets, Select/Brainstorm
+            and the task search above them, a phone showed NINE stacked controls
+            before the first task. They're `flex-1` now with a sane minimum, so
+            the three sit on one line and wrap only if they genuinely can't. */}
         <MultiDropdown
-          // Full-width on a phone (where a 10rem control leaves a stranded gap
-          // beside it), fixed from `sm` up so the row stays aligned.
-          className="w-full sm:w-40"
+          className="min-w-28 flex-1 sm:w-40 sm:flex-none"
           label="Assignee"
           placeholder="Anyone"
           summaryNoun="people"
@@ -1205,7 +1214,7 @@ export function DebugBoard({
           counts={facetCounts}
         />
         <Dropdown
-          className="w-full sm:w-36"
+          className="min-w-24 flex-1 sm:w-36 sm:flex-none"
           id="debug-sort"
           value={sort}
           onChange={(v) => setSort(v as Sort)}
