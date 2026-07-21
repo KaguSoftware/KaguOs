@@ -17,6 +17,7 @@ import { Button, ConfirmButton, SubmitButton } from "@/components/ui/button";
 import { Input, Textarea } from "@/components/ui/input";
 import { Field } from "@/components/ui/field";
 import { Dropdown } from "@/components/ui/dropdown";
+import { SignedFileLink } from "@/components/ui/signed-file-link";
 import { DatePicker } from "@/components/ui/date-picker";
 import { FileInput } from "@/components/ui/typed-inputs";
 import { cn } from "@/lib/utils";
@@ -132,13 +133,7 @@ export function EditContractForm({ contract }: { contract: Contract }) {
   );
 }
 
-export function ContractFilePanel({
-  contract,
-  signedUrl,
-}: {
-  contract: Contract;
-  signedUrl: string | null;
-}) {
+export function ContractFilePanel({ contract }: { contract: Contract }) {
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const fileName = contract.file_path?.split("/").pop()?.replace(/^[0-9a-f-]{36}-/, "");
@@ -171,22 +166,16 @@ export function ContractFilePanel({
     <div className="space-y-3 p-4">
       {contract.file_path ? (
         <div className="flex flex-wrap items-center gap-3">
-          {signedUrl ? (
-            <a
-              href={signedUrl}
-              target="_blank"
-              rel="noreferrer"
-              className="inline-flex items-center gap-1.5 text-sm text-ink underline-offset-2 hover:text-primary-dim hover:underline"
-            >
-              <FileText className="size-4 text-faint" aria-hidden />
-              {fileName || "contract file"}
-            </a>
-          ) : (
-            <span className="inline-flex items-center gap-1.5 text-sm text-muted">
-              <FileText className="size-4 text-faint" aria-hidden />
-              {fileName || "contract file"}
-            </span>
-          )}
+          {/* Signed AT CLICK, never at render — see SignedFileLink for why a
+              render-time signed URL is stale by construction. */}
+          <SignedFileLink
+            bucket="contracts"
+            path={contract.file_path}
+            className="inline-flex items-center gap-1.5 text-sm text-ink underline-offset-2 hover:text-primary-dim hover:underline"
+          >
+            <FileText className="size-4 text-faint" aria-hidden />
+            {fileName || "contract file"}
+          </SignedFileLink>
           <ConfirmButton
             size="sm"
             disabled={pending}

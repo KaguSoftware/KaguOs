@@ -116,29 +116,38 @@ export async function createIdea(
   const body = String(formData.get("body") ?? "").trim();
   const sector = String(formData.get("sector") ?? "").trim() || null;
   const type = String(formData.get("type") ?? "").trim() || null;
+  // A suggestion for an existing project rather than a proposal for a new one.
+  const projectId = String(formData.get("project_id") ?? "").trim() || null;
 
   // Snapshot how many people must unanimously upvote this to auto-promote, at
   // the moment it's posted. Freezing it here means a teammate who joins Work
   // later can't retroactively "un-pass" an idea that already cleared the bar.
-  const { data: requiredCount } = await ctx.supabase.rpc("work_access_count");
+  // Project-scoped ideas never auto-promote, so the snapshot is pointless for
+  // them — left null so nothing downstream renders a bar they can't reach.
+  const { data: requiredCount } = projectId
+    ? { data: null }
+    : await ctx.supabase.rpc("work_access_count");
 
   const { error } = await ctx.supabase.from("ideas").insert({
     title,
     body: body || null,
     sector,
     type,
+    project_id: projectId,
     created_by: ctx.userId,
     required_count: requiredCount ?? null,
   });
   if (error) return { ok: false, message: error.message };
 
+  const href = projectId ? `/work/projects/${projectId}/ideas` : "/work?tab=ideas";
   notifySection(ctx, "work", {
     kind: "idea_new",
     title: `New idea: ${title}`,
-    href: "/work?tab=ideas",
+    href,
   });
 
   revalidatePath("/work");
+  if (projectId) revalidatePath(`/work/projects/${projectId}/ideas`);
   return { ok: true, message: "Idea posted." };
 }
 
@@ -330,10 +339,19 @@ async function maybeAutoPromote(
 
   const { data: idea } = await ctx.supabase
     .from("ideas")
-    .select("id, title, body, sector, type, status, created_by, required_count")
+    .select(
+      "id, title, body, sector, type, status, created_by, required_count, project_id"
+    )
     .eq("id", ideaId)
     .single();
   if (!idea || idea.status !== "open") return null;
+
+  // ⚠️ A project-scoped idea NEVER auto-promotes. Promotion means "become a new
+  // project", which is nonsense for "rename this screen" filed inside an
+  // existing one — it would quietly spawn junk projects out of ordinary
+  // feature suggestions. Voting still counts; it's how the team picks a
+  // favourite, not a trigger.
+  if (idea.project_id) return null;
 
   const required = idea.required_count ?? 0;
   if (required < 2) return null;
@@ -367,12 +385,20 @@ export async function promoteIdea(ideaId: string): Promise<ActionResult> {
 
   const { data: idea, error: readError } = await ctx.supabase
     .from("ideas")
-    .select("id, title, body, sector, type, status, created_by")
+    .select("id, title, body, sector, type, status, created_by, project_id")
     .eq("id", ideaId)
     .single();
   if (readError || !idea) return { ok: false, message: "Idea not found." };
   if (idea.status === "promoted") {
     return { ok: false, message: "Already promoted." };
+  }
+  // Same rule as auto-promote, enforced on the manual button too — a suggestion
+  // filed inside a project is not a candidate to become its own project.
+  if (idea.project_id) {
+    return {
+      ok: false,
+      message: "This idea belongs to a project, so it can't become one.",
+    };
   }
 
   const result = await promoteIdeaCore(ctx, idea, false);

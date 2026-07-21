@@ -10,9 +10,10 @@ import { Field } from "@/components/ui/field";
 import { Dropdown } from "@/components/ui/dropdown";
 import { DatePicker } from "@/components/ui/date-picker";
 import { useToast } from "@/components/ui/toast";
+import { TaskImages } from "@/components/debug/task-images";
 import { useAction } from "@/lib/use-action";
 import { cn } from "@/lib/utils";
-import type { DebugPriority, DebugTask } from "@/lib/types";
+import type { DebugPriority, DebugTask, DebugTaskImage } from "@/lib/types";
 
 const PRIORITY_OPTIONS = [
   { value: "low", label: "Low", hint: "Whenever someone gets to it" },
@@ -77,6 +78,11 @@ export function Brainstorm({
   const [tasks, setTasks] = useState<DebugTask[]>([]);
   const [idx, setIdx] = useState(0);
   const [draft, setDraft] = useState<Draft | null>(null);
+  // Screenshots per task id. Kept OUTSIDE `draft` because images are saved the
+  // moment they're picked (TaskImages uploads and records them itself), while
+  // the draft is only committed on "Save & next" — folding them together would
+  // make Skip look like it discards attachments it has in fact already stored.
+  const [images, setImages] = useState<Record<string, DebugTaskImage[]>>({});
 
   const projectOptions = [
     { value: "", label: "General", hint: "Not tied to a project" },
@@ -396,6 +402,20 @@ export function Brainstorm({
             value={draft.description}
             onChange={(e) =>
               setDraft((d) => d && { ...d, description: e.target.value })
+            }
+          />
+        </Field>
+        {/* Screenshots. The task already exists by this phase (capture posted
+            every title), so this needs none of the create form's staged-upload
+            machinery — it's the same TaskImages the expanded row uses, saving
+            straight to the task. */}
+        <Field label="Screenshots" hint="A picture beats a paragraph for a bug.">
+          <TaskImages
+            taskId={task.id}
+            images={images[task.id] ?? []}
+            canEdit
+            onChange={(next) =>
+              setImages((prev) => ({ ...prev, [task.id]: next }))
             }
           />
         </Field>

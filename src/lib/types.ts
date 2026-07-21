@@ -165,8 +165,24 @@ export type Idea = {
   /** People who must unanimously upvote to auto-promote — snapshot at create. */
   required_count: number | null;
   promoted_project_id: string | null;
+  /**
+   * The project this idea is a suggestion FOR, or null for a company idea
+   * (a proposal that could itself become a project). A project-scoped idea
+   * never promotes — see the guard in `actions/work.ts`.
+   */
+  project_id: string | null;
   created_by: string | null;
   created_at: string;
+};
+
+/** One row in a project's ideas list — the idea plus its vote/comment tallies. */
+export type ProjectIdeaRow = {
+  id: string;
+  title: string;
+  created_by: string | null;
+  created_at: string;
+  idea_votes: { user_id: string; value: number }[];
+  idea_comments: { count: number }[];
 };
 
 export type IdeaComment = {

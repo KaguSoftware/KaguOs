@@ -53,17 +53,99 @@ Contracts w/ PDFs), **Debug** (everyone: per-project boards, self-claim-only, re
   (authenticated may update only `full_name`, `color`).
 - Debug claim rule (DB): assignee may only be set to yourself/null unless admin.
 - Files upload from the BROWSER straight to storage (RLS-gated), then a server action saves the
-  path; downloads via signed URLs (1h).
+  path; downloads via signed URLs.
+- ⚠️ **NEVER bake a signed URL into server-rendered HTML — sign AT CLICK.** A URL signed during
+  render is stale by construction: the page outlives its own token (router cache, a tab left open, a
+  back-navigation), and the click then lands on `InvalidJWT — "exp" claim timestamp check failed`,
+  which reads to the user as "the button does nothing". Raising the TTL doesn't fix it. Use
+  **`SignedFileLink`** (`components/ui/signed-file-link.tsx`) — it mints a 60s URL in the click
+  handler. Pass a `file_path` to the client, never a `signedUrl`. (This was a real 2026-07-21 bug on
+  Learn PDFs; contracts had it latent.)
 - Text+CHECK not enums; created_by nullable `on delete set null`; `updated_at` triggers.
 - Next 16: `src/proxy.ts` (not middleware); async cookies/params.
 - Chart colors are validated (dataviz skill): income `oklch(0.62 0.13 160)`, expense
   `oklch(0.55 0.16 25)` — L band 0.48–0.67 on dark; re-validate any new chart palette.
 
+## Current status (2026-07-21)
+
+### 🟢 DEBUG-BOARD BATCH: EXPIRED-PDF BUG + FILTER COUNTS + TITLE CLIP + BRAINSTORM SHOTS + PROJECT IDEAS (2026-07-21) — BUILT + STATICALLY VERIFIED (tsc · lint · check:demo 86 reads · build all green), **migrations 0038 + 0039 APPLIED to prod and schema-verified**, live-drive by Parsa pending
+Five items off the debug board plus one asked mid-session. **The headline is a real production bug
+that had nothing to do with what it looked like.**
+
+1. **🔴 "kagu learn pdf click not working" was an EXPIRED SIGNED URL, not a broken click.** Parsa's
+   screenshot showed the answer: `{"statusCode":"400","error":"InvalidJWT","message":"\"exp\" claim
+   timestamp check failed"}`. `learn/[id]/page.tsx` signed every attachment **at server render** with
+   a 1-hour TTL and wrote the URL into the markup — but the page outlives its own token (router
+   cache, a tab left open, a back-navigation), so any click an hour later carried a dead token and
+   looked like a dead button. **A longer TTL is not the fix; a render-time URL is stale by
+   construction.**
+   New **`SignedFileLink`** (`components/ui/signed-file-link.tsx`) mints a **60s** URL inside the
+   click handler — a token that's always seconds old, so the TTL can be short instead of long. It
+   also **removes the batch-signing round-trip from the page's critical path** (the old perf comment
+   at :135 is now moot in the best way — zero signing cost on render).
+   ⚠️ It navigates via `window.location.assign`, NOT `window.open`: the async signing severs the
+   click from its user gesture and popup blockers eat the resulting `open()`.
+   ⚠️ Failure is announced (toast) rather than silent — the original bug's worst quality was that a
+   click appeared not to register.
+   **`management/contracts/[id]` had the identical latent bug** (also 3600s at render) and was fixed
+   the same way; `ContractFilePanel`'s `signedUrl` prop is gone. The rule is now in Conventions.
+2. **Filter dropdowns carry counts.** New **`DropdownOption.count`**, rendered right-aligned in mono
+   + tabular — deliberately NOT `hint`, which renders as a second line of prose under the label; a
+   count has to sit on the baseline where the eye compares down the column. Assignee options and the
+   Filters popover chips (kind/state/priority) both got them, from one pass over `liveTasks`.
+   **Counts are whole-board and deliberately IGNORE the other filters** (Parsa's call): a number is a
+   stable fact ("Ali holds 12 here"), not something that reshuffles as you refine. Accepted tradeoff:
+   a non-zero count can still yield an empty view when another filter excludes those rows.
+   Zero-count options stay visible and enabled — "Sait 0" is information.
+   Bonus fix: the `MultiDropdown` check mark now reserves its slot (`invisible`) instead of mounting,
+   so picking an option no longer shoves the row's contents sideways.
+3. **Long debug titles.** `task-row.tsx` had `truncate` (ONE line) on the title while the elastic
+   column is narrow — most of a long title was simply unrecoverable. Now `line-clamp-2` collapsed,
+   **full and unclamped when the row is expanded**, plus a `title` tooltip.
+4. **Brainstorm screenshots.** `brainstorm.tsx` had *no* image support at all while the create form,
+   the expanded row and the row editor all did. Easy fix once seen: by the details pass **the task
+   already exists** (capture posts every title), so it needs none of the create form's staged-upload
+   machinery — it mounts the same `TaskImages` the expanded row uses. Image state is keyed by task id
+   **outside `draft`**, because images save on pick while the draft commits on "Save & next" —
+   folding them together would make Skip look like it discards attachments already stored.
+5. **⛔ "call availability independent from status" — DROPPED BY PARSA MID-SESSION, NOT BUILT.**
+   He clarified he meant *"switching to Deep focus / Sleeping turns call availability off"* (the
+   `pickPreset` callDefault behaviour), then said **"yk what forget that dont do that"** and
+   **"ignore and reset #5"**. `sidebar-presence.tsx` was `git checkout`-ed back to its committed
+   state and is byte-identical to before. **Presets still seed their call default on switch — that is
+   intended, leave it alone.**
+6. **NEW — per-project Ideas** (asked mid-session: *"allow a button that says 'ideas' in each work
+   project… people can suggest ideas for new features, names, everything"*).
+   **Scoped the EXISTING ideas system rather than building a second one** (Parsa's pick): **migration
+   0039** adds nullable `ideas.project_id` (+ index). The nullability carries the meaning —
+   `null` = a company idea (every existing row, behaving exactly as before), non-null = a suggestion
+   for that project. No RLS change needed: the ideas policies gate on Work membership either way.
+   - Routes `/work/projects/[id]/ideas` and `…/ideas/new`; an **Ideas** button with a live count on
+     the project header (count hidden at 0 — a "0" on every project is noise).
+   - `ProjectIdeas` is **leaner than `IdeasPanel` on purpose**: no status chips, no sector/type, no
+     promote bar. Those all answer "should this become a project?", which a project-scoped idea never
+     asks. `VoteControl` is reused unchanged.
+   - `NewIdeaForm` takes an optional `project` and **drops sector/type in that mode** — they describe
+     a would-be new project, and "what sector is this button rename?" has no answer.
+   - ⚠️ **Auto-promote is BLOCKED for project-scoped ideas** (`maybeAutoPromote` returns early) **and
+     so is the manual `promoteIdea` button** — promotion means "become a NEW project", which would
+     quietly spawn junk projects out of ordinary feature suggestions. Voting still works; it's how
+     the team picks a favourite, not a trigger. `required_count` is left null for them so no
+     unreachable progress bar renders.
+   - ⚠️ `/work?tab=ideas` now filters `.is("project_id", null)` — without it, project suggestions
+     leak into the company pipeline queue they can never graduate from.
+   - `on delete cascade` (unlike `debug_tasks.found_by`): a suggestion about a deleted project is
+     orphaned by definition, whereas work discovered by an audit outlives the audit.
+
+**Not driven by a human yet.** The one test that actually reproduces #1: open a Learn sprint with a
+PDF, **leave the tab open over an hour**, then click. An immediate click passes even on the broken
+build, which is why this went unnoticed. Also worth a live pass: post a project idea and vote it past
+the bar — confirm **no** new project appears.
+
 ## Current status (2026-07-20)
 
-### 🟢 STATUS PRESETS ×4 + DASHBOARD STAT ROW FILLS ITS ROW (2026-07-20) — BUILT + STATICALLY VERIFIED (tsc + lint + build green), pushed to `main` (`b359351`), **migration 0038 NOT YET APPLIED to prod**, live-drive by Parsa pending
-Two small asks in one session. ⚠️ **0038 is the one thing that must happen before this is usable** —
-setting any new status against prod today fails the `status_kind` CHECK.
+### 🟢 STATUS PRESETS ×4 + DASHBOARD STAT ROW FILLS ITS ROW (2026-07-20) — BUILT + STATICALLY VERIFIED (tsc + lint + build green), pushed to `main` (`b359351`), **migration 0038 APPLIED to prod 2026-07-21** (CHECK verified to include eating/away/chilling/sleeping), live-drive by Parsa pending
+Two small asks in one session.
 
 - **Four everyday statuses**: 🍜 Eating · 🚶 **Not home** (`away`) · 🛋️ Chilling · 😴 Sleeping.
   Parsa asked for "sleeping, chilling, and some more", and picked "not home" over "commuting" as the
@@ -864,6 +946,10 @@ volume. They're insurance, not a speedup.
   `actions/debug.ts` because a `"use server"` module may only export async functions.
 - `src/components/debug/task-images.tsx` — upload / thumbnails / lightbox, signed URLs batched in
   one call per row. Used by the expanded row AND the row editor.
+- `src/components/ui/signed-file-link.tsx` — opens a private-bucket file by signing a **60s** URL in
+  the CLICK handler. The one correct way to link a stored file; see the Conventions warning.
+- `src/components/work/project-ideas.tsx` — a project's own suggestions list (votes + comments only,
+  no promote vocabulary). Paired with `work/projects/[id]/ideas/`.
 - `src/components/comms/workspace.tsx` — Comms tablist (External / Meetings / Notes); contacts stay
   server-rendered and arrive as the `external` prop.
 - `src/components/comms/internal.tsx` — `MeetingList` + `NoteList` (the internal half).

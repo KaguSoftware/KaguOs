@@ -29,13 +29,8 @@ export default async function ContractPage({
     .maybeSingle();
   if (!contract) notFound();
 
-  let signedUrl: string | null = null;
-  if (contract.file_path) {
-    const { data: signed } = await ctx.supabase.storage
-      .from("contracts")
-      .createSignedUrl(contract.file_path, 3600);
-    signedUrl = signed?.signedUrl ?? null;
-  }
+  // No render-time signing: the file link mints its own short-lived URL when
+  // clicked, so it can't go stale on a page held in the router cache.
 
   return (
     <>
@@ -51,7 +46,7 @@ export default async function ContractPage({
       <div className="grid max-w-3xl gap-6">
         <Panel>
           <PanelHeader title="File" />
-          <ContractFilePanel contract={contract as Contract} signedUrl={signedUrl} />
+          <ContractFilePanel contract={contract as Contract} />
         </Panel>
         <Panel>
           <PanelHeader title="Details" />

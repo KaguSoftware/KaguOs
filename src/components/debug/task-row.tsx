@@ -380,9 +380,16 @@ export function TaskRow({
           {/* Kind leads the row — see KindMark. */}
           <KindMark kind={task.kind} />
           <span className="min-w-0">
+          {/* A long title used to `truncate` to ONE line, and the elastic column
+              is narrow (badges, state and assignee take the rest), so most of
+              the title was simply unreadable with no way to recover it. Two
+              lines when collapsed — enough for any real title — and the full
+              thing once the row is expanded. `title` gives the hover tooltip. */}
           <span
+            title={task.title}
             className={cn(
-              "block truncate text-sm font-medium",
+              "block text-sm font-medium",
+              expanded ? "break-words" : "line-clamp-2",
               task.state === "done"
                 ? "text-muted line-through decoration-faint"
                 : "text-ink"

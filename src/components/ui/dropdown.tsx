@@ -9,6 +9,14 @@ export type DropdownOption = {
   value: string;
   label: string;
   hint?: string;
+  /**
+   * How many things this option matches — rendered right-aligned and mono, as a
+   * fact about the data rather than part of the label. Deliberately NOT `hint`:
+   * a hint is a second line of prose under the label, while a count has to sit
+   * on the baseline where the eye can compare it down the column.
+   * `0` is meaningful ("nobody holds any") and is shown, not hidden.
+   */
+  count?: number;
 };
 
 /**
@@ -536,12 +544,22 @@ export function MultiDropdown({
                       </span>
                     )}
                   </span>
-                  {isSelected && (
+                  {/* Count then check, in a fixed order — the check mounting on
+                      selection must not shove the number sideways. */}
+                  <span className="flex shrink-0 items-center gap-2">
+                    {option.count !== undefined && (
+                      <span className="font-mono text-[11px] tabular-nums text-faint">
+                        {option.count}
+                      </span>
+                    )}
                     <Check
-                      className="size-3.5 shrink-0 text-primary-dim"
+                      className={cn(
+                        "size-3.5 shrink-0 text-primary-dim",
+                        !isSelected && "invisible"
+                      )}
                       aria-hidden
                     />
-                  )}
+                  </span>
                 </li>
               );
             })}

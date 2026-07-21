@@ -5,6 +5,7 @@ import { ArrowLeft, Lightbulb } from "lucide-react";
 import { requireSection, canAccess } from "@/lib/data/session";
 import { PageHeader } from "@/components/shell/page-header";
 import { Panel, PanelHeader } from "@/components/ui/panel";
+import { LinkButton } from "@/components/ui/link-button";
 import { EditProjectForm } from "@/components/work/project-form";
 import { ProjectActions } from "@/components/work/project-actions";
 import { ProjectSecrets } from "@/components/work/project-secrets";
@@ -30,34 +31,43 @@ export default async function ProjectPage({
   // front is free even when the project turns out not to exist: an extra query
   // inside a wave that's already in flight costs ~3ms, while a second wave
   // costs ~305ms.
-  const [{ data: project }, { data: sourceIdea }, secretRows] = await Promise.all([
-    // Gate the project itself on the demo/real split: in showcase mode a real
-    // project id resolves to nothing (→ notFound below), so no real project —
-    // and none of its real secrets — can ever render in a client demo.
-    ctx.supabase
-      .from("projects")
-      .select("*")
-      .eq("id", id)
-      .eq("is_demo", ctx.showcase)
-      .maybeSingle(),
-    ctx.supabase
-      .from("ideas")
-      .select("id, title")
-      .eq("promoted_project_id", id)
-      .eq("is_demo", ctx.showcase)
-      .maybeSingle(),
-    canSeeSecrets
-      ? ctx.supabase
-          .from("project_secrets")
-          .select("*")
-          .eq("project_id", id)
-          .eq("is_demo", ctx.showcase)
-          .order("created_at", { ascending: true })
-      : null,
-  ]);
+  const [{ data: project }, { data: sourceIdea }, secretRows, ideaCountRes] =
+    await Promise.all([
+      // Gate the project itself on the demo/real split: in showcase mode a real
+      // project id resolves to nothing (→ notFound below), so no real project —
+      // and none of its real secrets — can ever render in a client demo.
+      ctx.supabase
+        .from("projects")
+        .select("*")
+        .eq("id", id)
+        .eq("is_demo", ctx.showcase)
+        .maybeSingle(),
+      ctx.supabase
+        .from("ideas")
+        .select("id, title")
+        .eq("promoted_project_id", id)
+        .eq("is_demo", ctx.showcase)
+        .maybeSingle(),
+      canSeeSecrets
+        ? ctx.supabase
+            .from("project_secrets")
+            .select("*")
+            .eq("project_id", id)
+            .eq("is_demo", ctx.showcase)
+            .order("created_at", { ascending: true })
+        : null,
+      // Head-only count for the Ideas button — the rows themselves live on
+      // /ideas, so this page only needs the number.
+      ctx.supabase
+        .from("ideas")
+        .select("id", { count: "exact", head: true })
+        .eq("project_id", id)
+        .eq("is_demo", ctx.showcase),
+    ]);
   if (!project) notFound();
 
   const secrets = (secretRows?.data ?? []) as ProjectSecret[];
+  const ideaCount = ideaCountRes.count ?? 0;
 
   return (
     <>
@@ -71,6 +81,19 @@ export default async function ProjectPage({
       <PageHeader
         title={project.name}
         description={project.client ? `Client: ${project.client}` : "Internal project"}
+        action={
+          <LinkButton href={`/work/projects/${id}/ideas`} variant="outline">
+            <Lightbulb className="size-3.5" aria-hidden />
+            Ideas
+            {/* The count only appears once there's something to see — a "0"
+                next to every project's button is noise, not information. */}
+            {ideaCount > 0 && (
+              <span className="font-mono text-[11px] tabular-nums text-faint">
+                {ideaCount}
+              </span>
+            )}
+          </LinkButton>
+        }
       />
 
       {sourceIdea && (

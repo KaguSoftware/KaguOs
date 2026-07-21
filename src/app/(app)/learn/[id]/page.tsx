@@ -7,6 +7,7 @@ import { PageHeader } from "@/components/shell/page-header";
 import { Panel, PanelHeader } from "@/components/ui/panel";
 import { Badge, type BadgeTone } from "@/components/ui/badge";
 import { LinkButton } from "@/components/ui/link-button";
+import { SignedFileLink } from "@/components/ui/signed-file-link";
 import { SprintProgress } from "@/components/learn/sprint-progress";
 import { SprintQuestions } from "@/components/learn/sprint-questions";
 import { memberColorCss } from "@/lib/colors";
@@ -132,31 +133,13 @@ export default async function SprintPage({
   const participantIds = (participants ?? []).map((p) => p.user_id);
   const gridPeople = people.filter((p) => participantIds.includes(p.id));
 
-  // Signed URLs for uploaded files (private bucket, 1 hour).
-  //
-  // ONE call for every file, not one call per file. Signing in a loop cost a
-  // full round-trip each time (~305ms), serially — a sprint with six attachments
-  // spent ~1.8s doing nothing but waiting, and it got worse every time someone
-  // uploaded another file. createSignedUrls (plural) signs the whole batch in a
-  // single trip, so the cost is flat no matter how many resources a sprint has.
+  // Attachments are NOT signed here. They used to be — one batched
+  // createSignedUrls call with a 1-hour TTL, baked into the markup — and that
+  // was a bug: the page outlives its own tokens (router cache, a tab left open,
+  // a back-navigation), so clicking a PDF an hour later hit an expired token and
+  // looked like a dead button. `SignedFileLink` signs at click instead, which
+  // also takes the signing round-trip off this page's critical path entirely.
   const resourceList = (resources ?? []) as SprintResource[];
-  const withFiles = resourceList.filter((r) => r.file_path);
-  const fileUrls = new Map<string, string>();
-  if (withFiles.length > 0) {
-    const { data: signed } = await ctx.supabase.storage
-      .from("learn")
-      .createSignedUrls(
-        withFiles.map((r) => r.file_path as string),
-        3600
-      );
-    // Match on path rather than index — the response order isn't guaranteed,
-    // and a single unsignable file returns a row with its own error, not a throw.
-    const byPath = new Map((signed ?? []).map((s) => [s.path, s.signedUrl]));
-    for (const resource of withFiles) {
-      const url = byPath.get(resource.file_path as string);
-      if (url) fileUrls.set(resource.id, url);
-    }
-  }
 
   const phase = phaseOf(sprint as Sprint);
 
@@ -248,8 +231,7 @@ export default async function SprintPage({
             <PanelHeader title="Resources" />
             <ul className="divide-y divide-line">
               {resourceList.map((resource) => {
-                const fileUrl = fileUrls.get(resource.id);
-                const primaryHref = resource.url || fileUrl;
+                const filePath = resource.file_path;
                 const Icon = resource.url ? Link2 : FileText;
                 return (
                   <li
@@ -257,30 +239,43 @@ export default async function SprintPage({
                     className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2.5 text-sm transition-colors duration-150 hover:bg-raised/60"
                   >
                     <Icon className="size-3.5 shrink-0 text-faint" aria-hidden />
-                    {primaryHref ? (
+                    {resource.url ? (
                       <a
-                        href={primaryHref}
+                        href={resource.url}
                         target="_blank"
                         rel="noreferrer"
                         className="min-w-0 truncate text-ink underline-offset-2 hover:text-primary-dim hover:underline"
                       >
                         {resource.title}
                       </a>
+                    ) : filePath ? (
+                      // An attachment with no external link: the title itself
+                      // opens the file, signed on click.
+                      <SignedFileLink
+                        bucket="learn"
+                        path={filePath}
+                        title={resource.title}
+                        className="flex min-w-0 items-center gap-1.5 truncate text-left text-ink underline-offset-2 hover:text-primary-dim hover:underline"
+                      >
+                        <span className="min-w-0 truncate">{resource.title}</span>
+                      </SignedFileLink>
                     ) : (
                       <span className="min-w-0 truncate text-muted">
                         {resource.title}
                       </span>
                     )}
-                    {resource.url && fileUrl && (
-                      <a
-                        href={fileUrl}
-                        target="_blank"
-                        rel="noreferrer"
+                    {/* A resource can be both a link and an attachment; the chip
+                        is the second affordance for the file. */}
+                    {resource.url && filePath && (
+                      <SignedFileLink
+                        bucket="learn"
+                        path={filePath}
+                        ariaLabel={`Open the file attached to ${resource.title}`}
                         className="inline-flex shrink-0 items-center gap-1 rounded-full border border-line px-2 py-0.5 text-xs text-muted transition-colors duration-150 hover:border-line-strong hover:text-ink"
                       >
                         <FileText className="size-3" aria-hidden />
                         file
-                      </a>
+                      </SignedFileLink>
                     )}
                   </li>
                 );

@@ -570,14 +570,49 @@ export function DebugBoard({
 
   // Assignee filter options: only people who actually hold a task, so the list
   // stays short and relevant. "Anyone" and "Unassigned" are always offered.
+  //
+  // Each option carries HOW MANY tasks it matches. The counts are taken over the
+  // whole board (`liveTasks`) and deliberately IGNORE the other filters, so a
+  // number is a stable fact — "Ali holds 12 here" — rather than something that
+  // reshuffles every time you touch a different control. The tradeoff is
+  // accepted: a non-zero count can still yield an empty view when another filter
+  // excludes those rows.
   const assigneeOptions = useMemo(() => {
-    const ids = new Set<string>();
-    for (const t of liveTasks) if (t.assignee_id) ids.add(t.assignee_id);
-    const people = [...ids]
-      .map((id) => ({ value: id, label: members[id]?.name ?? "Someone" }))
+    const tally = new Map<string, number>();
+    for (const t of liveTasks) {
+      const key = t.assignee_id ?? "unassigned";
+      tally.set(key, (tally.get(key) ?? 0) + 1);
+    }
+    const people = [...tally.keys()]
+      .filter((id) => id !== "unassigned")
+      .map((id) => ({
+        value: id,
+        label: members[id]?.name ?? "Someone",
+        count: tally.get(id) ?? 0,
+      }))
       .sort((a, b) => a.label.localeCompare(b.label));
-    return [{ value: "unassigned", label: "Unassigned" }, ...people];
+    return [
+      { value: "unassigned", label: "Unassigned", count: tally.get("unassigned") ?? 0 },
+      ...people,
+    ];
   }, [liveTasks, members]);
+
+  // Kind / state / priority tallies for the Filters popover, same whole-board
+  // basis. One pass over the tasks rather than one filter() per option.
+  const facetCounts = useMemo(() => {
+    const kind: Record<string, number> = {};
+    const state: Record<string, number> = {};
+    const priority: Record<string, number> = {};
+    for (const t of liveTasks) {
+      kind[t.kind] = (kind[t.kind] ?? 0) + 1;
+      state[t.state] = (state[t.state] ?? 0) + 1;
+      priority[t.priority] = (priority[t.priority] ?? 0) + 1;
+    }
+    return { Kind: kind, State: state, Priority: priority } as Record<
+      string,
+      Record<string, number>
+    >;
+  }, [liveTasks]);
 
   // What the user has NARROWED beyond the default view. The state filter opens
   // pre-set to "Active", so counting it flatly would show "Clear 2" on a board
@@ -881,6 +916,7 @@ export function DebugBoard({
           setStateFilter={setStateFilter}
           priority={priority}
           setPriority={setPriority}
+          counts={facetCounts}
         />
         <Dropdown
           className="w-full sm:w-36"
@@ -1060,6 +1096,7 @@ function FiltersPopover({
   setStateFilter,
   priority,
   setPriority,
+  counts,
 }: {
   kindFilter: string[];
   setKindFilter: (v: string[]) => void;
@@ -1067,6 +1104,8 @@ function FiltersPopover({
   setStateFilter: (v: string[]) => void;
   priority: string[];
   setPriority: (v: string[]) => void;
+  /** Group label → option value → how many tasks on the board match. */
+  counts: Record<string, Record<string, number>>;
 }) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -1141,11 +1180,13 @@ function FiltersPopover({
                 <div className="flex flex-wrap gap-1.5">
                   {group.options.map((o) => {
                     const on = group.values.includes(o.value);
+                    const n = counts[group.label]?.[o.value] ?? 0;
                     return (
                       <button
                         key={o.value}
                         type="button"
                         aria-pressed={on}
+                        aria-label={`${o.label} — ${n} task${n === 1 ? "" : "s"}`}
                         onClick={() =>
                           group.set(
                             on
@@ -1154,7 +1195,7 @@ function FiltersPopover({
                           )
                         }
                         className={cn(
-                          "rounded-md border px-2 py-0.5 text-[12px]",
+                          "inline-flex items-center gap-1.5 rounded-md border px-2 py-0.5 text-[12px]",
                           "transition-[background-color,border-color,transform] duration-150 ease-mac active:scale-[0.97]",
                           on
                             ? "border-primary/50 bg-primary/10 text-ink"
@@ -1162,6 +1203,12 @@ function FiltersPopover({
                         )}
                       >
                         {o.label}
+                        {/* The count is a fact about the board, so it recedes
+                            behind the label it qualifies. Mono + tabular keeps
+                            the chips from resizing as numbers change width. */}
+                        <span className="font-mono text-[11px] tabular-nums text-faint">
+                          {n}
+                        </span>
                       </button>
                     );
                   })}

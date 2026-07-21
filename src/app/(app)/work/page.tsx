@@ -26,6 +26,10 @@ export default async function WorkPage() {
         "id, title, status, sector, type, required_count, created_by, created_at, idea_votes(user_id, value), idea_comments(count)"
       )
       .eq("is_demo", ctx.showcase)
+      // Company ideas only. A project-scoped idea is a suggestion about work
+      // that already exists; showing it here would put it in the queue to
+      // BECOME a project, which it can never do (see maybeAutoPromote).
+      .is("project_id", null)
       .order("created_at", { ascending: false }),
     getMembersMap(ctx.supabase),
   ]);
