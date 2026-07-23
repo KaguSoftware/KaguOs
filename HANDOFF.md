@@ -66,6 +66,55 @@ Contracts w/ PDFs), **Debug** (everyone: per-project boards, self-claim-only, re
 - Chart colors are validated (dataviz skill): income `oklch(0.62 0.13 160)`, expense
   `oklch(0.55 0.16 25)` — L band 0.48–0.67 on dark; re-validate any new chart palette.
 
+## Current status (2026-07-23)
+
+### 🟢 DEBUG BOARD ORDERING + BUILT-IN MESSAGING (2026-07-23) — BUILT + STATICALLY VERIFIED (tsc clean · lint at the 2 known errors · check:demo **92** · build), **migrations 0041 + 0042 APPLIED to prod and schema-verified**, live-drive by Parsa PENDING
+Two board asks ("board order sorting", "built in messaging system") + two mid-session additions
+(a group chat; chat gated to work members only).
+
+1. **Debug board tabs auto-sort by open tasks, admin can pin.** Migration **0041** adds nullable
+   `projects.debug_position` — null = auto (open count desc, name tie-break), non-null = pinned
+   first in that order. Nullability carries the meaning; every existing row behaves as before.
+   - ⚠️ Tab order computes from the **server snapshot** (`orderBoards` over `initialTasks` +
+     `projects`, both changing only on server re-render) — realtime churn moves the count pills
+     but NEVER reshuffles the rail mid-session. Don't "fix" it to use `liveTasks`.
+   - Admin editor (`components/debug/board-order.tsx`): CreateOverlay, pin/unpin + up/down —
+     the focus-hero vocabulary, deliberately no drag-and-drop (nothing in this app drags). Every
+     change writes immediately via `setDebugBoardOrder(pinnedIds, unpinnedIds)`
+     (`lib/actions/debug-boards.ts`, mirrors `reorderDebugFocus`). Trigger sits OUTSIDE the
+     scrolling rail so it's always reachable.
+2. **Chat: 1:1 threads + one "Work team" group chat.** Migration **0042**: flat `messages` table
+   (`recipient_id` **null = the group chat** — Parsa: work members only, "not everyone
+   everyone"), `message_reads` (per-user last-read marker for the group; a per-row flag can't
+   represent 7 independent readers), RLS (participants only; group visible to
+   `private.is_member('work')`), realtime publication, and widens the notifications kind CHECK
+   with `'message'`.
+   - Routes `/messages` (inbox = whole chat audience, doubles as the picker) and
+     `/messages/[userId]` with reserved segment **`team`** (`GROUP_THREAD` in
+     `lib/messages-shared.ts` — not a uuid, can't collide).
+   - Thread (`components/messages/thread.tsx`): realtime patches state **in place** (board.tsx
+     pattern, never router.refresh — a refresh per line would drop composer focus), optimistic
+     send reconciled against the returned row (the realtime INSERT can land first — both paths
+     handled), Enter sends / Shift+Enter newline, timestamps pinned to Istanbul.
+   - ⚠️ **Anti-noise contract:** a direct message notifies (`kind: "message"`) ONLY when the
+     recipient has no unread from that sender — one bell per unread thread, re-arms on read.
+     **The group chat never notifies**; the sidebar badge carries it. Don't add per-line pings.
+   - Unread badge: `getUnreadMessageCount` rides the layout's existing second wave (no new
+     round-trip), shows on the Messages nav item + the mobile menu tile (which deliberately does
+     NOT reuse `pulse.stats.work` despite sharing the section gate). `markThreadRead` does
+     `revalidatePath("/", "layout")` so the badge drops without a reload.
+   - Entry points: clicking a teammate's **row** in the sidebar presence panel links to their
+     thread (the hover card stays a read-only tooltip — a link inside a portaled card across an
+     8px hover gap is a dexterity test); TeamSheet rows get a message icon. `sidebar-presence.tsx`
+     touched ONLY in those two spots + imports — preset callDefault behaviour untouched.
+   - Showcase: chat hidden entirely (no `is_demo`, real words) — inbox shows a "not available in
+     showcase" door, thread pages 404, loaders return null, badge silent.
+
+**Not driven by a human yet.** The checks that matter: two browsers, A→B — badge lights live,
+thread streams without refresh, second message while unread fires NO second bell but a third
+after B reads DOES; user C sees zero rows of the A↔B thread; pin two boards as admin and confirm
+non-admins see the order but no editor; closing a task moves a tab's pill without reshuffling tabs.
+
 ## Current status (2026-07-21)
 
 ### 🟢 PHASE 3 — REACH & ATTENTION: NEEDS-YOU WIDENED + A BROKEN DEEP-LINK FIXED + REMINDER DUE DATES (2026-07-21) — BUILT + STATICALLY VERIFIED (tsc · lint unchanged · check:demo **92** · build), **migration 0040 APPLIED + column verified**, live-drive by Parsa PENDING

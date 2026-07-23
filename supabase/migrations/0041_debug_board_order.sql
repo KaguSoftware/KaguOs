@@ -1,0 +1,12 @@
+-- Debug board tab ordering.
+--
+-- Board tabs used to render alphabetically. Now they auto-sort by open task
+-- count, and an admin can PIN boards to the front to direct attention:
+-- `debug_position` non-null = pinned at that position (ascending), null = not
+-- pinned, auto-sorted by open count. Nullability carries the meaning, same as
+-- reminders.due_on — every existing row is unpinned and behaves as before.
+--
+-- No RLS change: projects_update already allows work members (which includes
+-- admins), and the reorder server action re-checks requireAdmin() anyway.
+-- No index — projects is a tiny table.
+alter table public.projects add column debug_position integer;

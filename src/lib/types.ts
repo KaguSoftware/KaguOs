@@ -118,6 +118,20 @@ export type PresencePerson = {
 /** id → display name + identity color (css), used wherever names render. */
 export type MembersMap = Record<string, { name: string; color: string }>;
 
+/**
+ * One chat message. `recipient_id` null = the Work-team group chat; non-null =
+ * a direct 1:1 message. `read_at` is direct-only (group reads live in
+ * `message_reads`, one last-read timestamp per person).
+ */
+export type Message = {
+  id: string;
+  sender_id: string;
+  recipient_id: string | null;
+  body: string;
+  read_at: string | null;
+  created_at: string;
+};
+
 export type SectionMembership = {
   user_id: string;
   section: Section;
@@ -433,7 +447,8 @@ export type Notification = {
     | "reminder_shared"
     | "learn_question"
     | "learn_answer"
-    | "status_change";
+    | "status_change"
+    | "message";
   title: string;
   href: string | null;
   read_at: string | null;

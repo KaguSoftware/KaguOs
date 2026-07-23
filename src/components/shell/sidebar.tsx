@@ -15,6 +15,7 @@ import {
   LogOut,
   Megaphone,
   Menu,
+  MessagesSquare,
   Search,
   ShieldCheck,
   X,
@@ -52,6 +53,8 @@ const NAV: NavItem[] = [
     section: "management",
   },
   { href: "/debug", label: "Debug", icon: Bug, section: "debug" },
+  // Chat shares Work's gate — the same audience the presence panel shows.
+  { href: "/messages", label: "Messages", icon: MessagesSquare, section: "work" },
   { href: "/marketing", label: "Marketing", icon: Megaphone, section: "marketing" },
   { href: "/comms", label: "Comms", icon: ContactIcon, section: "comms" },
 ];
@@ -62,7 +65,16 @@ function isActive(pathname: string, href: string) {
   return pathname === href || pathname.startsWith(root + "/") || pathname === root;
 }
 
-function NavLink({ item, pathname }: { item: NavItem; pathname: string }) {
+function NavLink({
+  item,
+  pathname,
+  badge,
+}: {
+  item: NavItem;
+  pathname: string;
+  /** Unread count pill, right-aligned. Hidden at 0/null — a permanent "0" is noise. */
+  badge?: number | null;
+}) {
   const active = isActive(pathname, item.href);
   const Icon = item.icon;
   return (
@@ -78,6 +90,11 @@ function NavLink({ item, pathname }: { item: NavItem; pathname: string }) {
     >
       <Icon className={cn("size-4", active && "text-primary-dim")} aria-hidden />
       {item.label}
+      {typeof badge === "number" && badge > 0 && (
+        <span className="ml-auto rounded-full bg-primary px-1.5 font-mono text-[11px] font-medium text-primary-ink">
+          {badge}
+        </span>
+      )}
     </Link>
   );
 }
@@ -113,6 +130,7 @@ function MobileMenu({
   pulse,
   presence,
   meId,
+  unreadMessages,
   onClose,
 }: {
   visible: NavItem[];
@@ -123,6 +141,7 @@ function MobileMenu({
   pulse: Pulse;
   presence: PresencePerson[] | null;
   meId: string;
+  unreadMessages: number | null;
   onClose: () => void;
 }) {
   // The sheet has to outlive the "close" click long enough to animate out, so
@@ -264,7 +283,16 @@ function MobileMenu({
           {items.map((item, i) => {
             const active = isActive(pathname, item.href);
             const Icon = item.icon;
-            const stat = item.section ? pulse.stats[item.section] : undefined;
+            // Messages shares Work's SECTION gate but not its numbers — its
+            // tile carries the unread count, not the project count.
+            const stat =
+              item.href === "/messages"
+                ? unreadMessages
+                  ? { value: unreadMessages, label: "unread", weight: unreadMessages }
+                  : undefined
+                : item.section
+                  ? pulse.stats[item.section]
+                  : undefined;
             const loud = (stat?.weight ?? 0) > 0;
             return (
               <Link
@@ -435,6 +463,7 @@ export function Sidebar({
   presence,
   pulse,
   meId,
+  unreadMessages,
 }: {
   sections: Section[];
   isAdmin: boolean;
@@ -448,6 +477,8 @@ export function Sidebar({
   /** Live section counts for the mobile menu's tiles. */
   pulse: Pulse;
   meId: string;
+  /** Unread chat messages (direct + group); null outside the chat audience. */
+  unreadMessages: number | null;
 }) {
   const pathname = usePathname();
   const visible = NAV.filter(
@@ -501,7 +532,12 @@ export function Sidebar({
         </div>
         <nav className="flex-1 space-y-0.5 px-2" aria-label="Sections">
           {visible.map((item) => (
-            <NavLink key={item.href} item={item} pathname={pathname} />
+            <NavLink
+              key={item.href}
+              item={item}
+              pathname={pathname}
+              badge={item.href === "/messages" ? unreadMessages : null}
+            />
           ))}
           {isAdmin && (
             <>
@@ -583,6 +619,7 @@ export function Sidebar({
           pulse={pulse}
           presence={presence}
           meId={meId}
+          unreadMessages={unreadMessages}
           onClose={() => setMenuOpen(false)}
         />
       )}

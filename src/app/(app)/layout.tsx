@@ -4,6 +4,7 @@ import { getSessionContext, getUserId } from "@/lib/data/session";
 import { getMembersMap } from "@/lib/data/members";
 import { getPresence } from "@/lib/data/presence";
 import { getPulse } from "@/lib/data/pulse";
+import { getUnreadMessageCount } from "@/lib/data/messages";
 import { selectOrThrow } from "@/lib/data/query";
 import { LiveRefresh } from "@/components/shell/live-refresh";
 import { Sidebar } from "@/components/shell/sidebar";
@@ -44,7 +45,13 @@ export default async function AppLayout({
   // Presence for the always-open sidebar panel + the mobile menu's live tile
   // counts. Both need ctx (access/showcase gating), both are cache()-deduped,
   // and they fly TOGETHER — so the pulse costs no extra round-trip.
-  const [presence, pulse] = await Promise.all([getPresence(ctx), getPulse(ctx)]);
+  const [presence, pulse, unreadMessages] = await Promise.all([
+    getPresence(ctx),
+    getPulse(ctx),
+    // Chat unread for the Messages nav badge — same audience gate as presence,
+    // so it's null (and the badge silent) exactly where the panel is absent.
+    getUnreadMessageCount(ctx),
+  ]);
 
   return (
     <ToastProvider>
@@ -68,7 +75,9 @@ export default async function AppLayout({
       {/* App-wide live updates: the notification bell and team presence refresh
           the moment a notification lands or someone changes status. Skipped in
           showcase — notifications are hidden and presence is demo-irrelevant. */}
-      {!ctx.showcase && <LiveRefresh tables={["notifications", "profiles"]} />}
+      {!ctx.showcase && (
+        <LiveRefresh tables={["notifications", "profiles", "messages"]} />
+      )}
       <div className="flex min-h-dvh flex-col md:flex-row">
         <Sidebar
           sections={[...ctx.sections]}
@@ -84,6 +93,7 @@ export default async function AppLayout({
           presence={presence}
           pulse={pulse}
           meId={ctx.userId}
+          unreadMessages={unreadMessages}
         />
         <main id="main" tabIndex={-1} className="min-w-0 flex-1 focus:outline-none">
           {ctx.showcase && <ShowcaseBanner />}

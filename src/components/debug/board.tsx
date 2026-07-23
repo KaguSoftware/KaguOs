@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import {
   Archive,
+  ArrowUpDown,
   Bug,
   CheckSquare,
   ChevronDown,
@@ -28,6 +29,7 @@ import {
   type BulkPatch,
 } from "@/lib/actions/debug";
 import { TaskRow } from "@/components/debug/task-row";
+import { BoardOrderOverlay } from "@/components/debug/board-order";
 import { DebugFocusHero } from "@/components/debug/focus-hero";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Dropdown, MultiDropdown } from "@/components/ui/dropdown";
@@ -58,6 +60,37 @@ const EMPTY_IMAGES: DebugTaskImage[] = [];
 const BOARD_SEARCH_THRESHOLD = 5;
 
 type Sort = "smart" | "priority" | "deadline" | "newest";
+
+export type BoardProject = {
+  id: string;
+  name: string;
+  /** Admin-pinned tab position; null = unpinned, auto-sorted by open count. */
+  debug_position: number | null;
+};
+
+/**
+ * Tab order: admin-pinned boards first (by debug_position), then the rest by
+ * open task count descending, name as tie-break. Counts come from the SERVER
+ * snapshot, not liveTasks — closing a task must move the pill's number, never
+ * reshuffle the tab rail under the user mid-click.
+ */
+function orderBoards(projects: BoardProject[], tasks: DebugTask[]) {
+  const open: Record<string, number> = {};
+  for (const t of tasks) {
+    if (t.state === "done" || t.archived_at || !t.project_id) continue;
+    open[t.project_id] = (open[t.project_id] ?? 0) + 1;
+  }
+  const pinned = projects
+    .filter((p) => p.debug_position !== null)
+    .sort((a, b) => a.debug_position! - b.debug_position!);
+  const rest = projects
+    .filter((p) => p.debug_position === null)
+    .sort(
+      (a, b) =>
+        (open[b.id] ?? 0) - (open[a.id] ?? 0) || a.name.localeCompare(b.name)
+    );
+  return { ordered: [...pinned, ...rest], openCounts: open };
+}
 
 const SORT_OPTIONS = [
   { value: "smart", label: "Smart" },
@@ -194,7 +227,7 @@ export function DebugBoard({
   initialImages,
 }: {
   initialTasks: DebugTask[];
-  projects: { id: string; name: string }[];
+  projects: BoardProject[];
   members: MembersMap;
   meId: string;
   isAdmin: boolean;
@@ -269,6 +302,8 @@ export function DebugBoard({
   // is what delivers it. See the key handler below for the full map.
   const [cursor, setCursor] = useState(-1);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  // Admin-only board ordering editor (pin boards to the front of the rail).
+  const [orderOpen, setOrderOpen] = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
   const { success: toastSuccess, error: toastError } = useToast();
   // Brainstorm session trail: ids of tasks made in /debug/brainstorm, handed
@@ -932,7 +967,14 @@ export function DebugBoard({
   // out of the filtered set its tab still renders (so the selection stays legible).
   const showBoardSearch = projects.length >= BOARD_SEARCH_THRESHOLD;
   const q = boardQuery.trim().toLowerCase();
-  const projectTabs = projects
+  // Ordered from the SERVER snapshot (`initialTasks`), not `liveTasks` — both
+  // inputs only change on a server re-render, so realtime task churn moves the
+  // count pills but never reshuffles the rail mid-session.
+  const { ordered: orderedProjects, openCounts } = useMemo(
+    () => orderBoards(projects, initialTasks),
+    [projects, initialTasks]
+  );
+  const projectTabs = orderedProjects
     .filter((p) => !q || p.name.toLowerCase().includes(q) || board.includes(p.id))
     .map((p) => ({ key: p.id, name: p.name }));
 
@@ -1012,9 +1054,9 @@ export function DebugBoard({
           lives on the wrapper (full-width, always crisp); the inner rail scrolls
           with no visible bar and fades at both edges, so an overflowing strip
           reads as "there's more this way" instead of exposing a scrollbar. */}
-      <div className="border-b border-line">
+      <div className="flex items-center border-b border-line">
         <div
-          className="scrollbar-none flex gap-1 overflow-x-auto mask-[linear-gradient(to_right,transparent,black_1.25rem,black_calc(100%-1.25rem),transparent)]"
+          className="scrollbar-none flex min-w-0 flex-1 gap-1 overflow-x-auto mask-[linear-gradient(to_right,transparent,black_1.25rem,black_calc(100%-1.25rem),transparent)]"
           role="tablist"
           aria-label="Project boards"
         >
@@ -1056,7 +1098,28 @@ export function DebugBoard({
             <span className="px-3 py-2 text-sm text-faint">No boards match.</span>
           )}
         </div>
+        {/* Sits OUTSIDE the scrolling rail so it's always reachable, however
+            long the strip grows. The rail auto-sorts by open work; this is
+            where an admin overrides that to direct attention. */}
+        {isAdmin && (
+          <button
+            type="button"
+            onClick={() => setOrderOpen(true)}
+            title="Order boards"
+            aria-label="Order boards"
+            className="ml-1 shrink-0 rounded-md p-1.5 text-faint transition-colors duration-150 hover:bg-raised hover:text-ink"
+          >
+            <ArrowUpDown className="size-3.5" aria-hidden />
+          </button>
+        )}
       </div>
+      {orderOpen && (
+        <BoardOrderOverlay
+          projects={orderedProjects}
+          openCounts={openCounts}
+          onClose={() => setOrderOpen(false)}
+        />
+      )}
 
       <div className="flex flex-wrap items-center justify-between gap-2">
         {/* Quick views. These WRITE the state/assignee filters below rather

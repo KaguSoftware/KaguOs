@@ -2,7 +2,8 @@
 
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Phone, Smile, X } from "lucide-react";
+import Link from "next/link";
+import { MessageCircle, Phone, Smile, X } from "lucide-react";
 import { updateMyStatus } from "@/lib/actions/account";
 import { Input } from "@/components/ui/input";
 import { EmojiPicker } from "@/components/ui/emoji-picker";
@@ -717,7 +718,16 @@ function TeammateRow({
       tabIndex={0}
       className="rounded-md outline-none focus-visible:bg-raised"
     >
-      <PresenceRow person={person} live={live} now={now} />
+      {/* The row IS the chat link — "click their name to message them". The
+          hover card stays a read-only tooltip; putting the link inside a
+          portaled card across an 8px hover gap would make it a dexterity test. */}
+      <Link
+        href={`/messages/${person.id}`}
+        className="block"
+        aria-label={`Message ${person.name}`}
+      >
+        <PresenceRow person={person} live={live} now={now} />
+      </Link>
 
       {rect &&
         createPortal(
@@ -790,6 +800,13 @@ function TeammateRow({
               <p className="flex items-center justify-between">
                 <span>Presence</span>
                 <span className="text-faint">{lastSeen}</span>
+              </p>
+              <p className="flex items-center justify-between">
+                <span>Message</span>
+                <span className="flex items-center gap-1 text-faint">
+                  <MessageCircle className="size-3" aria-hidden />
+                  Click the row
+                </span>
               </p>
             </div>
           </div>,
@@ -1022,6 +1039,16 @@ export function TeamSheet({
                     {remaining && <span className="text-faint"> · {remaining}</span>}
                   </span>
                 </span>
+                {p.id !== meId && (
+                  <Link
+                    href={`/messages/${p.id}`}
+                    onClick={onClose}
+                    aria-label={`Message ${p.name}`}
+                    className="shrink-0 rounded-md p-2 text-muted transition-colors duration-150 hover:bg-surface hover:text-ink"
+                  >
+                    <MessageCircle className="size-4" aria-hidden />
+                  </Link>
+                )}
               </li>
             );
           })}

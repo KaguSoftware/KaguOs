@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
 import { Plus } from "lucide-react";
-import { requireSection } from "@/lib/data/session";
+import { canAccess, requireSection } from "@/lib/data/session";
 import { getMembersMap } from "@/lib/data/members";
 import { rowsOrThrow } from "@/lib/data/query";
 import { PageHeader } from "@/components/shell/page-header";
@@ -30,15 +30,16 @@ export default async function DebugPage() {
       rowsOrThrow(
         ctx.supabase
           .from("projects")
-          .select("id, name")
+          .select("id, name, debug_position")
           .eq("is_demo", ctx.showcase)
           .order("name"),
         "projects"
       ),
       getMembersMap(ctx.supabase),
-      // Admins can (re)set the "suggest for" nudge from the inline edit too —
-      // same Work-members-only roster as the create page.
-      ctx.isAdmin
+      // Anyone on the WORK team can (re)set the "suggest for" nudge from the
+      // inline edit (Parsa, 2026-07-23 — was admin-only). Suggestions still
+      // TARGET work members only, same roster as the create page.
+      canAccess(ctx, "work")
         ? rowsOrThrow(
             ctx.supabase
               .from("section_memberships")
@@ -77,7 +78,7 @@ export default async function DebugPage() {
 
   const focusItems = (focusRes ?? []) as DebugFocus[];
 
-  const suggestOptions = ctx.isAdmin
+  const suggestOptions = canAccess(ctx, "work")
     ? workMemberships
         .map((m) => ({ value: m.user_id, label: members[m.user_id]?.name }))
         .filter((o): o is { value: string; label: string } => Boolean(o.label))

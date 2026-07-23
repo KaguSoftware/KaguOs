@@ -12,7 +12,8 @@ type NotifyKind =
   | "reminder_shared"
   | "learn_question"
   | "learn_answer"
-  | "status_change";
+  | "status_change"
+  | "message";
 
 type NotifyInput = {
   kind: NotifyKind;

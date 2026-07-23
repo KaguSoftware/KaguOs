@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import {
   blockIfShowcase,
+  canAccess,
   requireAdmin,
   requireSection,
   type SessionContext,
@@ -35,8 +36,9 @@ export async function createTask(
   const kind = KINDS.includes(rawKind) ? rawKind : "fix";
   const projectId = String(formData.get("project_id") ?? "").trim() || null;
   const dueOn = String(formData.get("due_on") ?? "").trim() || null;
-  // The soft suggestion is admin-only — gate it server-side, never trust the form.
-  const suggestedFor = ctx.isAdmin
+  // The soft suggestion is open to the whole WORK team (Parsa, 2026-07-23 —
+  // was admin-only), still gated server-side, never trusting the form.
+  const suggestedFor = canAccess(ctx, "work")
     ? String(formData.get("suggested_for") ?? "").trim() || null
     : null;
 
@@ -257,7 +259,7 @@ export async function updateTask(
     kind?: DebugKind;
     due_on?: string | null;
     project_id?: string | null;
-    /** Admin-only soft suggestion; silently ignored for everyone else. */
+    /** Work-team soft suggestion; silently ignored for everyone else. */
     suggested_for?: string | null;
   }
 ): Promise<ActionResult> {
@@ -283,8 +285,8 @@ export async function updateTask(
       ...(fields.project_id !== undefined
         ? { project_id: fields.project_id || null }
         : {}),
-      // The suggestion nudge is admin-only — same server-side gate as createTask.
-      ...(fields.suggested_for !== undefined && ctx.isAdmin
+      // The suggestion nudge is open to the work team — same gate as createTask.
+      ...(fields.suggested_for !== undefined && canAccess(ctx, "work")
         ? { suggested_for: fields.suggested_for || null }
         : {}),
     })

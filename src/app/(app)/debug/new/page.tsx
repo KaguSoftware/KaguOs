@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { requireSection } from "@/lib/data/session";
+import { canAccess, requireSection } from "@/lib/data/session";
 import { getMembersMap } from "@/lib/data/members";
 import { rowsOrThrow } from "@/lib/data/query";
 import { CreatePage } from "@/components/ui/create";
@@ -9,8 +9,9 @@ export const metadata: Metadata = { title: "New task" };
 
 export default async function NewTaskPage() {
   const ctx = await requireSection("debug");
-  // Admins get the "suggest for" field; suggestions target WORK members only
-  // (the people who take on this kind of work), so we fetch that roster too.
+  // The whole WORK team gets the "suggest for" field (Parsa, 2026-07-23 — was
+  // admin-only); suggestions target WORK members only (the people who take on
+  // this kind of work), so we fetch that roster too.
   const [projects, members, workMemberships] = await Promise.all([
     rowsOrThrow(
       ctx.supabase
@@ -21,7 +22,7 @@ export default async function NewTaskPage() {
       "projects"
     ),
     getMembersMap(ctx.supabase),
-    ctx.isAdmin
+    canAccess(ctx, "work")
       ? rowsOrThrow(
           ctx.supabase
             .from("section_memberships")
@@ -32,8 +33,8 @@ export default async function NewTaskPage() {
       : Promise.resolve([] as { user_id: string }[]),
   ]);
 
-  // Only admins get the "suggest for" field — a soft nudge, not a claim.
-  const memberOptions = ctx.isAdmin
+  // A soft nudge, not a claim — hidden outside the work team.
+  const memberOptions = canAccess(ctx, "work")
     ? workMemberships
         .map((m) => ({ value: m.user_id, label: members[m.user_id]?.name }))
         .filter((o): o is { value: string; label: string } => Boolean(o.label))
