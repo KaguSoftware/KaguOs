@@ -109,6 +109,26 @@ Two board asks ("board order sorting", "built in messaging system") + two mid-se
      touched ONLY in those two spots + imports — preset callDefault behaviour untouched.
    - Showcase: chat hidden entirely (no `is_demo`, real words) — inbox shows a "not available in
      showcase" door, thread pages 404, loaders return null, badge silent.
+   - **Hardening pass (same session, "make sure it's fast with 0 bugs"):**
+     * Sends PIPELINE — no `sending` gate; each line gets its own temp row + reconcile, so a
+       quick second message never waits on the first one's round-trip.
+     * The realtime INSERT of your OWN line can beat the action's return — the handler swaps it
+       into the matching temp (by body) instead of appending, or the message doubles for a beat.
+     * `markThreadRead` only runs when something is actually unread (the thread page computes
+       `initialUnread` server-side, fetching the group marker in the same wave), and the 1:1
+       branch `.select("id")`s the update to SKIP the layout revalidation when nothing changed —
+       that revalidate flushes the whole router cache and must only run when the badge moves.
+     * Incoming lines only auto-scroll when the reader is already near the bottom; own sends
+       always scroll. Failed sends hand the words back to the composer — unless new typing is
+       already there, which is never overwritten.
+     * Inbox uses `formatRelative` timestamps and deliberately has NO LiveRefresh of its own —
+       the layout already refreshes on `messages`; a second channel doubles socket traffic.
+3. **Debug "suggest for" opened to the whole work team** (Parsa, mid-session — was admin-only).
+   Gate is now `canAccess(ctx, "work")` in all FIVE places: `createTask` + `updateTask`
+   (server-side, never trusting the form) and the three roster-building pages (`debug/page.tsx`,
+   `debug/new/page.tsx`, `debug/brainstorm/page.tsx`). Suggestions still TARGET work members
+   only, and no DB change was needed — `suggested_for` never had a DB-level admin constraint
+   (0021's comment says so explicitly).
 
 **Not driven by a human yet.** The checks that matter: two browsers, A→B — badge lights live,
 thread streams without refresh, second message while unread fires NO second bell but a third

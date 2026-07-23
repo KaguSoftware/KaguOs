@@ -233,7 +233,7 @@ export function DebugBoard({
   isAdmin: boolean;
   /** Which world this board is showing — realtime must match the page query. */
   showcase: boolean;
-  /** Work members an admin can "suggest for" from the edit form. Empty for non-admins. */
+  /** Work members to "suggest for" from the edit form. Empty outside the work team. */
   suggestOptions: { value: string; label: string }[];
   /** Every active focus item, rank-ordered. Empty = no focus set. */
   focusItems: DebugFocus[];

@@ -60,7 +60,7 @@ export function Brainstorm({
   suggestOptions,
 }: {
   projects: { id: string; name: string }[];
-  /** Work members an admin can "suggest for". Empty for non-admins. */
+  /** Work members to "suggest for". Empty outside the work team. */
   suggestOptions: { value: string; label: string }[];
 }) {
   const router = useRouter();

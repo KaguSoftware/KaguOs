@@ -41,7 +41,7 @@ export function NewTaskForm({
   memberOptions,
 }: {
   projects: { id: string; name: string }[];
-  /** People an admin can suggest for the task. Empty for non-admins. */
+  /** People to suggest for the task. Empty outside the work team. */
   memberOptions: { value: string; label: string }[];
 }) {
   const router = useRouter();

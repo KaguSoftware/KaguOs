@@ -149,7 +149,7 @@ export function TaskRow({
   meId: string;
   isAdmin: boolean;
   projects: { id: string; name: string }[];
-  /** Work members an admin can "suggest for". Empty for non-admins. */
+  /** Work members to "suggest for". Empty outside the work team. */
   suggestOptions: { value: string; label: string }[];
   projectName?: string | null;
   /** How many tasks this audit turned up. 0 for non-audits. */
