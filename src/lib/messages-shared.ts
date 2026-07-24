@@ -13,3 +13,21 @@ export const GROUP_LABEL = "Work team";
 
 /** Matches the DB CHECK on messages.body. */
 export const MAX_MESSAGE_LEN = 4000;
+
+/** Limits on chat image attachments — mirrors lib/debug-images.ts. */
+export const MAX_IMAGES_PER_MESSAGE = 4;
+export const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+export const ALLOWED_IMAGE_TYPES = [
+  "image/png",
+  "image/jpeg",
+  "image/webp",
+  "image/gif",
+];
+
+/** Resize applied to chat-bubble THUMBNAILS only — see debug-images.ts for
+ *  why this must be baked into the signing token rather than a query param. */
+export const CHAT_THUMB_TRANSFORM = {
+  width: 480,
+  resize: "contain",
+  quality: 75,
+} as const;

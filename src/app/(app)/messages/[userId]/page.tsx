@@ -4,9 +4,13 @@ import { notFound } from "next/navigation";
 import { ArrowLeft, Users } from "lucide-react";
 import { requireSection } from "@/lib/data/session";
 import { getPresence } from "@/lib/data/presence";
-import { getGroupThread, getThread } from "@/lib/data/messages";
+import {
+  getGroupAudience,
+  getGroupReadMarkers,
+  getGroupThread,
+  getThread,
+} from "@/lib/data/messages";
 import { getMembersMap } from "@/lib/data/members";
-import { selectOrThrow } from "@/lib/data/query";
 import { MessageThread } from "@/components/messages/thread";
 import { GROUP_LABEL, GROUP_THREAD } from "@/lib/messages-shared";
 
@@ -31,21 +35,14 @@ export default async function MessageThreadPage({
   if (!isGroup && userId === ctx.userId) notFound();
 
   // One wave: the thread + the roster (validates the id, names the header) +
-  // for the group, my last-read marker — the client can't know it otherwise.
-  const [thread, presence, members, marker] = await Promise.all([
+  // for the group, the full audience and everyone's last-read marker — both
+  // needed for "seen by" and neither the client can know otherwise.
+  const [thread, presence, members, audience, readMarkers] = await Promise.all([
     isGroup ? getGroupThread(ctx) : getThread(ctx, userId),
     getPresence(ctx),
     getMembersMap(ctx.supabase),
-    isGroup
-      ? selectOrThrow(
-          ctx.supabase
-            .from("message_reads")
-            .select("read_at")
-            .eq("user_id", ctx.userId)
-            .maybeSingle(),
-          "message_reads"
-        )
-      : null,
+    isGroup ? getGroupAudience(ctx) : Promise.resolve(null),
+    isGroup ? getGroupReadMarkers(ctx) : Promise.resolve(null),
   ]);
 
   const person = isGroup
@@ -54,7 +51,7 @@ export default async function MessageThreadPage({
   if (!isGroup && !person) notFound();
 
   // Whether opening this thread should consume unread (and drop the badge).
-  const groupReadAt = marker?.data?.read_at ?? null;
+  const groupReadAt = readMarkers?.[ctx.userId] ?? null;
   const initialUnread = isGroup
     ? thread.some(
         (m) =>
@@ -123,6 +120,8 @@ export default async function MessageThreadPage({
         otherId={isGroup ? null : userId}
         members={members}
         initialUnread={initialUnread}
+        audience={audience}
+        readMarkers={readMarkers}
       />
     </div>
   );

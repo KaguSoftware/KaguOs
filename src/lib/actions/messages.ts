@@ -9,15 +9,24 @@ import {
 import { notifyUser } from "@/lib/actions/notify";
 import { MAX_MESSAGE_LEN } from "@/lib/messages-shared";
 import type { ActionResult } from "@/lib/actions/account";
-import type { Message } from "@/lib/types";
+import type { Message, MessageImage } from "@/lib/types";
 
 export type SendResult = ActionResult & { row?: Message };
 
+export type SendImageInput = {
+  path: string;
+  width: number | null;
+  height: number | null;
+};
+
 /**
  * Send a chat message. `recipientId` null = the Work-team group chat.
+ * `images` are already-uploaded bytes (browser → `chat-images` bucket
+ * directly) — this only writes the index rows, same split as debug's
+ * `addTaskImage`.
  *
- * Returns the inserted row so the thread view can reconcile its optimistic
- * append against the real id/timestamp.
+ * Returns the inserted row (images included) so the thread view can
+ * reconcile its optimistic append against the real id/timestamp.
  *
  * Notification contract (the anti-noise rule): a DIRECT message notifies the
  * recipient only when they have no unread from this sender yet — one bell per
@@ -27,7 +36,8 @@ export type SendResult = ActionResult & { row?: Message };
  */
 export async function sendMessage(
   recipientId: string | null,
-  body: string
+  body: string,
+  images: SendImageInput[] = []
 ): Promise<SendResult> {
   const showcaseStop = await blockIfShowcase();
   if (showcaseStop) return showcaseStop;
@@ -36,7 +46,8 @@ export async function sendMessage(
     return { ok: false, message: "Chat is for the work team." };
 
   const clean = body.trim().slice(0, MAX_MESSAGE_LEN);
-  if (!clean) return { ok: false, message: "Write something first." };
+  if (!clean && images.length === 0)
+    return { ok: false, message: "Write something or attach an image." };
   if (recipientId === ctx.userId)
     return { ok: false, message: "That's you." };
 
@@ -80,6 +91,32 @@ export async function sendMessage(
     .single();
   if (error) return { ok: false, message: error.message };
 
+  let imageRows: MessageImage[] = [];
+  if (images.length > 0) {
+    const { data: inserted, error: imageError } = await ctx.supabase
+      .from("message_images")
+      .insert(
+        images.map((img) => ({
+          message_id: row.id,
+          file_path: img.path,
+          width: img.width,
+          height: img.height,
+        }))
+      )
+      .select();
+    if (imageError) {
+      // The message row is already committed, but a message claiming an
+      // image that failed to record would be confusing — undo both, like
+      // addTaskImage undoes an upload when its row insert fails.
+      await ctx.supabase.storage
+        .from("chat-images")
+        .remove(images.map((img) => img.path));
+      await ctx.supabase.from("messages").delete().eq("id", row.id);
+      return { ok: false, message: imageError.message };
+    }
+    imageRows = (inserted ?? []) as MessageImage[];
+  }
+
   if (recipientId && priorUnread === 0) {
     const myName = ctx.profile.full_name || ctx.profile.email;
     notifyUser(ctx, recipientId, {
@@ -90,7 +127,11 @@ export async function sendMessage(
   }
 
   revalidatePath("/messages");
-  return { ok: true, message: "Sent.", row: row as Message };
+  return {
+    ok: true,
+    message: "Sent.",
+    row: { ...(row as Message), images: imageRows },
+  };
 }
 
 /**

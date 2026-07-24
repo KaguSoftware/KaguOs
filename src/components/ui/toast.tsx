@@ -9,6 +9,7 @@ import {
   useRef,
   useState,
 } from "react";
+import Link from "next/link";
 import { CheckCircle2, Info, Loader2, TriangleAlert, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -20,6 +21,8 @@ type Toast = {
   message: string;
   /** loading toasts persist until dismissed/updated; others auto-dismiss. */
   duration: number | null;
+  /** Optional click-through target — wraps the message in a Link when set. */
+  href?: string;
   /** true once dismissed: plays the exit animation, then unmounts. */
   exiting?: boolean;
 };
@@ -27,7 +30,12 @@ type Toast = {
 /** Keep in sync with the toast-out keyframe duration in globals.css. */
 const EXIT_MS = 180;
 
-type ToastInput = { tone?: ToastTone; message: string; duration?: number | null };
+type ToastInput = {
+  tone?: ToastTone;
+  message: string;
+  duration?: number | null;
+  href?: string;
+};
 
 type ToastHandle = {
   /** Replace this toast's content (e.g. loading → success). Resets its timer. */
@@ -140,7 +148,13 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
       // Deterministic id (no Math.random) — a monotonic counter is enough.
       counter.current += 1;
       const id = `t${counter.current}`;
-      const next: Toast = { id, tone, message: input.message, duration };
+      const next: Toast = {
+        id,
+        tone,
+        message: input.message,
+        duration,
+        href: input.href,
+      };
       setToasts((prev) => [...prev, next]);
       arm(id, duration);
 
@@ -156,7 +170,13 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
           setToasts((prev) =>
             prev.map((t) =>
               t.id === id
-                ? { ...t, tone: uTone, message: u.message, duration: uDuration }
+                ? {
+                    ...t,
+                    tone: uTone,
+                    message: u.message,
+                    duration: uDuration,
+                    href: u.href,
+                  }
                 : t
             )
           );
@@ -240,7 +260,16 @@ function ToastViewport({
             )}
           >
             <Icon className={cn("mt-px size-4 shrink-0", meta.iconClass)} aria-hidden />
-            <p className="min-w-0 flex-1 text-[13px] leading-snug text-ink">{t.message}</p>
+            {t.href ? (
+              <Link
+                href={t.href}
+                className="min-w-0 flex-1 text-[13px] leading-snug text-ink hover:underline"
+              >
+                {t.message}
+              </Link>
+            ) : (
+              <p className="min-w-0 flex-1 text-[13px] leading-snug text-ink">{t.message}</p>
+            )}
             <button
               type="button"
               onClick={() => onDismiss(t.id)}

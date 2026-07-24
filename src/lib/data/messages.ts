@@ -1,7 +1,8 @@
 import { cache } from "react";
 import { canAccess, type SessionContext } from "@/lib/data/session";
 import { rowsOrThrow, selectOrThrow } from "@/lib/data/query";
-import type { Message } from "@/lib/types";
+import { getPresence } from "@/lib/data/presence";
+import type { Message, MessageImage } from "@/lib/types";
 
 /**
  * Chat data. Audience = the presence audience (Work members, admins included);
@@ -69,6 +70,51 @@ export const getUnreadMessageCount = cache(async function getUnreadMessageCount(
   );
 });
 
+/** Every id in the group-chat audience (work members ∪ admins). */
+export const getGroupAudience = cache(async function getGroupAudience(
+  ctx: SessionContext
+): Promise<string[]> {
+  const presence = await getPresence(ctx);
+  return (presence ?? []).map((p) => p.id);
+});
+
+/** Everyone's group-chat last-read marker, keyed by user id — the "seen by" data. */
+export async function getGroupReadMarkers(
+  ctx: SessionContext
+): Promise<Record<string, string>> {
+  if (!canAccess(ctx, "work") || ctx.showcase) return {};
+  const rows = await rowsOrThrow<{ user_id: string; read_at: string }>(
+    ctx.supabase.from("message_reads").select("user_id, read_at"),
+    "message_reads: all"
+  );
+  return Object.fromEntries(rows.map((r) => [r.user_id, r.read_at]));
+}
+
+/** Attach each row's images (if any) — one extra query, not one per message. */
+async function attachImages(
+  ctx: SessionContext,
+  rows: Message[]
+): Promise<Message[]> {
+  if (rows.length === 0) return rows;
+  const images = await rowsOrThrow<MessageImage>(
+    ctx.supabase
+      .from("message_images")
+      .select("*")
+      .in(
+        "message_id",
+        rows.map((r) => r.id)
+      ),
+    "message_images"
+  );
+  const byMessage = new Map<string, MessageImage[]>();
+  for (const img of images) {
+    const list = byMessage.get(img.message_id) ?? [];
+    list.push(img);
+    byMessage.set(img.message_id, list);
+  }
+  return rows.map((r) => ({ ...r, images: byMessage.get(r.id) }));
+}
+
 export type InboxSummary = {
   /** Per-partner: their latest message either direction + my unread from them. */
   direct: Record<string, { last: Message; unread: number }>;
@@ -76,7 +122,7 @@ export type InboxSummary = {
 };
 
 /** The /messages inbox: last line + unread count per partner and for the group. */
-export async function getInboxSummary(
+export const getInboxSummary = cache(async function getInboxSummary(
   ctx: SessionContext
 ): Promise<InboxSummary | null> {
   if (!canAccess(ctx, "work") || ctx.showcase) return null;
@@ -127,7 +173,7 @@ export async function getInboxSummary(
       unread: countGroupUnread(groupRows, me, marker.data?.read_at ?? null),
     },
   };
-}
+});
 
 /** One 1:1 thread — both directions between me and `otherId`, oldest first. */
 export async function getThread(
@@ -135,7 +181,7 @@ export async function getThread(
   otherId: string
 ): Promise<Message[]> {
   const me = ctx.userId;
-  return rowsOrThrow<Message>(
+  const rows = await rowsOrThrow<Message>(
     ctx.supabase
       .from("messages")
       .select("*")
@@ -146,11 +192,12 @@ export async function getThread(
       .limit(THREAD_LIMIT),
     "messages: thread"
   );
+  return attachImages(ctx, rows);
 }
 
 /** The Work-team group chat, oldest first. */
 export async function getGroupThread(ctx: SessionContext): Promise<Message[]> {
-  return rowsOrThrow<Message>(
+  const rows = await rowsOrThrow<Message>(
     ctx.supabase
       .from("messages")
       .select("*")
@@ -159,4 +206,5 @@ export async function getGroupThread(ctx: SessionContext): Promise<Message[]> {
       .limit(THREAD_LIMIT),
     "messages: group thread"
   );
+  return attachImages(ctx, rows);
 }

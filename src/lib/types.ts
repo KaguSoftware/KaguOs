@@ -130,7 +130,22 @@ export type Message = {
   body: string;
   read_at: string | null;
   created_at: string;
+  /** Not a DB column — hydrated by the data fetcher from `message_images`. */
+  images?: MessageImage[];
 };
+
+/** One attached image on a chat message. */
+export type MessageImage = {
+  id: string;
+  message_id: string;
+  file_path: string;
+  width: number | null;
+  height: number | null;
+  created_at: string;
+};
+
+/** A `MessageImage` plus its signed rendering URLs. */
+export type MessageImageView = MessageImage & { url: string; thumbUrl: string };
 
 export type SectionMembership = {
   user_id: string;

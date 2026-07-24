@@ -4,13 +4,14 @@ import { getSessionContext, getUserId } from "@/lib/data/session";
 import { getMembersMap } from "@/lib/data/members";
 import { getPresence } from "@/lib/data/presence";
 import { getPulse } from "@/lib/data/pulse";
-import { getUnreadMessageCount } from "@/lib/data/messages";
+import { getInboxSummary, getUnreadMessageCount } from "@/lib/data/messages";
 import { selectOrThrow } from "@/lib/data/query";
 import { LiveRefresh } from "@/components/shell/live-refresh";
 import { Sidebar } from "@/components/shell/sidebar";
 import { CommandPalette } from "@/components/shell/command-palette";
 import { ShowcaseBanner } from "@/components/shell/showcase";
 import { ToastProvider } from "@/components/ui/toast";
+import { UnreadDmPopups } from "@/components/shell/unread-dm-popups";
 import type { Notification } from "@/lib/types";
 
 export default async function AppLayout({
@@ -45,13 +46,29 @@ export default async function AppLayout({
   // Presence for the always-open sidebar panel + the mobile menu's live tile
   // counts. Both need ctx (access/showcase gating), both are cache()-deduped,
   // and they fly TOGETHER — so the pulse costs no extra round-trip.
-  const [presence, pulse, unreadMessages] = await Promise.all([
+  const [presence, pulse, unreadMessages, inbox] = await Promise.all([
     getPresence(ctx),
     getPulse(ctx),
     // Chat unread for the Messages nav badge — same audience gate as presence,
     // so it's null (and the badge silent) exactly where the panel is absent.
     getUnreadMessageCount(ctx),
+    // Feeds the unread-DM popups below — cache()-deduped against any page
+    // that also calls getInboxSummary in the same request.
+    getInboxSummary(ctx),
   ]);
+
+  // Minimal, privacy-conscious slice for the popups — sender + preview only,
+  // never the group chat (that's the sidebar badge's job, not a popup's).
+  const unreadDMs =
+    ctx.showcase || !inbox
+      ? []
+      : Object.entries(inbox.direct)
+          .filter(([, t]) => t.unread > 0)
+          .map(([partnerId, t]) => ({
+            partnerId,
+            lastBody: t.last.body,
+            lastAt: t.last.created_at,
+          }));
 
   return (
     <ToastProvider>
@@ -76,7 +93,12 @@ export default async function AppLayout({
           the moment a notification lands or someone changes status. Skipped in
           showcase — notifications are hidden and presence is demo-irrelevant. */}
       {!ctx.showcase && (
-        <LiveRefresh tables={["notifications", "profiles", "messages"]} />
+        <LiveRefresh
+          tables={["notifications", "profiles", "messages", "message_reads"]}
+        />
+      )}
+      {!ctx.showcase && (
+        <UnreadDmPopups threads={unreadDMs} members={members} />
       )}
       <div className="flex min-h-dvh flex-col md:flex-row">
         <Sidebar

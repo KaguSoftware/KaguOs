@@ -1,13 +1,21 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { SendHorizontal } from "lucide-react";
+import Image from "next/image";
+import { ImagePlus, SendHorizontal, X } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
-import { markThreadRead, sendMessage } from "@/lib/actions/messages";
+import { markThreadRead, sendMessage, type SendImageInput } from "@/lib/actions/messages";
 import { useToast } from "@/components/ui/toast";
-import { MAX_MESSAGE_LEN } from "@/lib/messages-shared";
+import { Skeleton } from "@/components/ui/skeleton";
+import {
+  ALLOWED_IMAGE_TYPES,
+  CHAT_THUMB_TRANSFORM,
+  MAX_IMAGES_PER_MESSAGE,
+  MAX_IMAGE_BYTES,
+  MAX_MESSAGE_LEN,
+} from "@/lib/messages-shared";
 import { cn } from "@/lib/utils";
-import type { MembersMap, Message } from "@/lib/types";
+import type { MembersMap, Message, MessageImage } from "@/lib/types";
 
 /** Chat timestamps pin to Istanbul like every other domain date — the whole
  *  team is there, and two people must agree on when a thing was said. */
@@ -25,6 +33,34 @@ const DAY = new Intl.DateTimeFormat("en-GB", {
 const DAY_KEY = new Intl.DateTimeFormat("en-CA", {
   timeZone: "Europe/Istanbul",
 });
+
+type Attachment = {
+  file: File;
+  previewUrl: string;
+  width: number | null;
+  height: number | null;
+};
+
+/** Natural size of a picked file, so a thumbnail can reserve its box. */
+function measure(file: File): Promise<{ width: number; height: number } | null> {
+  return new Promise((resolve) => {
+    const url = URL.createObjectURL(file);
+    const img = new window.Image();
+    img.onload = () => {
+      resolve({ width: img.naturalWidth, height: img.naturalHeight });
+      URL.revokeObjectURL(url);
+    };
+    img.onerror = () => {
+      resolve(null);
+      URL.revokeObjectURL(url);
+    };
+    img.src = url;
+  });
+}
+
+function firstName(members: MembersMap, id: string) {
+  return (members[id]?.name ?? "Former member").split(" ")[0];
+}
 
 /**
  * One live chat thread — a 1:1 when `otherId` is set, the Work-team group
@@ -45,6 +81,8 @@ export function MessageThread({
   otherId,
   members,
   initialUnread,
+  audience,
+  readMarkers,
 }: {
   initialMessages: Message[];
   meId: string;
@@ -53,11 +91,19 @@ export function MessageThread({
   members: MembersMap;
   /** Whether this thread holds unread lines for me — decides the mount mark. */
   initialUnread: boolean;
+  /** Group-chat audience (null for DMs) — who "seen by" is computed over. */
+  audience: string[] | null;
+  /** Group-chat last-read marker per user id (null for DMs). */
+  readMarkers: Record<string, string> | null;
 }) {
   const [messages, setMessages] = useState(initialMessages);
   const [draft, setDraft] = useState("");
+  const [attachments, setAttachments] = useState<Attachment[]>([]);
+  const [signedUrls, setSignedUrls] = useState<Record<string, { url: string; thumbUrl: string }>>({});
+  const [lightbox, setLightbox] = useState<{ url: string; width: number | null; height: number | null } | null>(null);
   const endRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
+  const attachFileRef = useRef<HTMLInputElement>(null);
   // Scroll to the newest line even if the reader is scrolled up — set by MY
   // sends, which must always come into view.
   const forceScroll = useRef(false);
@@ -127,7 +173,9 @@ export function MessageThread({
                   (m) => m.id.startsWith("temp-") && m.body === row.body
                 );
                 if (temp)
-                  return prev.map((m) => (m.id === temp.id ? row : m));
+                  return prev.map((m) =>
+                    m.id === temp.id ? { ...row, images: m.images } : m
+                  );
               }
               return [...prev, row];
             });
@@ -141,7 +189,23 @@ export function MessageThread({
             const row = payload.new as Message;
             if (!accepts(row)) return;
             setMessages((prev) =>
-              prev.map((m) => (m.id === row.id ? row : m))
+              prev.map((m) => (m.id === row.id ? { ...row, images: m.images } : m))
+            );
+          }
+        )
+        .on(
+          "postgres_changes",
+          { event: "INSERT", schema: "public", table: "message_images" },
+          (payload) => {
+            // A message's images can land a beat after the message row
+            // itself — patch them into whichever bubble is already showing.
+            const img = payload.new as MessageImage;
+            setMessages((prev) =>
+              prev.map((m) =>
+                m.id === img.message_id
+                  ? { ...m, images: [...(m.images ?? []).filter((i) => i.id !== img.id), img] }
+                  : m
+              )
             );
           }
         )
@@ -174,43 +238,172 @@ export function MessageThread({
     forceScroll.current = false;
   }, [messages]);
 
+  // Sign every image path currently rendered, once per batch — merged into
+  // the running map rather than replaced, since a chat's image set only
+  // grows. Blob-preview paths (unsent attachments) are skipped: they render
+  // straight from the local object URL, no signing needed.
+  const imagePaths = useMemo(() => {
+    const paths = new Set<string>();
+    for (const m of messages) {
+      for (const img of m.images ?? []) {
+        if (!img.file_path.startsWith("blob:")) paths.add(img.file_path);
+      }
+    }
+    return [...paths].filter((p) => !(p in signedUrls));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [messages]);
+
+  useEffect(() => {
+    if (imagePaths.length === 0) return;
+    let cancelled = false;
+    const supabase = createClient();
+    Promise.all([
+      supabase.storage.from("chat-images").createSignedUrls(imagePaths, 60 * 60),
+      Promise.all(
+        imagePaths.map((p) =>
+          supabase.storage
+            .from("chat-images")
+            .createSignedUrl(p, 60 * 60, { transform: CHAT_THUMB_TRANSFORM })
+        )
+      ),
+    ]).then(([full, thumbs]) => {
+      if (cancelled || !full.data) return;
+      const next: Record<string, { url: string; thumbUrl: string }> = {};
+      imagePaths.forEach((p, idx) => {
+        const url = full.data?.[idx]?.signedUrl ?? "";
+        if (!url) return;
+        next[p] = { url, thumbUrl: thumbs[idx]?.data?.signedUrl ?? url };
+      });
+      setSignedUrls((prev) => ({ ...prev, ...next }));
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [imagePaths]);
+
+  useEffect(() => {
+    if (!lightbox) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setLightbox(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [lightbox]);
+
+  function imageView(img: MessageImage): { url: string; thumbUrl: string } {
+    if (img.file_path.startsWith("blob:"))
+      return { url: img.file_path, thumbUrl: img.file_path };
+    return signedUrls[img.file_path] ?? { url: "", thumbUrl: "" };
+  }
+
+  async function addFiles(files: FileList | null) {
+    if (!files || files.length === 0) return;
+    const room = MAX_IMAGES_PER_MESSAGE - attachments.length;
+    if (room <= 0) {
+      toastError(`A message can carry ${MAX_IMAGES_PER_MESSAGE} images.`);
+      return;
+    }
+    const picked = Array.from(files);
+    if (picked.length > room) {
+      toastError(
+        `Only ${room} more image${room === 1 ? "" : "s"} fit — the rest were skipped.`
+      );
+    }
+    const added: Attachment[] = [];
+    for (const file of picked.slice(0, room)) {
+      if (!ALLOWED_IMAGE_TYPES.includes(file.type)) {
+        toastError(`${file.name} isn't a PNG, JPEG, WebP or GIF.`);
+        continue;
+      }
+      if (file.size > MAX_IMAGE_BYTES) {
+        toastError(`${file.name} is over 5MB.`);
+        continue;
+      }
+      const size = await measure(file);
+      added.push({
+        file,
+        previewUrl: URL.createObjectURL(file),
+        width: size?.width ?? null,
+        height: size?.height ?? null,
+      });
+    }
+    if (added.length > 0) setAttachments((prev) => [...prev, ...added]);
+  }
+
+  function removeAttachment(index: number) {
+    setAttachments((prev) => {
+      const target = prev[index];
+      if (target) URL.revokeObjectURL(target.previewUrl);
+      return prev.filter((_, i) => i !== index);
+    });
+  }
+
   // No `sending` gate: sends PIPELINE. Each line gets its own temp row and its
   // own reconcile, so a quick second message never waits on the first one's
   // round-trip — the composer clears and you keep typing.
-  function send() {
+  async function send() {
     const clean = draft.trim();
-    if (!clean) return;
+    if (!clean && attachments.length === 0) return;
+    const pending = attachments;
+    const tempId = `temp-${Date.now()}-${Math.random().toString(36).slice(2)}`;
     const temp: Message = {
-      id: `temp-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+      id: tempId,
       sender_id: meId,
       recipient_id: otherId,
       body: clean,
       read_at: null,
       created_at: new Date().toISOString(),
+      images: pending.map((a, i) => ({
+        id: `${tempId}-img-${i}`,
+        message_id: tempId,
+        file_path: a.previewUrl,
+        width: a.width,
+        height: a.height,
+        created_at: new Date().toISOString(),
+      })),
     };
     forceScroll.current = true;
     setMessages((prev) => [...prev, temp]);
     setDraft("");
+    setAttachments([]);
+    if (attachFileRef.current) attachFileRef.current.value = "";
+
     const fail = (message: string) => {
-      setMessages((prev) => prev.filter((m) => m.id !== temp.id));
+      setMessages((prev) => prev.filter((m) => m.id !== tempId));
       // Hand the words back — unless they've already typed something new,
       // which must never be overwritten.
       setDraft((d) => (d.trim() ? d : clean));
+      setAttachments(pending);
       toastError(message);
     };
-    sendMessage(otherId, clean)
-      .then((result) => {
-        if (!result.ok) return fail(result.message);
-        const row = result.row;
-        if (!row) return;
-        // Reconcile: the realtime INSERT may have landed (and swapped) first.
-        setMessages((prev) =>
-          prev.some((m) => m.id === row.id)
-            ? prev.filter((m) => m.id !== temp.id)
-            : prev.map((m) => (m.id === temp.id ? row : m))
-        );
-      })
-      .catch(() => fail("Something went wrong. Please try again."));
+
+    try {
+      const supabase = createClient();
+      const uploaded: SendImageInput[] = [];
+      for (const a of pending) {
+        const ext = (a.file.name.split(".").pop() ?? "png")
+          .toLowerCase()
+          .replace(/[^a-z0-9]/g, "");
+        const path = `${meId}/${crypto.randomUUID()}.${ext || "png"}`;
+        const { error } = await supabase.storage.from("chat-images").upload(path, a.file);
+        if (error) throw new Error(error.message);
+        uploaded.push({ path, width: a.width, height: a.height });
+      }
+      const result = await sendMessage(otherId, clean, uploaded);
+      if (!result.ok) return fail(result.message);
+      const row = result.row;
+      if (!row) return;
+      // Reconcile: the realtime INSERT may have landed (and swapped) first.
+      setMessages((prev) =>
+        prev.some((m) => m.id === row.id)
+          ? prev.filter((m) => m.id !== tempId)
+          : prev.map((m) => (m.id === tempId ? row : m))
+      );
+    } catch (e) {
+      fail(e instanceof Error ? e.message : "Something went wrong. Please try again.");
+    } finally {
+      for (const a of pending) URL.revokeObjectURL(a.previewUrl);
+    }
   }
 
   return (
@@ -228,15 +421,43 @@ export function MessageThread({
         )}
         {messages.map((m, i) => {
           const mine = m.sender_id === meId;
-          const prev = messages[i - 1];
+          const prevMsg = messages[i - 1];
+          const nextMsg = messages[i + 1];
           const newDay =
-            !prev ||
-            DAY_KEY.format(new Date(prev.created_at)) !==
+            !prevMsg ||
+            DAY_KEY.format(new Date(prevMsg.created_at)) !==
+              DAY_KEY.format(new Date(m.created_at));
+          const nextIsNewDay =
+            !nextMsg ||
+            DAY_KEY.format(new Date(nextMsg.created_at)) !==
               DAY_KEY.format(new Date(m.created_at));
           // Name the sender on the first line of a run (group chat only —
           // a 1:1 has exactly one other voice).
-          const newRun = newDay || !prev || prev.sender_id !== m.sender_id;
+          const newRun = newDay || !prevMsg || prevMsg.sender_id !== m.sender_id;
+          // The LAST line of a run of my own group-chat sends is where "seen
+          // by" renders — once per burst, not once per bubble.
+          const lastInRun =
+            nextIsNewDay || !nextMsg || nextMsg.sender_id !== m.sender_id;
           const sender = members[m.sender_id];
+
+          let seenLabel: string | null = null;
+          if (mine && otherId !== null) {
+            seenLabel = m.read_at ? `Seen ${TIME.format(new Date(m.read_at))}` : "Sent";
+          } else if (mine && otherId === null && lastInRun && audience && readMarkers) {
+            const others = audience.filter((id) => id !== meId);
+            const seenBy = others.filter(
+              (id) => readMarkers[id] && readMarkers[id] > m.created_at
+            );
+            seenLabel =
+              seenBy.length === 0
+                ? others.length > 0
+                  ? `Not seen by ${others.map((id) => firstName(members, id)).join(", ")}`
+                  : null
+                : seenBy.length === others.length
+                  ? "Seen by everyone"
+                  : `Seen by ${seenBy.map((id) => firstName(members, id)).join(", ")}`;
+          }
+
           return (
             <div key={m.id}>
               {newDay && (
@@ -265,18 +486,53 @@ export function MessageThread({
                 )}
                 <div
                   className={cn(
-                    "max-w-[min(75%,34rem)] rounded-lg px-3 py-1.5",
+                    "flex max-w-[min(75%,34rem)] flex-col gap-1.5 rounded-lg px-3 py-1.5",
                     mine
                       ? "bg-raised text-ink"
                       : "border border-line bg-surface text-ink"
                   )}
                 >
-                  <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">
-                    {m.body}
-                  </p>
+                  {m.body && (
+                    <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">
+                      {m.body}
+                    </p>
+                  )}
+                  {m.images && m.images.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5">
+                      {m.images.map((img) => {
+                        const view = imageView(img);
+                        if (!view.thumbUrl)
+                          return (
+                            <Skeleton
+                              key={img.id}
+                              className="h-28 w-36 border border-line"
+                            />
+                          );
+                        return (
+                          <button
+                            key={img.id}
+                            type="button"
+                            onClick={() => setLightbox({ ...view, width: img.width, height: img.height })}
+                            className="block overflow-hidden rounded-md border border-line"
+                            aria-label="View image full size"
+                          >
+                            <Image
+                              src={view.thumbUrl}
+                              alt=""
+                              width={img.width ?? 240}
+                              height={img.height ?? 160}
+                              unoptimized
+                              className="h-28 w-auto max-w-56 object-cover"
+                            />
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
                 <span className="px-1 pt-0.5 font-mono text-[10px] text-faint">
                   {TIME.format(new Date(m.created_at))}
+                  {seenLabel ? ` · ${seenLabel}` : ""}
                 </span>
               </div>
             </div>
@@ -286,7 +542,59 @@ export function MessageThread({
       </div>
 
       <div className="border-t border-line pt-3">
-        <div className="flex items-end gap-2">
+        {attachments.length > 0 && (
+          <ul className="mb-2 flex flex-wrap gap-2">
+            {attachments.map((a, i) => (
+              <li key={a.previewUrl} className="group relative">
+                <Image
+                  src={a.previewUrl}
+                  alt=""
+                  width={a.width ?? 160}
+                  height={a.height ?? 100}
+                  unoptimized
+                  className="h-16 w-auto max-w-32 rounded-md border border-line object-cover"
+                />
+                <button
+                  type="button"
+                  onClick={() => removeAttachment(i)}
+                  aria-label="Remove image"
+                  className="absolute -right-1.5 -top-1.5 grid size-5 place-items-center rounded-full border border-line bg-surface text-faint transition-colors duration-150 hover:text-danger"
+                >
+                  <X className="size-3" aria-hidden />
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+        <div
+          className="flex items-end gap-2"
+          // Ctrl+V a screenshot straight into the composer — scoped to this
+          // container so it never hijacks a paste meant for the textarea's
+          // text (a paste carrying no files falls through untouched).
+          onPaste={(e) => {
+            const files = e.clipboardData?.files;
+            if (!files || files.length === 0) return;
+            e.preventDefault();
+            addFiles(files);
+          }}
+        >
+          <input
+            ref={attachFileRef}
+            type="file"
+            accept={ALLOWED_IMAGE_TYPES.join(",")}
+            multiple
+            className="hidden"
+            onChange={(e) => addFiles(e.target.files)}
+          />
+          <button
+            type="button"
+            onClick={() => attachFileRef.current?.click()}
+            disabled={attachments.length >= MAX_IMAGES_PER_MESSAGE}
+            aria-label="Attach image"
+            className="flex size-9 shrink-0 items-center justify-center rounded-md border border-line text-faint transition-colors duration-150 hover:border-line-strong hover:text-ink disabled:opacity-40"
+          >
+            <ImagePlus className="size-4" aria-hidden />
+          </button>
           <textarea
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
@@ -295,7 +603,7 @@ export function MessageThread({
               // textarea only, nothing global.
               if (e.key === "Enter" && !e.shiftKey) {
                 e.preventDefault();
-                send();
+                void send();
               }
             }}
             rows={1}
@@ -306,8 +614,8 @@ export function MessageThread({
           />
           <button
             type="button"
-            onClick={send}
-            disabled={!draft.trim()}
+            onClick={() => void send()}
+            disabled={!draft.trim() && attachments.length === 0}
             aria-label="Send"
             className="flex size-9 shrink-0 items-center justify-center rounded-md bg-primary text-primary-ink transition-transform duration-150 active:scale-[0.98] disabled:opacity-40"
           >
@@ -315,6 +623,25 @@ export function MessageThread({
           </button>
         </div>
       </div>
+
+      {lightbox && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Image preview"
+          onClick={() => setLightbox(null)}
+          className="fixed inset-0 z-50 grid animate-overlay-in place-items-center bg-black/80 p-6"
+        >
+          <Image
+            src={lightbox.url}
+            alt=""
+            width={lightbox.width ?? 1200}
+            height={lightbox.height ?? 800}
+            unoptimized
+            className="max-h-full w-auto max-w-full rounded-lg object-contain"
+          />
+        </div>
+      )}
     </div>
   );
 }
