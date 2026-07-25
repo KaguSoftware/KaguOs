@@ -1,20 +1,33 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import Image from "next/image";
-import { ImagePlus, SendHorizontal, X } from "lucide-react";
+import { ImagePlus, Loader2, SendHorizontal, X } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
-import { markThreadRead, sendMessage, type SendImageInput } from "@/lib/actions/messages";
+import {
+  loadOlderMessages,
+  sendMessage,
+  type SendImageInput,
+} from "@/lib/actions/messages";
+import { READ_SLACK_PX, useReadMarker } from "@/lib/use-read-marker";
 import { useToast } from "@/components/ui/toast";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   ALLOWED_IMAGE_TYPES,
   CHAT_THUMB_TRANSFORM,
+  chatImagePath,
   MAX_IMAGES_PER_MESSAGE,
   MAX_IMAGE_BYTES,
   MAX_MESSAGE_LEN,
 } from "@/lib/messages-shared";
-import { cn } from "@/lib/utils";
+import { buttonClasses, cn } from "@/lib/utils";
 import type { MembersMap, Message, MessageImage } from "@/lib/types";
 
 /** Chat timestamps pin to Istanbul like every other domain date — the whole
@@ -33,6 +46,15 @@ const DAY = new Intl.DateTimeFormat("en-GB", {
 const DAY_KEY = new Intl.DateTimeFormat("en-CA", {
   timeZone: "Europe/Istanbul",
 });
+
+/** Thumb token lifetime. Retired well before this — see RESIGN_AFTER_MS. */
+const SIGN_TTL_S = 60 * 60;
+/** Retire a thumb URL at 50 minutes so it is never served dead. */
+const RESIGN_AFTER_MS = 50 * 60 * 1000;
+/** How often to sweep for thumb URLs nearing expiry. */
+const RESIGN_CHECK_MS = 5 * 60 * 1000;
+/** Full-size URLs are minted in the click handler, so they need seconds only. */
+const FULL_TTL_S = 60;
 
 type Attachment = {
   file: File;
@@ -77,6 +99,8 @@ function firstName(members: MembersMap, id: string) {
  */
 export function MessageThread({
   initialMessages,
+  initialHasOlder,
+  readOnly = false,
   meId,
   otherId,
   members,
@@ -85,6 +109,10 @@ export function MessageThread({
   readMarkers,
 }: {
   initialMessages: Message[];
+  /** Older history exists behind the first page — shows the "Show older" cue. */
+  initialHasOlder: boolean;
+  /** Readable but not writable — the partner has left the work team. */
+  readOnly?: boolean;
   meId: string;
   /** null = the group chat. */
   otherId: string | null;
@@ -97,26 +125,47 @@ export function MessageThread({
   readMarkers: Record<string, string> | null;
 }) {
   const [messages, setMessages] = useState(initialMessages);
+  const [hasOlder, setHasOlder] = useState(initialHasOlder);
+  const [loadingOlder, setLoadingOlder] = useState(false);
   const [draft, setDraft] = useState("");
   const [attachments, setAttachments] = useState<Attachment[]>([]);
-  const [signedUrls, setSignedUrls] = useState<Record<string, { url: string; thumbUrl: string }>>({});
+  /** path → signed THUMB url + when it was minted (for pre-expiry re-signing). */
+  const [thumbs, setThumbs] = useState<
+    Record<string, { url: string; at: number }>
+  >({});
   const [lightbox, setLightbox] = useState<{ url: string; width: number | null; height: number | null } | null>(null);
   const endRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const attachFileRef = useRef<HTMLInputElement>(null);
+  const composerRef = useRef<HTMLTextAreaElement>(null);
   // Scroll to the newest line even if the reader is scrolled up — set by MY
   // sends, which must always come into view.
   const forceScroll = useRef(false);
+  // Distance from the bottom to re-establish after a page of older history is
+  // prepended. Prepending grows scrollHeight, so holding scrollTop would slide
+  // the reader's place; holding the distance from the BOTTOM keeps it still.
+  const restoreFromBottom = useRef<number | null>(null);
   const { error: toastError } = useToast();
 
   // Server refreshes re-send props — adopt during render (no stale flash).
   const [seen, setSeen] = useState(initialMessages);
   if (seen !== initialMessages) {
     setSeen(initialMessages);
-    // Keep optimistic rows the server snapshot hasn't caught up to yet.
+    // A refresh re-sends only the NEWEST page, so this is a merge, not a
+    // replacement: older pages the reader loaded and optimistic rows the
+    // snapshot hasn't caught up to must both survive. Then sort — concatenating
+    // would file older history AFTER newer lines. The fresh row wins (it
+    // carries read_at flips) but keeps locally-held images if it has none,
+    // exactly like the realtime UPDATE handler below.
     setMessages((prev) => {
-      const ids = new Set(initialMessages.map((m) => m.id));
-      return [...initialMessages, ...prev.filter((m) => !ids.has(m.id))];
+      const fresh = new Map(initialMessages.map((m) => [m.id, m]));
+      const merged = prev.map((m) => {
+        const next = fresh.get(m.id);
+        return next ? { ...next, images: next.images ?? m.images } : m;
+      });
+      const held = new Set(prev.map((m) => m.id));
+      for (const m of initialMessages) if (!held.has(m.id)) merged.push(m);
+      return merged.sort((a, b) => a.created_at.localeCompare(b.created_at));
     });
   }
 
@@ -128,14 +177,44 @@ export function MessageThread({
           (m.sender_id === meId && m.recipient_id === otherId);
   }, [otherId, meId]);
 
-  // Opening the thread consumes its unread — and an incoming line while the
-  // thread is on screen is read the moment it paints, so mark again then.
-  // Skipped when there's nothing unread: markThreadRead revalidates the layout
-  // (that's how the badge drops), and doing that on every quiet open would
-  // flush the router cache for no reason.
+  /**
+   * Is the newest line actually on screen? The read marker and the auto-scroll
+   * policy now share ONE rule. They used to disagree: the scroll policy
+   * deliberately left an incoming line alone when the reader was scrolled up,
+   * while the marker told the sender it had been seen.
+   */
+  const nearBottom = useCallback(() => {
+    const el = listRef.current;
+    if (!el) return true;
+    return el.scrollHeight - el.scrollTop - el.clientHeight < READ_SLACK_PX;
+  }, []);
+
+  // A mark needs real attention (tab visible + focused + newest line on screen)
+  // and coalesces a burst into one round trip. See use-read-marker.ts.
+  const { mark, flush: flushRead } = useReadMarker(otherId, nearBottom);
+  // Held in a ref so the realtime subscription below doesn't take it as a
+  // dependency and re-subscribe.
+  const markRef = useRef(mark);
   useEffect(() => {
-    if (initialUnread) void markThreadRead(otherId);
+    markRef.current = mark;
+  }, [mark]);
+
+  // Opening the thread consumes its unread. Skipped when there's nothing unread:
+  // marking revalidates the layout (that's how the badge drops), and doing that
+  // on every quiet open would flush the router cache for no reason.
+  useEffect(() => {
+    if (initialUnread) mark();
     // Mount-only by design — later unreads are handled by the INSERT stream.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Opening a chat should put the cursor where you are about to type. Guarded on
+  // visibility so a tab restored in the background doesn't steal focus. Runs
+  // once per mount, and the component remounts per thread, so this fires on
+  // every open.
+  useEffect(() => {
+    if (!readOnly && document.visibilityState === "visible")
+      composerRef.current?.focus();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -179,7 +258,9 @@ export function MessageThread({
               }
               return [...prev, row];
             });
-            if (row.sender_id !== meId) void markThreadRead(otherId);
+            // Requests a mark; the helper decides whether the reader is actually
+            // present, and coalesces a burst of lines into one round trip.
+            if (row.sender_id !== meId) markRef.current();
           }
         )
         .on(
@@ -203,7 +284,20 @@ export function MessageThread({
             setMessages((prev) =>
               prev.map((m) =>
                 m.id === img.message_id
-                  ? { ...m, images: [...(m.images ?? []).filter((i) => i.id !== img.id), img] }
+                  ? {
+                      ...m,
+                      images: [
+                        // A real row SUPERSEDES this send's local blob previews.
+                        // Appending alongside them showed your own image twice —
+                        // and the blob copy was revoked a moment later, so one of
+                        // the two turned into a broken thumbnail.
+                        ...(m.images ?? []).filter(
+                          (i) =>
+                            i.id !== img.id && !i.file_path.startsWith("blob:")
+                        ),
+                        img,
+                      ],
+                    }
                   : m
               )
             );
@@ -218,68 +312,121 @@ export function MessageThread({
     };
   }, [otherId, meId, accepts]);
 
+  // Put the reader back where they were after older history is prepended.
+  // Runs BEFORE the scroll effect below (layout effects go first), so that one
+  // then measures the restored position and correctly decides not to scroll.
+  useLayoutEffect(() => {
+    const el = listRef.current;
+    const fromBottom = restoreFromBottom.current;
+    if (!el || fromBottom === null) return;
+    restoreFromBottom.current = null;
+    el.scrollTop = el.scrollHeight - fromBottom;
+  }, [messages]);
+
   // Keep the newest line in view — instant on first paint, smooth after.
   // An INCOMING line only follows when the reader is already near the bottom;
   // yanking someone out of the history they scrolled up to read is worse than
   // letting the new line wait. My own sends always come into view.
   const firstScroll = useRef(true);
   useEffect(() => {
-    const el = listRef.current;
-    const nearBottom = el
-      ? el.scrollHeight - el.scrollTop - el.clientHeight < 200
-      : true;
-    if (firstScroll.current || forceScroll.current || nearBottom) {
+    if (firstScroll.current || forceScroll.current || nearBottom()) {
+      // A JS scroll behavior is out of reach of the global reduced-motion CSS
+      // kill switch, so it has to ask for itself.
+      const calm =
+        typeof window !== "undefined" &&
+        window.matchMedia("(prefers-reduced-motion: reduce)").matches;
       endRef.current?.scrollIntoView({
-        behavior: firstScroll.current ? "instant" : "smooth",
+        behavior: firstScroll.current || calm ? "instant" : "smooth",
         block: "end",
       });
     }
     firstScroll.current = false;
     forceScroll.current = false;
-  }, [messages]);
+  }, [messages, nearBottom]);
 
-  // Sign every image path currently rendered, once per batch — merged into
-  // the running map rather than replaced, since a chat's image set only
-  // grows. Blob-preview paths (unsent attachments) are skipped: they render
-  // straight from the local object URL, no signing needed.
+  /**
+   * Thumbnails only. The full-size URL is signed AT CLICK in `openLightbox`,
+   * which is the house rule (`ui/signed-file-link.tsx`) and also deletes one
+   * request per image from thread open — a full-size URL is useless unless
+   * someone actually opens the lightbox.
+   *
+   * Two things this has to get right, both of which it used to get wrong:
+   *
+   *  - **Key on CONTENT, not identity.** `imagePaths` is a fresh array on every
+   *    `messages` change, and the effect used to depend on the array itself, so
+   *    every arriving message cancelled the in-flight wave and started over.
+   *    A wave costs ~850ms, so a thread receiving lines faster than that never
+   *    resolved a single thumbnail — permanent grey Skeletons. Same fix as
+   *    `debug/task-images.tsx`: depend on the joined string.
+   *  - **Don't cancel a wave just because a new path appeared.** In-flight paths
+   *    are tracked in a ref and excluded from the next batch, so a new image
+   *    EXTENDS the work instead of restarting it. Only unmount abandons results.
+   */
+  const inFlight = useRef<Set<string>>(new Set());
+  const mounted = useRef(true);
+  useEffect(() => {
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+
   const imagePaths = useMemo(() => {
     const paths = new Set<string>();
     for (const m of messages) {
       for (const img of m.images ?? []) {
+        // Unsent attachments render straight from their local object URL.
         if (!img.file_path.startsWith("blob:")) paths.add(img.file_path);
       }
     }
-    return [...paths].filter((p) => !(p in signedUrls));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [messages]);
+    return [...paths].filter((p) => !(p in thumbs));
+  }, [messages, thumbs]);
+  const pathKey = imagePaths.join("|");
 
   useEffect(() => {
-    if (imagePaths.length === 0) return;
-    let cancelled = false;
+    if (!pathKey) return;
+    // The in-flight set is read HERE, not in the memo above — a ref may not be
+    // read during render. Filtering here is what makes a newly arrived image
+    // extend the work instead of re-requesting whatever is already on the wire.
+    const paths = pathKey.split("|").filter((p) => !inFlight.current.has(p));
+    if (paths.length === 0) return;
+    for (const p of paths) inFlight.current.add(p);
     const supabase = createClient();
-    Promise.all([
-      supabase.storage.from("chat-images").createSignedUrls(imagePaths, 60 * 60),
-      Promise.all(
-        imagePaths.map((p) =>
+    void (async () => {
+      const signed = await Promise.all(
+        paths.map((p) =>
           supabase.storage
             .from("chat-images")
-            .createSignedUrl(p, 60 * 60, { transform: CHAT_THUMB_TRANSFORM })
+            .createSignedUrl(p, SIGN_TTL_S, { transform: CHAT_THUMB_TRANSFORM })
+            .then((r) => [p, r.data?.signedUrl ?? ""] as const)
         )
-      ),
-    ]).then(([full, thumbs]) => {
-      if (cancelled || !full.data) return;
-      const next: Record<string, { url: string; thumbUrl: string }> = {};
-      imagePaths.forEach((p, idx) => {
-        const url = full.data?.[idx]?.signedUrl ?? "";
-        if (!url) return;
-        next[p] = { url, thumbUrl: thumbs[idx]?.data?.signedUrl ?? url };
+      );
+      for (const p of paths) inFlight.current.delete(p);
+      if (!mounted.current) return;
+      const at = Date.now();
+      setThumbs((prev) => {
+        const next = { ...prev };
+        for (const [p, url] of signed) if (url) next[p] = { url, at };
+        return next;
       });
-      setSignedUrls((prev) => ({ ...prev, ...next }));
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [imagePaths]);
+    })();
+  }, [pathKey]);
+
+  // A signing token dies an hour after it is minted, and these live in client
+  // state. A tab left open past that rendered broken images with no recovery
+  // path, so entries are retired before they can expire — dropping one makes it
+  // eligible for `imagePaths` again and the effect above re-signs it.
+  useEffect(() => {
+    const id = setInterval(() => {
+      const cutoff = Date.now() - RESIGN_AFTER_MS;
+      setThumbs((prev) => {
+        const live = Object.entries(prev).filter(([, v]) => v.at >= cutoff);
+        return live.length === Object.keys(prev).length
+          ? prev
+          : Object.fromEntries(live);
+      });
+    }, RESIGN_CHECK_MS);
+    return () => clearInterval(id);
+  }, []);
 
   useEffect(() => {
     if (!lightbox) return;
@@ -290,10 +437,32 @@ export function MessageThread({
     return () => window.removeEventListener("keydown", onKey);
   }, [lightbox]);
 
-  function imageView(img: MessageImage): { url: string; thumbUrl: string } {
-    if (img.file_path.startsWith("blob:"))
-      return { url: img.file_path, thumbUrl: img.file_path };
-    return signedUrls[img.file_path] ?? { url: "", thumbUrl: "" };
+  /** The thumbnail to render — empty string until its token has been minted. */
+  function thumbUrl(img: MessageImage) {
+    if (img.file_path.startsWith("blob:")) return img.file_path;
+    return thumbs[img.file_path]?.url ?? "";
+  }
+
+  /**
+   * Full-size URLs are signed HERE, in the click — the house rule from
+   * `ui/signed-file-link.tsx`. A URL minted during render outlives its own token
+   * in a tab left open, and the click then lands on an expired JWT, which reads
+   * to the user as "the image is broken".
+   */
+  async function openLightbox(img: MessageImage) {
+    if (img.file_path.startsWith("blob:")) {
+      setLightbox({ url: img.file_path, width: img.width, height: img.height });
+      return;
+    }
+    const supabase = createClient();
+    const { data, error } = await supabase.storage
+      .from("chat-images")
+      .createSignedUrl(img.file_path, FULL_TTL_S);
+    if (error || !data?.signedUrl) {
+      toastError("Couldn't open that image. Please try again.");
+      return;
+    }
+    setLightbox({ url: data.signedUrl, width: img.width, height: img.height });
   }
 
   async function addFiles(files: FileList | null) {
@@ -338,6 +507,47 @@ export function MessageThread({
     });
   }
 
+  // Walk backwards through history one page at a time. The cursor is the oldest
+  // REAL row we hold — a temp row carries a client clock and would be a false
+  // floor.
+  async function loadOlder() {
+    if (loadingOlder || !hasOlder) return;
+    const oldest = messages.find((m) => !m.id.startsWith("temp-"));
+    if (!oldest) return;
+    const el = listRef.current;
+    if (el) restoreFromBottom.current = el.scrollHeight - el.scrollTop;
+    setLoadingOlder(true);
+    try {
+      const result = await loadOlderMessages(otherId, oldest.created_at);
+      if (!result.ok || !result.messages) {
+        restoreFromBottom.current = null;
+        toastError(result.message);
+        return;
+      }
+      const older = result.messages;
+      setHasOlder(result.hasOlder ?? false);
+      // Decided out here, not in the updater: if nothing new arrived the list
+      // identity won't change, the layout effect won't run, and a pending
+      // restore would fire on some LATER change and jerk the reader.
+      const held = new Set(messages.map((m) => m.id));
+      if (older.every((m) => held.has(m.id))) {
+        restoreFromBottom.current = null;
+        return;
+      }
+      setMessages((prev) => {
+        const ids = new Set(prev.map((m) => m.id));
+        return [...older.filter((m) => !ids.has(m.id)), ...prev];
+      });
+    } catch (e) {
+      restoreFromBottom.current = null;
+      toastError(
+        e instanceof Error ? e.message : "Could not load older messages."
+      );
+    } finally {
+      setLoadingOlder(false);
+    }
+  }
+
   // No `sending` gate: sends PIPELINE. Each line gets its own temp row and its
   // own reconcile, so a quick second message never waits on the first one's
   // round-trip — the composer clears and you keep typing.
@@ -380,23 +590,48 @@ export function MessageThread({
     try {
       const supabase = createClient();
       const uploaded: SendImageInput[] = [];
-      for (const a of pending) {
-        const ext = (a.file.name.split(".").pop() ?? "png")
-          .toLowerCase()
-          .replace(/[^a-z0-9]/g, "");
-        const path = `${meId}/${crypto.randomUUID()}.${ext || "png"}`;
-        const { error } = await supabase.storage.from("chat-images").upload(path, a.file);
-        if (error) throw new Error(error.message);
-        uploaded.push({ path, width: a.width, height: a.height });
-      }
+      // Four attachments used to upload one after another before the message was
+      // sent at all, so a 4-image send waited on four serial round trips.
+      const results = await Promise.all(
+        pending.map(async (a) => {
+          // Key from the MIME TYPE, not the filename — see chatImagePath.
+          const path = chatImagePath(meId, crypto.randomUUID(), a.file.type);
+          const { error } = await supabase.storage
+            .from("chat-images")
+            .upload(path, a.file, {
+              // Explicit rather than inferred from the multipart Blob.
+              contentType: a.file.type,
+              upsert: false,
+            });
+          if (error) throw new Error(error.message);
+          return { path, width: a.width, height: a.height };
+        })
+      );
+      uploaded.push(...results);
       const result = await sendMessage(otherId, clean, uploaded);
       if (!result.ok) return fail(result.message);
+      if (result.warning) toastError(result.warning);
       const row = result.row;
-      if (!row) return;
+      // No row on an ok result shouldn't happen, but leaving the temp on screen
+      // forever if it did would be a silent stuck bubble — drop it and let the
+      // realtime INSERT or the next refresh supply the real one.
+      if (!row) {
+        setMessages((prev) => prev.filter((m) => m.id !== tempId));
+        return;
+      }
       // Reconcile: the realtime INSERT may have landed (and swapped) first.
       setMessages((prev) =>
         prev.some((m) => m.id === row.id)
-          ? prev.filter((m) => m.id !== tempId)
+          ? prev
+              .filter((m) => m.id !== tempId)
+              // The swapped-in row is still holding this send's blob previews
+              // (they were kept to avoid a flash); the returned row carries the
+              // real image rows, and those blob URLs are about to be revoked.
+              .map((m) =>
+                m.id === row.id && row.images?.length
+                  ? { ...m, images: row.images }
+                  : m
+              )
           : prev.map((m) => (m.id === tempId ? row : m))
       );
     } catch (e) {
@@ -410,8 +645,31 @@ export function MessageThread({
     <div className="flex min-h-0 flex-1 flex-col">
       <div
         ref={listRef}
+        // Scrolling back down to the newest line is what makes a held read mark
+        // true, so every scroll gives the marker a chance to flush. `flushRead`
+        // is a no-op when nothing is pending.
+        onScroll={flushRead}
         className="min-h-0 flex-1 space-y-1 overflow-y-auto py-4 pr-1"
       >
+        {hasOlder && (
+          <div className="flex justify-center pb-2">
+            <button
+              type="button"
+              onClick={() => void loadOlder()}
+              disabled={loadingOlder}
+              className={buttonClasses("ghost", "sm")}
+            >
+              {loadingOlder ? (
+                <>
+                  <Loader2 className="size-3.5 animate-spin" aria-hidden />
+                  Loading older
+                </>
+              ) : (
+                "Show older messages"
+              )}
+            </button>
+          </div>
+        )}
         {messages.length === 0 && (
           <p className="py-10 text-center text-sm text-faint">
             {otherId === null
@@ -499,9 +757,9 @@ export function MessageThread({
                   )}
                   {m.images && m.images.length > 0 && (
                     <div className="flex flex-wrap gap-1.5">
-                      {m.images.map((img) => {
-                        const view = imageView(img);
-                        if (!view.thumbUrl)
+                      {m.images.map((img, idx) => {
+                        const src = thumbUrl(img);
+                        if (!src)
                           return (
                             <Skeleton
                               key={img.id}
@@ -512,12 +770,18 @@ export function MessageThread({
                           <button
                             key={img.id}
                             type="button"
-                            onClick={() => setLightbox({ ...view, width: img.width, height: img.height })}
+                            onClick={() => void openLightbox(img)}
                             className="block overflow-hidden rounded-md border border-line"
-                            aria-label="View image full size"
+                            // Every thumbnail in a bubble used to share one
+                            // label, so a rotor listed N identical entries.
+                            aria-label={
+                              (m.images?.length ?? 1) > 1
+                                ? `View image ${idx + 1} of ${m.images?.length} full size`
+                                : "View image full size"
+                            }
                           >
                             <Image
-                              src={view.thumbUrl}
+                              src={src}
                               alt=""
                               width={img.width ?? 240}
                               height={img.height ?? 160}
@@ -541,6 +805,14 @@ export function MessageThread({
         <div ref={endRef} />
       </div>
 
+      {readOnly ? (
+        <div className="border-t border-line pt-3">
+          <p className="py-2 text-center text-[13px] text-faint">
+            This conversation is closed — {members[otherId ?? ""]?.name ?? "they"}{" "}
+            is no longer on the work team.
+          </p>
+        </div>
+      ) : (
       <div className="border-t border-line pt-3">
         {attachments.length > 0 && (
           <ul className="mb-2 flex flex-wrap gap-2">
@@ -596,6 +868,7 @@ export function MessageThread({
             <ImagePlus className="size-4" aria-hidden />
           </button>
           <textarea
+            ref={composerRef}
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
             onKeyDown={(e) => {
@@ -623,6 +896,7 @@ export function MessageThread({
           </button>
         </div>
       </div>
+      )}
 
       {lightbox && (
         <div

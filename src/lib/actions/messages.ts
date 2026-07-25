@@ -7,11 +7,39 @@ import {
   getSessionContext,
 } from "@/lib/data/session";
 import { notifyUser } from "@/lib/actions/notify";
-import { MAX_MESSAGE_LEN } from "@/lib/messages-shared";
+import { getGroupThread, getThread } from "@/lib/data/messages";
+import {
+  isChatImagePath,
+  MAX_IMAGE_DIMENSION,
+  MAX_IMAGES_PER_MESSAGE,
+  MAX_MESSAGE_LEN,
+} from "@/lib/messages-shared";
 import type { ActionResult } from "@/lib/actions/account";
 import type { Message, MessageImage } from "@/lib/types";
 
-export type SendResult = ActionResult & { row?: Message };
+export type SendResult = ActionResult & {
+  row?: Message;
+  /** Sent, but something secondary didn't land — surfaced as a toast, not a fail. */
+  warning?: string;
+};
+
+export type OlderResult = ActionResult & {
+  messages?: Message[];
+  hasOlder?: boolean;
+};
+
+/**
+ * How long a conversation must be quiet before a direct message rings the bell
+ * again. See the anti-noise contract in `sendMessage`.
+ */
+const QUIET_WINDOW_MS = 5 * 60 * 1000;
+
+/** A client-reported pixel dimension, bounded — or null if it isn't usable. */
+function clampDimension(value: number | null) {
+  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0)
+    return null;
+  return Math.min(Math.round(value), MAX_IMAGE_DIMENSION);
+}
 
 export type SendImageInput = {
   path: string;
@@ -51,12 +79,29 @@ export async function sendMessage(
   if (recipientId === ctx.userId)
     return { ok: false, message: "That's you." };
 
-  let priorUnread = 0;
+  // The client caps attachments too, but the client is not the authority. And a
+  // path arriving from the browser must live under this sender's own prefix and
+  // look like a key this app minted — otherwise a row could point anywhere in
+  // the bucket. Dimensions are claims, so they get bounded rather than trusted.
+  if (images.length > MAX_IMAGES_PER_MESSAGE)
+    return {
+      ok: false,
+      message: `A message can carry ${MAX_IMAGES_PER_MESSAGE} images.`,
+    };
+  if (images.some((img) => !isChatImagePath(img.path, ctx.userId)))
+    return { ok: false, message: "That image couldn't be attached." };
+  const bounded = images.map((img) => ({
+    path: img.path,
+    width: clampDimension(img.width),
+    height: clampDimension(img.height),
+  }));
+
+  let shouldNotify = false;
   if (recipientId) {
     // Recipient must be in the chat audience (admins ∪ work members) — RLS
-    // can't cheaply ask that about the OTHER user, so the action does. The
-    // unread head-count rides the same wave and decides whether to notify.
-    const [profile, membership, unread] = await Promise.all([
+    // can't cheaply ask that about the OTHER user, so the action does. The two
+    // notification inputs ride the same wave, so none of this costs a trip.
+    const [profile, membership, unread, lastMine] = await Promise.all([
       ctx.supabase
         .from("profiles")
         .select("id, is_admin")
@@ -74,10 +119,54 @@ export async function sendMessage(
         .eq("sender_id", ctx.userId)
         .eq("recipient_id", recipientId)
         .is("read_at", null),
+      // When did I last write to them? The other half of the quiet window.
+      ctx.supabase
+        .from("messages")
+        .select("created_at")
+        .eq("sender_id", ctx.userId)
+        .eq("recipient_id", recipientId)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle(),
     ]);
+    // A failed lookup is not a permissions answer. Reporting one as "they're
+    // not in the chat audience" told the user their teammate had been removed
+    // from Work when the truth was a dropped request.
+    if (profile.error || membership.error)
+      return {
+        ok: false,
+        message: "Couldn't reach the server. Please try again.",
+      };
     if (!profile.data || !(profile.data.is_admin || membership.data))
-      return { ok: false, message: "They're not in the chat audience." };
-    priorUnread = unread.count ?? 0;
+      return { ok: false, message: "They're not on the work team." };
+
+    /**
+     * THE ANTI-NOISE CONTRACT, and why it needs two conditions.
+     *
+     * The rule is one bell per conversation, never one per line. It used to be
+     * implemented as `priorUnread === 0` alone — notify when they have nothing
+     * unread from me. That inverted in practice: the recipient's open thread
+     * marked each line read the instant it arrived, so by my next line the
+     * count was 0 again and it notified. The guard meant to suppress repeat
+     * bells was being reset by the reader, once per line.
+     *
+     * So the count is now paired with a QUIET WINDOW, which no reader can
+     * reset. Notify only when they have nothing unread from me AND I haven't
+     * written to them recently. A conversation that has gone quiet re-arms; an
+     * active back-and-forth stays silent.
+     *
+     * (The window can't be measured on the `notifications` table — RLS scopes
+     * those rows to their recipient, so the sender can't see whether a bell
+     * already exists. My own sent messages are readable, and answer the same
+     * question.)
+     */
+    const quietSince = Date.now() - QUIET_WINDOW_MS;
+    const lastAt = lastMine.data?.created_at;
+    const quiet = !lastAt || new Date(lastAt).getTime() < quietSince;
+    // Fail SAFE: an errored count used to fall through `?? 0` to "nothing
+    // unread", so the guard's failure mode was always to send the bell.
+    const noUnread = !unread.error && (unread.count ?? 0) === 0;
+    shouldNotify = noUnread && quiet;
   }
 
   const { data: row, error } = await ctx.supabase
@@ -92,11 +181,12 @@ export async function sendMessage(
   if (error) return { ok: false, message: error.message };
 
   let imageRows: MessageImage[] = [];
-  if (images.length > 0) {
+  let warning: string | undefined;
+  if (bounded.length > 0) {
     const { data: inserted, error: imageError } = await ctx.supabase
       .from("message_images")
       .insert(
-        images.map((img) => ({
+        bounded.map((img) => ({
           message_id: row.id,
           file_path: img.path,
           width: img.width,
@@ -105,19 +195,26 @@ export async function sendMessage(
       )
       .select();
     if (imageError) {
-      // The message row is already committed, but a message claiming an
-      // image that failed to record would be confusing — undo both, like
-      // addTaskImage undoes an upload when its row insert fails.
-      await ctx.supabase.storage
-        .from("chat-images")
-        .remove(images.map((img) => img.path));
-      await ctx.supabase.from("messages").delete().eq("id", row.id);
-      return { ok: false, message: imageError.message };
+      /**
+       * This used to try to undo both sides — remove the storage objects, then
+       * delete the message row — and NEITHER could ever succeed: 0044 creates no
+       * delete policy on `storage.objects` for this bucket, and 0042 none on
+       * `messages` ("messages are a record"). RLS matched zero rows, PostgREST
+       * reported success, both errors went unchecked, and the caller was told
+       * the send had failed. The message was in fact committed and already
+       * broadcast to everyone's realtime stream, so the user sent it again and
+       * the thread showed it twice.
+       *
+       * So: be honest. The message stands, because it really is sent. Only the
+       * pictures are missing, and that is what the sender is told.
+       */
+      warning = "Message sent, but the images couldn't be attached.";
+    } else {
+      imageRows = (inserted ?? []) as MessageImage[];
     }
-    imageRows = (inserted ?? []) as MessageImage[];
   }
 
-  if (recipientId && priorUnread === 0) {
+  if (recipientId && shouldNotify) {
     const myName = ctx.profile.full_name || ctx.profile.email;
     notifyUser(ctx, recipientId, {
       kind: "message",
@@ -130,7 +227,34 @@ export async function sendMessage(
   return {
     ok: true,
     message: "Sent.",
+    warning,
     row: { ...(row as Message), images: imageRows },
+  };
+}
+
+/**
+ * One older page of a thread — `before` is the oldest `created_at` the client
+ * already holds. A read, not a mutation, but it lives here because a client
+ * component can only reach the server through an action.
+ */
+export async function loadOlderMessages(
+  otherId: string | null,
+  before: string
+): Promise<OlderResult> {
+  const ctx = await getSessionContext();
+  // Chat is closed in showcase entirely — same answer the loaders give.
+  if (ctx.showcase) return { ok: false, message: "Not available in showcase." };
+  if (!canAccess(ctx, "work"))
+    return { ok: false, message: "Chat is for the work team." };
+
+  const page = otherId
+    ? await getThread(ctx, otherId, before)
+    : await getGroupThread(ctx, before);
+  return {
+    ok: true,
+    message: "Loaded.",
+    messages: page.messages,
+    hasOlder: page.hasOlder,
   };
 }
 
@@ -162,6 +286,30 @@ export async function markThreadRead(
     // the expensive part — it must only run when it buys something).
     if (!data || data.length === 0) return { ok: true, message: "Read." };
   } else {
+    // Same no-op guard the DM branch has: if my marker is already at or past
+    // the newest group line, nothing can change and the layout revalidation
+    // below would flush the whole router cache for nothing. Without this, every
+    // arriving group line cost a full app-wide re-render even when the marker
+    // did not move.
+    const [marker, newest] = await Promise.all([
+      ctx.supabase
+        .from("message_reads")
+        .select("read_at")
+        .eq("user_id", ctx.userId)
+        .maybeSingle(),
+      ctx.supabase
+        .from("messages")
+        .select("created_at")
+        .is("recipient_id", null)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+    ]);
+    const readAt = marker.data?.read_at ?? null;
+    const newestAt = newest.data?.created_at ?? null;
+    if (!marker.error && !newest.error && readAt && newestAt && readAt >= newestAt)
+      return { ok: true, message: "Read." };
+
     const { error } = await ctx.supabase
       .from("message_reads")
       .upsert({ user_id: ctx.userId, read_at: new Date().toISOString() });

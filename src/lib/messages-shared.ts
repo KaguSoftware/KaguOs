@@ -31,3 +31,39 @@ export const CHAT_THUMB_TRANSFORM = {
   resize: "contain",
   quality: 75,
 } as const;
+
+/**
+ * Extension per allowed MIME type. Derived from the TYPE, never the filename:
+ * the old code did `file.name.split(".").pop()`, so `shot.PNG.exe` was stored as
+ * `<uuid>.exe` and a file with no dot at all became its own extension (the
+ * `"png"` fallback was unreachable — `pop()` on a non-empty array is never
+ * undefined).
+ */
+export const IMAGE_EXT: Record<string, string> = {
+  "image/png": "png",
+  "image/jpeg": "jpg",
+  "image/webp": "webp",
+  "image/gif": "gif",
+};
+
+/** The only shape a chat image object key may take: `<senderId>/<uuid>.<ext>`. */
+export function chatImagePath(senderId: string, id: string, type: string) {
+  return `${senderId}/${id}.${IMAGE_EXT[type] ?? "png"}`;
+}
+
+/**
+ * Server-side guard. `sendMessage` receives paths from the CLIENT and used to
+ * write them into `message_images.file_path` unexamined, so a row could point at
+ * any object in the bucket. A path must live under the sender's own prefix and
+ * look like something this app minted.
+ */
+export function isChatImagePath(path: string, senderId: string) {
+  const exts = Object.values(IMAGE_EXT).join("|");
+  return new RegExp(
+    `^${senderId}/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\\.(${exts})$`,
+    "i"
+  ).test(path);
+}
+
+/** Bound on a stored image dimension — a sane pixel count, not a client claim. */
+export const MAX_IMAGE_DIMENSION = 20000;
