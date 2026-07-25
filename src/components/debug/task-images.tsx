@@ -13,6 +13,7 @@ import {
 } from "@/lib/debug-images";
 import { useToast } from "@/components/ui/toast";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Lightbox } from "@/components/ui/lightbox";
 import { cn } from "@/lib/utils";
 import type { DebugTaskImage, DebugTaskImageView } from "@/lib/types";
 
@@ -126,16 +127,7 @@ export function TaskImages({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key]);
 
-  // Escape closes the lightbox — a full-screen overlay with no keyboard exit
-  // is a trap for anyone not using a mouse.
-  useEffect(() => {
-    if (!lightbox) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setLightbox(null);
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [lightbox]);
+  // Escape, the focus trap and focus restoration all live in ui/lightbox.tsx now.
 
   async function upload(files: FileList | null) {
     if (!files || files.length === 0) return;
@@ -347,22 +339,12 @@ export function TaskImages({
       )}
 
       {lightbox && (
-        <div
-          role="dialog"
-          aria-modal="true"
-          aria-label="Image preview"
-          onClick={() => setLightbox(null)}
-          className="fixed inset-0 z-50 grid animate-overlay-in place-items-center bg-black/80 p-6"
-        >
-          <Image
-            src={lightbox.url}
-            alt=""
-            width={lightbox.width ?? 1200}
-            height={lightbox.height ?? 800}
-            unoptimized
-            className="max-h-full w-auto max-w-full rounded-lg object-contain"
-          />
-        </div>
+        <Lightbox
+          url={lightbox.url}
+          width={lightbox.width}
+          height={lightbox.height}
+          onClose={() => setLightbox(null)}
+        />
       )}
     </div>
   );

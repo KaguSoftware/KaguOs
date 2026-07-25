@@ -489,6 +489,10 @@ export default async function DashboardPage() {
   const heavyRoutes: string[] = [];
   if (canAccess(ctx, "management")) heavyRoutes.push("/management/finance");
   if (canAccess(ctx, "debug")) heavyRoutes.push("/debug");
+  // Messages qualifies on frequency rather than weight: it's checked many times
+  // a day, and a cold open means a full presence + inbox wave before anything
+  // paints.
+  if (canAccess(ctx, "work")) heavyRoutes.push("/messages");
 
   // Both are null in showcase mode (deliberately skipped), else a real array.
   const reminders = (remindersRes ?? []) as Reminder[];

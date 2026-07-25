@@ -9,7 +9,7 @@ import {
   useState,
 } from "react";
 import Image from "next/image";
-import { ImagePlus, Loader2, SendHorizontal, X } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import {
   loadOlderMessages,
@@ -19,14 +19,13 @@ import {
 import { READ_SLACK_PX, useReadMarker } from "@/lib/use-read-marker";
 import { useToast } from "@/components/ui/toast";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Lightbox } from "@/components/ui/lightbox";
 import {
-  ALLOWED_IMAGE_TYPES,
-  CHAT_THUMB_TRANSFORM,
-  chatImagePath,
-  MAX_IMAGES_PER_MESSAGE,
-  MAX_IMAGE_BYTES,
-  MAX_MESSAGE_LEN,
-} from "@/lib/messages-shared";
+  Composer,
+  type Attachment,
+  type ComposerHandle,
+} from "@/components/messages/composer";
+import { CHAT_THUMB_TRANSFORM, chatImagePath } from "@/lib/messages-shared";
 import { buttonClasses, cn } from "@/lib/utils";
 import type { MembersMap, Message, MessageImage } from "@/lib/types";
 
@@ -56,33 +55,23 @@ const RESIGN_CHECK_MS = 5 * 60 * 1000;
 /** Full-size URLs are minted in the click handler, so they need seconds only. */
 const FULL_TTL_S = 60;
 
-type Attachment = {
-  file: File;
-  previewUrl: string;
-  width: number | null;
-  height: number | null;
-};
-
-/** Natural size of a picked file, so a thumbnail can reserve its box. */
-function measure(file: File): Promise<{ width: number; height: number } | null> {
-  return new Promise((resolve) => {
-    const url = URL.createObjectURL(file);
-    const img = new window.Image();
-    img.onload = () => {
-      resolve({ width: img.naturalWidth, height: img.naturalHeight });
-      URL.revokeObjectURL(url);
-    };
-    img.onerror = () => {
-      resolve(null);
-      URL.revokeObjectURL(url);
-    };
-    img.src = url;
-  });
-}
-
 function firstName(members: MembersMap, id: string) {
   return (members[id]?.name ?? "Former member").split(" ")[0];
 }
+
+/** Everything about one bubble that doesn't change unless `messages` does. */
+type Row = {
+  m: Message;
+  mine: boolean;
+  newDay: boolean;
+  dayLabel: string;
+  newRun: boolean;
+  lastInRun: boolean;
+  timeLabel: string;
+  seenLabel: string | null;
+  senderName: string;
+  senderColor: string | undefined;
+};
 
 /**
  * One live chat thread — a 1:1 when `otherId` is set, the Work-team group
@@ -90,9 +79,10 @@ function firstName(members: MembersMap, id: string) {
  *
  * Realtime patches state IN PLACE (the debug board pattern), never
  * router.refresh — a chat that repaints the whole route per line would drop
- * composer focus mid-word. The stream is already RLS-scoped to rows this user
- * may read; `accepts` narrows it to THIS thread, because the channel hears
- * every thread's traffic.
+ * composer focus mid-word. (The app shell used to defeat that from outside this
+ * file; see chat-live-refresh.tsx.) The stream is already RLS-scoped to rows
+ * this user may read; `accepts` narrows it to THIS thread, because the channel
+ * hears every thread's traffic.
  *
  * Sends are optimistic (Parsa "fast" rule): the line lands in the list on
  * submit, reconciles with the server row, and rolls back + toasts on reject.
@@ -127,17 +117,18 @@ export function MessageThread({
   const [messages, setMessages] = useState(initialMessages);
   const [hasOlder, setHasOlder] = useState(initialHasOlder);
   const [loadingOlder, setLoadingOlder] = useState(false);
-  const [draft, setDraft] = useState("");
-  const [attachments, setAttachments] = useState<Attachment[]>([]);
   /** path → signed THUMB url + when it was minted (for pre-expiry re-signing). */
   const [thumbs, setThumbs] = useState<
     Record<string, { url: string; at: number }>
   >({});
-  const [lightbox, setLightbox] = useState<{ url: string; width: number | null; height: number | null } | null>(null);
+  const [lightbox, setLightbox] = useState<{
+    url: string;
+    width: number | null;
+    height: number | null;
+  } | null>(null);
   const endRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
-  const attachFileRef = useRef<HTMLInputElement>(null);
-  const composerRef = useRef<HTMLTextAreaElement>(null);
+  const composerRef = useRef<ComposerHandle>(null);
   // Scroll to the newest line even if the reader is scrolled up — set by MY
   // sends, which must always come into view.
   const forceScroll = useRef(false);
@@ -200,21 +191,11 @@ export function MessageThread({
   }, [mark]);
 
   // Opening the thread consumes its unread. Skipped when there's nothing unread:
-  // marking revalidates the layout (that's how the badge drops), and doing that
-  // on every quiet open would flush the router cache for no reason.
+  // marking refreshes the tree (that's how the badge drops), and doing that on
+  // every quiet open would be a server round trip for nothing.
   useEffect(() => {
     if (initialUnread) mark();
     // Mount-only by design — later unreads are handled by the INSERT stream.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // Opening a chat should put the cursor where you are about to type. Guarded on
-  // visibility so a tab restored in the background doesn't steal focus. Runs
-  // once per mount, and the component remounts per thread, so this fires on
-  // every open.
-  useEffect(() => {
-    if (!readOnly && document.visibilityState === "visible")
-      composerRef.current?.focus();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -465,47 +446,65 @@ export function MessageThread({
     setLightbox({ url: data.signedUrl, width: img.width, height: img.height });
   }
 
-  async function addFiles(files: FileList | null) {
-    if (!files || files.length === 0) return;
-    const room = MAX_IMAGES_PER_MESSAGE - attachments.length;
-    if (room <= 0) {
-      toastError(`A message can carry ${MAX_IMAGES_PER_MESSAGE} images.`);
-      return;
-    }
-    const picked = Array.from(files);
-    if (picked.length > room) {
-      toastError(
-        `Only ${room} more image${room === 1 ? "" : "s"} fit — the rest were skipped.`
-      );
-    }
-    const added: Attachment[] = [];
-    for (const file of picked.slice(0, room)) {
-      if (!ALLOWED_IMAGE_TYPES.includes(file.type)) {
-        toastError(`${file.name} isn't a PNG, JPEG, WebP or GIF.`);
-        continue;
-      }
-      if (file.size > MAX_IMAGE_BYTES) {
-        toastError(`${file.name} is over 5MB.`);
-        continue;
-      }
-      const size = await measure(file);
-      added.push({
-        file,
-        previewUrl: URL.createObjectURL(file),
-        width: size?.width ?? null,
-        height: size?.height ?? null,
-      });
-    }
-    if (added.length > 0) setAttachments((prev) => [...prev, ...added]);
-  }
+  /**
+   * Per-bubble derived values, computed ONCE per message-list change.
+   *
+   * This all used to happen inline in the render body: several `new Date()` and
+   * `Intl` format calls per row, redone from scratch on every render — including
+   * renders that had nothing to do with the messages (opening the lightbox, a
+   * thumbnail URL arriving).
+   */
+  const rows = useMemo<Row[]>(() => {
+    const dayKeys = messages.map((m) =>
+      DAY_KEY.format(new Date(m.created_at))
+    );
+    return messages.map((m, i) => {
+      const prevMsg = messages[i - 1];
+      const nextMsg = messages[i + 1];
+      const mine = m.sender_id === meId;
+      const newDay = !prevMsg || dayKeys[i - 1] !== dayKeys[i];
+      const nextIsNewDay = !nextMsg || dayKeys[i + 1] !== dayKeys[i];
+      // First line of a run of one person's messages.
+      const newRun = newDay || !prevMsg || prevMsg.sender_id !== m.sender_id;
+      // The LAST line of a run is where a read receipt renders — once per
+      // burst, not once per bubble.
+      const lastInRun =
+        nextIsNewDay || !nextMsg || nextMsg.sender_id !== m.sender_id;
 
-  function removeAttachment(index: number) {
-    setAttachments((prev) => {
-      const target = prev[index];
-      if (target) URL.revokeObjectURL(target.previewUrl);
-      return prev.filter((_, i) => i !== index);
+      let seenLabel: string | null = null;
+      if (mine && otherId !== null) {
+        // Only on the last line of a run, and never "Sent" — every bubble
+        // carrying a permanent status suffix was noise, and "Sent" restated
+        // what the bubble's existence already says.
+        if (lastInRun && m.read_at)
+          seenLabel = `Seen ${TIME.format(new Date(m.read_at))}`;
+      } else if (mine && otherId === null && lastInRun && audience && readMarkers) {
+        const others = audience.filter((id) => id !== meId);
+        const seenBy = others.filter(
+          (id) => readMarkers[id] && readMarkers[id] > m.created_at
+        );
+        seenLabel =
+          seenBy.length === 0
+            ? null
+            : seenBy.length === others.length
+              ? "Seen by everyone"
+              : `Seen by ${seenBy.map((id) => firstName(members, id)).join(", ")}`;
+      }
+
+      return {
+        m,
+        mine,
+        newDay,
+        dayLabel: DAY.format(new Date(m.created_at)),
+        newRun,
+        lastInRun,
+        timeLabel: TIME.format(new Date(m.created_at)),
+        seenLabel,
+        senderName: members[m.sender_id]?.name ?? "Former member",
+        senderColor: members[m.sender_id]?.color,
+      };
     });
-  }
+  }, [messages, meId, otherId, members, audience, readMarkers]);
 
   // Walk backwards through history one page at a time. The cursor is the oldest
   // REAL row we hold — a temp row carries a client clock and would be a false
@@ -551,48 +550,41 @@ export function MessageThread({
   // No `sending` gate: sends PIPELINE. Each line gets its own temp row and its
   // own reconcile, so a quick second message never waits on the first one's
   // round-trip — the composer clears and you keep typing.
-  async function send() {
-    const clean = draft.trim();
-    if (!clean && attachments.length === 0) return;
-    const pending = attachments;
+  async function handleSend(clean: string, pending: Attachment[]) {
+    if (!clean && pending.length === 0) return;
     const tempId = `temp-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const now = new Date().toISOString();
     const temp: Message = {
       id: tempId,
       sender_id: meId,
       recipient_id: otherId,
       body: clean,
       read_at: null,
-      created_at: new Date().toISOString(),
+      created_at: now,
       images: pending.map((a, i) => ({
         id: `${tempId}-img-${i}`,
         message_id: tempId,
         file_path: a.previewUrl,
         width: a.width,
         height: a.height,
-        created_at: new Date().toISOString(),
+        created_at: now,
       })),
     };
     forceScroll.current = true;
     setMessages((prev) => [...prev, temp]);
-    setDraft("");
-    setAttachments([]);
-    if (attachFileRef.current) attachFileRef.current.value = "";
 
     const fail = (message: string) => {
       setMessages((prev) => prev.filter((m) => m.id !== tempId));
-      // Hand the words back — unless they've already typed something new,
-      // which must never be overwritten.
-      setDraft((d) => (d.trim() ? d : clean));
-      setAttachments(pending);
+      // Hand the words back — the composer refuses to overwrite new typing.
+      composerRef.current?.restore(clean, pending);
       toastError(message);
     };
 
     try {
       const supabase = createClient();
-      const uploaded: SendImageInput[] = [];
       // Four attachments used to upload one after another before the message was
       // sent at all, so a 4-image send waited on four serial round trips.
-      const results = await Promise.all(
+      const uploaded: SendImageInput[] = await Promise.all(
         pending.map(async (a) => {
           // Key from the MIME TYPE, not the filename — see chatImagePath.
           const path = chatImagePath(meId, crypto.randomUUID(), a.file.type);
@@ -607,7 +599,6 @@ export function MessageThread({
           return { path, width: a.width, height: a.height };
         })
       );
-      uploaded.push(...results);
       const result = await sendMessage(otherId, clean, uploaded);
       if (!result.ok) return fail(result.message);
       if (result.warning) toastError(result.warning);
@@ -635,7 +626,9 @@ export function MessageThread({
           : prev.map((m) => (m.id === tempId ? row : m))
       );
     } catch (e) {
-      fail(e instanceof Error ? e.message : "Something went wrong. Please try again.");
+      fail(
+        e instanceof Error ? e.message : "Something went wrong. Please try again."
+      );
     } finally {
       for (const a of pending) URL.revokeObjectURL(a.previewUrl);
     }
@@ -649,7 +642,17 @@ export function MessageThread({
         // true, so every scroll gives the marker a chance to flush. `flushRead`
         // is a no-op when nothing is pending.
         onScroll={flushRead}
-        className="min-h-0 flex-1 space-y-1 overflow-y-auto py-4 pr-1"
+        // role="log" makes arriving lines announce themselves — the transcript
+        // used to be an inert stack of divs, so a screen-reader user was never
+        // told a message had come in. `additions` keeps it to new bubbles rather
+        // than re-reading the history on every patch.
+        role="log"
+        aria-relevant="additions"
+        aria-label="Conversation"
+        // Overflow containers aren't focusable in Safari, so the history was
+        // unreachable by keyboard entirely.
+        tabIndex={0}
+        className="min-h-0 flex-1 space-y-1 overflow-y-auto py-4 pr-1 focus-visible:outline-none"
       >
         {hasOlder && (
           <div className="flex justify-center pb-2">
@@ -677,244 +680,126 @@ export function MessageThread({
               : "Nothing yet. Say hi."}
           </p>
         )}
-        {messages.map((m, i) => {
-          const mine = m.sender_id === meId;
-          const prevMsg = messages[i - 1];
-          const nextMsg = messages[i + 1];
-          const newDay =
-            !prevMsg ||
-            DAY_KEY.format(new Date(prevMsg.created_at)) !==
-              DAY_KEY.format(new Date(m.created_at));
-          const nextIsNewDay =
-            !nextMsg ||
-            DAY_KEY.format(new Date(nextMsg.created_at)) !==
-              DAY_KEY.format(new Date(m.created_at));
-          // Name the sender on the first line of a run (group chat only —
-          // a 1:1 has exactly one other voice).
-          const newRun = newDay || !prevMsg || prevMsg.sender_id !== m.sender_id;
-          // The LAST line of a run of my own group-chat sends is where "seen
-          // by" renders — once per burst, not once per bubble.
-          const lastInRun =
-            nextIsNewDay || !nextMsg || nextMsg.sender_id !== m.sender_id;
-          const sender = members[m.sender_id];
-
-          let seenLabel: string | null = null;
-          if (mine && otherId !== null) {
-            seenLabel = m.read_at ? `Seen ${TIME.format(new Date(m.read_at))}` : "Sent";
-          } else if (mine && otherId === null && lastInRun && audience && readMarkers) {
-            const others = audience.filter((id) => id !== meId);
-            const seenBy = others.filter(
-              (id) => readMarkers[id] && readMarkers[id] > m.created_at
-            );
-            seenLabel =
-              seenBy.length === 0
-                ? others.length > 0
-                  ? `Not seen by ${others.map((id) => firstName(members, id)).join(", ")}`
-                  : null
-                : seenBy.length === others.length
-                  ? "Seen by everyone"
-                  : `Seen by ${seenBy.map((id) => firstName(members, id)).join(", ")}`;
-          }
-
-          return (
-            <div key={m.id}>
-              {newDay && (
-                <div className="flex items-center gap-3 py-3" aria-hidden>
-                  <div className="h-px flex-1 bg-line" />
-                  <span className="font-mono text-[11px] text-faint">
-                    {DAY.format(new Date(m.created_at))}
-                  </span>
-                  <div className="h-px flex-1 bg-line" />
-                </div>
+        {rows.map((r) => (
+          <div key={r.m.id}>
+            {r.newDay && (
+              <div className="flex items-center gap-3 py-3">
+                <div className="h-px flex-1 bg-line" aria-hidden />
+                {/* Not aria-hidden: hiding it removed every date boundary from
+                    the transcript, so a whole history read as one flat run. */}
+                <span className="font-mono text-xs text-faint">
+                  {r.dayLabel}
+                </span>
+                <div className="h-px flex-1 bg-line" aria-hidden />
+              </div>
+            )}
+            <div
+              className={cn(
+                "flex flex-col",
+                r.mine ? "items-end" : "items-start",
+                r.newRun && !r.newDay && "mt-2.5"
+              )}
+            >
+              {r.newRun && otherId === null && !r.mine && (
+                <span
+                  className="px-1 pb-0.5 text-xs font-medium"
+                  style={{ color: r.senderColor }}
+                >
+                  {r.senderName}
+                </span>
               )}
               <div
                 className={cn(
-                  "flex flex-col",
-                  mine ? "items-end" : "items-start",
-                  newRun && !newDay && "mt-2.5"
+                  "flex max-w-[min(75%,34rem)] flex-col gap-1.5 rounded-lg px-3 py-1.5",
+                  // Shape, not just fill, carries mine-vs-theirs: the two fills
+                  // are 1.14:1 and 1.05:1 against the page, which is no contrast
+                  // at all. An asymmetric corner reads at any luminance, and
+                  // side-stripe borders are banned.
+                  r.mine
+                    ? "rounded-br-sm bg-raised text-ink"
+                    : "rounded-bl-sm border border-line-strong bg-surface text-ink"
                 )}
               >
-                {newRun && otherId === null && !mine && (
-                  <span
-                    className="px-1 pb-0.5 text-[11px] font-medium"
-                    style={{ color: sender?.color }}
-                  >
-                    {sender?.name ?? "Former member"}
+                {/* In a DM the sender is conveyed by ALIGNMENT only, which does
+                    not exist for a screen reader. Named here, invisibly. */}
+                {otherId !== null && r.newRun && (
+                  <span className="sr-only">
+                    {r.mine ? "You" : r.senderName}:
                   </span>
                 )}
-                <div
-                  className={cn(
-                    "flex max-w-[min(75%,34rem)] flex-col gap-1.5 rounded-lg px-3 py-1.5",
-                    mine
-                      ? "bg-raised text-ink"
-                      : "border border-line bg-surface text-ink"
-                  )}
-                >
-                  {m.body && (
-                    <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">
-                      {m.body}
-                    </p>
-                  )}
-                  {m.images && m.images.length > 0 && (
-                    <div className="flex flex-wrap gap-1.5">
-                      {m.images.map((img, idx) => {
-                        const src = thumbUrl(img);
-                        if (!src)
-                          return (
-                            <Skeleton
-                              key={img.id}
-                              className="h-28 w-36 border border-line"
-                            />
-                          );
+                {r.m.body && (
+                  <p className="whitespace-pre-wrap wrap-break-word text-sm leading-relaxed">
+                    {r.m.body}
+                  </p>
+                )}
+                {r.m.images && r.m.images.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5">
+                    {r.m.images.map((img, idx) => {
+                      const src = thumbUrl(img);
+                      if (!src)
                         return (
-                          <button
+                          <Skeleton
                             key={img.id}
-                            type="button"
-                            onClick={() => void openLightbox(img)}
-                            className="block overflow-hidden rounded-md border border-line"
-                            // Every thumbnail in a bubble used to share one
-                            // label, so a rotor listed N identical entries.
-                            aria-label={
-                              (m.images?.length ?? 1) > 1
-                                ? `View image ${idx + 1} of ${m.images?.length} full size`
-                                : "View image full size"
-                            }
-                          >
-                            <Image
-                              src={src}
-                              alt=""
-                              width={img.width ?? 240}
-                              height={img.height ?? 160}
-                              unoptimized
-                              className="h-28 w-auto max-w-56 object-cover"
-                            />
-                          </button>
+                            className="h-28 w-36 border border-line"
+                          />
                         );
-                      })}
-                    </div>
-                  )}
-                </div>
-                <span className="px-1 pt-0.5 font-mono text-[10px] text-faint">
-                  {TIME.format(new Date(m.created_at))}
-                  {seenLabel ? ` · ${seenLabel}` : ""}
-                </span>
+                      return (
+                        <button
+                          key={img.id}
+                          type="button"
+                          onClick={() => void openLightbox(img)}
+                          className="block overflow-hidden rounded-md border border-line transition-colors duration-150 hover:border-line-strong"
+                          // Every thumbnail in a bubble used to share one
+                          // label, so a rotor listed N identical entries.
+                          aria-label={
+                            (r.m.images?.length ?? 1) > 1
+                              ? `View image ${idx + 1} of ${r.m.images?.length} full size`
+                              : "View image full size"
+                          }
+                        >
+                          <Image
+                            src={src}
+                            alt=""
+                            width={img.width ?? 240}
+                            height={img.height ?? 160}
+                            unoptimized
+                            className="h-28 w-auto max-w-56 object-cover"
+                          />
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
+              <span className="px-1 pt-0.5 font-mono text-xs text-faint">
+                {r.timeLabel}
+                {r.seenLabel ? ` · ${r.seenLabel}` : ""}
+              </span>
             </div>
-          );
-        })}
+          </div>
+        ))}
         <div ref={endRef} />
       </div>
 
       {readOnly ? (
         <div className="border-t border-line pt-3">
           <p className="py-2 text-center text-[13px] text-faint">
-            This conversation is closed — {members[otherId ?? ""]?.name ?? "they"}{" "}
-            is no longer on the work team.
+            This conversation is closed —{" "}
+            {members[otherId ?? ""]?.name ?? "they"} is no longer on the work
+            team.
           </p>
         </div>
       ) : (
-      <div className="border-t border-line pt-3">
-        {attachments.length > 0 && (
-          <ul className="mb-2 flex flex-wrap gap-2">
-            {attachments.map((a, i) => (
-              <li key={a.previewUrl} className="group relative">
-                <Image
-                  src={a.previewUrl}
-                  alt=""
-                  width={a.width ?? 160}
-                  height={a.height ?? 100}
-                  unoptimized
-                  className="h-16 w-auto max-w-32 rounded-md border border-line object-cover"
-                />
-                <button
-                  type="button"
-                  onClick={() => removeAttachment(i)}
-                  aria-label="Remove image"
-                  className="absolute -right-1.5 -top-1.5 grid size-5 place-items-center rounded-full border border-line bg-surface text-faint transition-colors duration-150 hover:text-danger"
-                >
-                  <X className="size-3" aria-hidden />
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-        <div
-          className="flex items-end gap-2"
-          // Ctrl+V a screenshot straight into the composer — scoped to this
-          // container so it never hijacks a paste meant for the textarea's
-          // text (a paste carrying no files falls through untouched).
-          onPaste={(e) => {
-            const files = e.clipboardData?.files;
-            if (!files || files.length === 0) return;
-            e.preventDefault();
-            addFiles(files);
-          }}
-        >
-          <input
-            ref={attachFileRef}
-            type="file"
-            accept={ALLOWED_IMAGE_TYPES.join(",")}
-            multiple
-            className="hidden"
-            onChange={(e) => addFiles(e.target.files)}
-          />
-          <button
-            type="button"
-            onClick={() => attachFileRef.current?.click()}
-            disabled={attachments.length >= MAX_IMAGES_PER_MESSAGE}
-            aria-label="Attach image"
-            className="flex size-9 shrink-0 items-center justify-center rounded-md border border-line text-faint transition-colors duration-150 hover:border-line-strong hover:text-ink disabled:opacity-40"
-          >
-            <ImagePlus className="size-4" aria-hidden />
-          </button>
-          <textarea
-            ref={composerRef}
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            onKeyDown={(e) => {
-              // Enter sends, Shift+Enter breaks the line — scoped to this
-              // textarea only, nothing global.
-              if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault();
-                void send();
-              }
-            }}
-            rows={1}
-            maxLength={MAX_MESSAGE_LEN}
-            placeholder="Write a message…"
-            aria-label="Write a message"
-            className="max-h-40 min-h-9 flex-1 resize-none rounded-md border border-line bg-raised px-3 py-2 text-sm text-ink placeholder:text-faint transition-colors duration-150 hover:border-line-strong focus-visible:border-line-strong focus-visible:outline-none"
-          />
-          <button
-            type="button"
-            onClick={() => void send()}
-            disabled={!draft.trim() && attachments.length === 0}
-            aria-label="Send"
-            className="flex size-9 shrink-0 items-center justify-center rounded-md bg-primary text-primary-ink transition-transform duration-150 active:scale-[0.98] disabled:opacity-40"
-          >
-            <SendHorizontal className="size-4" aria-hidden />
-          </button>
-        </div>
-      </div>
+        <Composer ref={composerRef} onSend={handleSend} autoFocus />
       )}
 
       {lightbox && (
-        <div
-          role="dialog"
-          aria-modal="true"
-          aria-label="Image preview"
-          onClick={() => setLightbox(null)}
-          className="fixed inset-0 z-50 grid animate-overlay-in place-items-center bg-black/80 p-6"
-        >
-          <Image
-            src={lightbox.url}
-            alt=""
-            width={lightbox.width ?? 1200}
-            height={lightbox.height ?? 800}
-            unoptimized
-            className="max-h-full w-auto max-w-full rounded-lg object-contain"
-          />
-        </div>
+        <Lightbox
+          url={lightbox.url}
+          width={lightbox.width}
+          height={lightbox.height}
+          onClose={() => setLightbox(null)}
+        />
       )}
     </div>
   );

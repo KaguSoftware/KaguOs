@@ -4,8 +4,9 @@ import { getSessionContext, getUserId } from "@/lib/data/session";
 import { getMembersMap } from "@/lib/data/members";
 import { getPresence } from "@/lib/data/presence";
 import { getPulse } from "@/lib/data/pulse";
-import { getInboxSummary, getUnreadMessageCount } from "@/lib/data/messages";
+import { getInboxSummary, totalUnread } from "@/lib/data/messages";
 import { selectOrThrow } from "@/lib/data/query";
+import { ChatLiveRefresh } from "@/components/shell/chat-live-refresh";
 import { LiveRefresh } from "@/components/shell/live-refresh";
 import { Sidebar } from "@/components/shell/sidebar";
 import { CommandPalette } from "@/components/shell/command-palette";
@@ -46,16 +47,17 @@ export default async function AppLayout({
   // Presence for the always-open sidebar panel + the mobile menu's live tile
   // counts. Both need ctx (access/showcase gating), both are cache()-deduped,
   // and they fly TOGETHER — so the pulse costs no extra round-trip.
-  const [presence, pulse, unreadMessages, inbox] = await Promise.all([
+  const [presence, pulse, inbox] = await Promise.all([
     getPresence(ctx),
     getPulse(ctx),
-    // Chat unread for the Messages nav badge — same audience gate as presence,
-    // so it's null (and the badge silent) exactly where the panel is absent.
-    getUnreadMessageCount(ctx),
-    // Feeds the unread-DM popups below — cache()-deduped against any page
-    // that also calls getInboxSummary in the same request.
+    // Feeds BOTH the unread-DM popups below and the Messages nav badge, which is
+    // derived from it rather than queried separately — see totalUnread. cache()-
+    // deduped against any page that also calls getInboxSummary this request.
     getInboxSummary(ctx),
   ]);
+  // Same audience gate as presence, so it's null (and the badge silent) exactly
+  // where the panel is absent.
+  const unreadMessages = totalUnread(inbox);
 
   // Minimal, privacy-conscious slice for the popups — sender + preview only,
   // never the group chat (that's the sidebar badge's job, not a popup's).
@@ -91,11 +93,16 @@ export default async function AppLayout({
       />
       {/* App-wide live updates: the notification bell and team presence refresh
           the moment a notification lands or someone changes status. Skipped in
-          showcase — notifications are hidden and presence is demo-irrelevant. */}
+          showcase — notifications are hidden and presence is demo-irrelevant.
+
+          The chat tables are watched SEPARATELY, because a refresh must not fire
+          for the thread the user is currently reading — that thread patches
+          itself in place. See chat-live-refresh.tsx. */}
       {!ctx.showcase && (
-        <LiveRefresh
-          tables={["notifications", "profiles", "messages", "message_reads"]}
-        />
+        <>
+          <LiveRefresh tables={["notifications", "profiles"]} />
+          <ChatLiveRefresh meId={ctx.userId} />
+        </>
       )}
       {!ctx.showcase && (
         <UnreadDmPopups threads={unreadDMs} members={members} />

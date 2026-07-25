@@ -1,6 +1,9 @@
 "use client";
 
-import { useRealtimeRefresh } from "@/lib/use-realtime-refresh";
+import {
+  useRealtimeRefresh,
+  type ChangePayload,
+} from "@/lib/use-realtime-refresh";
 
 /**
  * Drop-in live updates for a server-rendered page: mount this and the page
@@ -10,7 +13,14 @@ import { useRealtimeRefresh } from "@/lib/use-realtime-refresh";
  *
  *   <LiveRefresh tables={["contacts", "contact_interactions"]} />
  */
-export function LiveRefresh({ tables }: { tables: string | string[] }) {
-  useRealtimeRefresh(tables);
+export function LiveRefresh({
+  tables,
+  shouldRefresh,
+}: {
+  tables: string | string[];
+  /** Optional per-event filter — see useRealtimeRefresh. Must be stable. */
+  shouldRefresh?: (payload: ChangePayload) => boolean;
+}) {
+  useRealtimeRefresh(tables, shouldRefresh);
   return null;
 }

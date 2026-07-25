@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
+import type { RealtimePostgresChangesPayload } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/client";
 
 /**
@@ -22,7 +23,23 @@ import { createClient } from "@/lib/supabase/client";
  * Refreshes are coalesced: a burst of changes (e.g. a batch insert) triggers a
  * single refresh on the next tick, not one per row.
  */
-export function useRealtimeRefresh(tables: string | string[]) {
+/** The shape every postgres_changes handler receives. */
+export type ChangePayload = RealtimePostgresChangesPayload<
+  Record<string, unknown>
+>;
+
+export function useRealtimeRefresh(
+  tables: string | string[],
+  /**
+   * Decide per event whether a refresh is worth a server round trip. Omit and
+   * every change refreshes. Used by the shell's chat subscription to ignore
+   * events belonging to a thread that is already patching itself in place —
+   * refreshing for those repainted the open thread for nothing.
+   *
+   * Must be referentially stable (useCallback) or the channel re-subscribes.
+   */
+  shouldRefresh?: (payload: ChangePayload) => boolean
+) {
   const router = useRouter();
   // Stringify so the effect re-subscribes only when the actual table set
   // changes, not on every render (a fresh array literal each time otherwise).
@@ -35,6 +52,13 @@ export function useRealtimeRefresh(tables: string | string[]) {
   useEffect(() => {
     routerRef.current = router;
   }, [router]);
+
+  // Same reasoning as the router ref: kept out of the effect's dependencies so a
+  // changing predicate never tears down and re-authorizes the socket.
+  const filterRef = useRef(shouldRefresh);
+  useEffect(() => {
+    filterRef.current = shouldRefresh;
+  }, [shouldRefresh]);
 
   useEffect(() => {
     const list = key.split(",").filter(Boolean);
@@ -73,7 +97,11 @@ export function useRealtimeRefresh(tables: string | string[]) {
         ch = ch.on(
           "postgres_changes",
           { event: "*", schema: "public", table },
-          scheduleRefresh
+          (payload) => {
+            const filter = filterRef.current;
+            if (filter && !filter(payload)) return;
+            scheduleRefresh();
+          }
         );
       }
       ch.subscribe();

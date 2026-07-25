@@ -1,6 +1,6 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { refresh } from "next/cache";
 import {
   blockIfShowcase,
   canAccess,
@@ -223,7 +223,14 @@ export async function sendMessage(
     });
   }
 
-  revalidatePath("/messages");
+  // refresh(), not revalidatePath("/messages"): the docs note that
+  // revalidatePath from a Server Action "causes all previously visited pages to
+  // refresh when navigated to again", which throws away the client router cache
+  // that next.config.ts's staleTimes exists to keep warm. refresh() re-renders
+  // the tree the sender is already looking at — which is all this needs — and
+  // leaves every other section warm. Other people's clients learn about the new
+  // line from realtime, not from this.
+  refresh();
   return {
     ok: true,
     message: "Sent.",
@@ -316,6 +323,10 @@ export async function markThreadRead(
     if (error) return { ok: false, message: error.message };
   }
 
-  revalidatePath("/", "layout");
+  // Was revalidatePath("/", "layout"), which the docs say "will purge the Client
+  // Cache" — so every section the user had visited went cold again each time
+  // they opened a thread, and this fires per inbound line. refresh() re-renders
+  // the current tree, layout included, so the badge still drops.
+  refresh();
   return { ok: true, message: "Read." };
 }

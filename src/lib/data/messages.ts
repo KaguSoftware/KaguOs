@@ -51,47 +51,25 @@ function countGroupUnread(
 }
 
 /**
- * Total unread (direct + group) for the sidebar badge. One wave of three
- * cheap queries: a head-only count, the recent group tail, and my marker.
+ * Total unread (direct + group) for the sidebar badge.
+ *
+ * DERIVED, not queried. This used to be `getUnreadMessageCount`, its own wave of
+ * three queries — a head count, the group tail, and my marker — running on EVERY
+ * route render in the app, right beside `getInboxSummary`, which already loads
+ * strictly more than it needed. Two overlapping sources for one number also meant
+ * they could disagree, and they did: the inbox counted unread inside a bounded
+ * preview window while the badge counted without a bound.
+ *
+ * One source now. `null` (no work access, or showcase) propagates as before, so
+ * the badge stays silent exactly where the inbox is unavailable.
  */
-export const getUnreadMessageCount = cache(async function getUnreadMessageCount(
-  ctx: SessionContext
-): Promise<number | null> {
-  if (!canAccess(ctx, "work") || ctx.showcase) return null;
-
-  const [direct, group, marker] = await Promise.all([
-    selectOrThrow(
-      ctx.supabase
-        .from("messages")
-        .select("id", { count: "exact", head: true })
-        .eq("recipient_id", ctx.userId)
-        .is("read_at", null),
-      "messages: unread count"
-    ),
-    rowsOrThrow(
-      ctx.supabase
-        .from("messages")
-        .select("sender_id, created_at")
-        .is("recipient_id", null)
-        .order("created_at", { ascending: false })
-        .limit(100),
-      "messages: group tail"
-    ),
-    selectOrThrow(
-      ctx.supabase
-        .from("message_reads")
-        .select("read_at")
-        .eq("user_id", ctx.userId)
-        .maybeSingle(),
-      "message_reads"
-    ),
-  ]);
-
+export function totalUnread(inbox: InboxSummary | null): number | null {
+  if (!inbox) return null;
   return (
-    (direct.count ?? 0) +
-    countGroupUnread(group, ctx.userId, marker.data?.read_at ?? null)
+    Object.values(inbox.direct).reduce((n, t) => n + t.unread, 0) +
+    inbox.group.unread
   );
-});
+}
 
 /** Every id in the group-chat audience (work members ∪ admins). */
 export const getGroupAudience = cache(async function getGroupAudience(
