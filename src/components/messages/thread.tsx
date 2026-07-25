@@ -91,6 +91,8 @@ export function MessageThread({
   initialMessages,
   initialHasOlder,
   readOnly = false,
+  firstUnreadId = null,
+  unreadCount = 0,
   meId,
   otherId,
   members,
@@ -103,6 +105,10 @@ export function MessageThread({
   initialHasOlder: boolean;
   /** Readable but not writable — the partner has left the work team. */
   readOnly?: boolean;
+  /** First line I hadn't read at open — where the "N new" divider sits. */
+  firstUnreadId?: string | null;
+  /** How many were unread at open, for the divider's label. */
+  unreadCount?: number;
   meId: string;
   /** null = the group chat. */
   otherId: string | null;
@@ -304,24 +310,45 @@ export function MessageThread({
     el.scrollTop = el.scrollHeight - fromBottom;
   }, [messages]);
 
-  // Keep the newest line in view — instant on first paint, smooth after.
-  // An INCOMING line only follows when the reader is already near the bottom;
-  // yanking someone out of the history they scrolled up to read is worse than
-  // letting the new line wait. My own sends always come into view.
+  // Frozen at mount — state, not a ref, because the render reads it. The divider
+  // has to survive the mark-as-read that follows immediately after open, and
+  // every server refresh after that; otherwise the one thing telling you where
+  // you left off vanishes as you look at it. Never updated after mount, so the
+  // initialiser is the whole story.
+  const [unreadAnchorId] = useState(firstUnreadId);
+  const [unreadAtOpen] = useState(unreadCount);
+  const unreadRef = useRef<HTMLDivElement>(null);
+
+  // Keep the right thing in view. On first paint that's the "N new" divider if
+  // there is one, and the newest line otherwise. After that: an INCOMING line
+  // only follows when the reader is already near the bottom — yanking someone out
+  // of the history they scrolled up to read is worse than letting the new line
+  // wait. My own sends always come into view.
   const firstScroll = useRef(true);
   useEffect(() => {
-    if (firstScroll.current || forceScroll.current || nearBottom()) {
-      // A JS scroll behavior is out of reach of the global reduced-motion CSS
-      // kill switch, so it has to ask for itself.
-      const calm =
-        typeof window !== "undefined" &&
-        window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    // A JS scroll behavior is out of reach of the global reduced-motion CSS kill
+    // switch, so it has to ask for itself.
+    const calm =
+      typeof window !== "undefined" &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+    if (firstScroll.current) {
+      firstScroll.current = false;
+      forceScroll.current = false;
+      if (unreadRef.current) {
+        unreadRef.current.scrollIntoView({ behavior: "instant", block: "center" });
+        return;
+      }
+      endRef.current?.scrollIntoView({ behavior: "instant", block: "end" });
+      return;
+    }
+
+    if (forceScroll.current || nearBottom()) {
       endRef.current?.scrollIntoView({
-        behavior: firstScroll.current || calm ? "instant" : "smooth",
+        behavior: calm ? "instant" : "smooth",
         block: "end",
       });
     }
-    firstScroll.current = false;
     forceScroll.current = false;
   }, [messages, nearBottom]);
 
@@ -682,6 +709,23 @@ export function MessageThread({
         )}
         {rows.map((r) => (
           <div key={r.m.id}>
+            {r.m.id === unreadAnchorId && (
+              <div
+                ref={unreadRef}
+                className="flex items-center gap-3 py-3"
+                // Announced, because for a screen-reader user this is the only
+                // thing that says where the new material starts.
+                role="separator"
+              >
+                <div className="h-px flex-1 bg-primary-dim/40" aria-hidden />
+                <span className="whitespace-nowrap text-xs font-medium text-primary-dim">
+                  {unreadAtOpen === 1
+                    ? "1 new message"
+                    : `${unreadAtOpen} new messages`}
+                </span>
+                <div className="h-px flex-1 bg-primary-dim/40" aria-hidden />
+              </div>
+            )}
             {r.newDay && (
               <div className="flex items-center gap-3 py-3">
                 <div className="h-px flex-1 bg-line" aria-hidden />

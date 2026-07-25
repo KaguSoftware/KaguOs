@@ -11,6 +11,14 @@ export const GROUP_THREAD = "team";
 /** Display name of the group chat — work members only, so not "Everyone". */
 export const GROUP_LABEL = "Work team";
 
+/**
+ * The one sentence that explains the group chat. It was written four different
+ * ways across the inbox row, the thread header and the empty state ("The whole
+ * work team, one room." / "Every work member, one room." / …), which reads as
+ * four different features.
+ */
+export const GROUP_HINT = "Everyone on the work team, one room.";
+
 /** Matches the DB CHECK on messages.body. */
 export const MAX_MESSAGE_LEN = 4000;
 

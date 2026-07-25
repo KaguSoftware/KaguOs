@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft, Users } from "lucide-react";
-import { requireSection } from "@/lib/data/session";
+import { canAccess, getSessionContext, requireSection } from "@/lib/data/session";
 import { getPresence } from "@/lib/data/presence";
 import {
   getGroupAudience,
@@ -12,9 +12,28 @@ import {
 } from "@/lib/data/messages";
 import { getMembersMap } from "@/lib/data/members";
 import { MessageThread } from "@/components/messages/thread";
-import { GROUP_LABEL, GROUP_THREAD } from "@/lib/messages-shared";
+import { GROUP_HINT, GROUP_LABEL, GROUP_THREAD } from "@/lib/messages-shared";
 
-export const metadata: Metadata = { title: "Messages" };
+/**
+ * Name the tab after who you're talking to. Every thread's tab said "Messages",
+ * so three chats open were three identical tabs.
+ *
+ * Both lookups are React cache()-deduped against the page render below, so this
+ * costs no extra round trip. It uses getSessionContext rather than
+ * requireSection because metadata must not redirect.
+ */
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ userId: string }>;
+}): Promise<Metadata> {
+  const { userId } = await params;
+  if (userId === GROUP_THREAD) return { title: GROUP_LABEL };
+  const ctx = await getSessionContext();
+  if (!canAccess(ctx, "work") || ctx.showcase) return { title: "Messages" };
+  const members = await getMembersMap(ctx.supabase);
+  return { title: members[userId]?.name ?? "Messages" };
+}
 
 /** Member ids are uuids; anything else is a bad URL, not a missing person. */
 const UUID =
@@ -73,23 +92,37 @@ export default async function MessageThreadPage({
   // Only the newest page is inspected, which is enough — the newest unread line
   // is always on it.
   const groupReadAt = readMarkers?.[ctx.userId] ?? null;
-  const initialUnread = isGroup
-    ? // No marker yet = first time in the room. Mark on open to SEED it, which
-      // is what lets countGroupUnread treat a missing marker as zero instead of
-      // showing a new member the whole room history as unread.
-      groupReadAt === null ||
-      thread.messages.some(
-        (m) => m.sender_id !== ctx.userId && m.created_at > groupReadAt
-      )
-    : thread.messages.some((m) => m.sender_id === userId && !m.read_at);
+  /**
+   * The id of the first line I haven't read — where the "N new" divider goes.
+   *
+   * This used to be reduced to a BOOLEAN here, which threw away the one piece of
+   * information needed to show someone where they left off. Opening a thread with
+   * fourteen unread landed you at the bottom with no marker, and marking-on-open
+   * then destroyed the evidence.
+   */
+  const unread = isGroup
+    ? // No marker yet = first time in the room, so nothing counts as unread; the
+      // mark on open SEEDS the marker (see countGroupUnread).
+      groupReadAt === null
+      ? []
+      : thread.messages.filter(
+          (m) => m.sender_id !== ctx.userId && m.created_at > groupReadAt
+        )
+    : thread.messages.filter((m) => m.sender_id === userId && !m.read_at);
+  const initialUnread = isGroup ? groupReadAt === null || unread.length > 0 : unread.length > 0;
+  const firstUnreadId = unread[0]?.id ?? null;
 
   return (
-    <div className="flex h-[calc(100dvh-8rem)] min-h-96 flex-col md:h-[calc(100dvh-11rem)]">
+    // The height lives on the messages layout now, shared by both panes; this
+    // just fills its column. min-h-96 is gone too — on a short viewport with the
+    // keyboard open it forced the PAGE to scroll instead of the message list.
+    <div className="flex min-h-0 flex-1 flex-col">
       <header className="flex items-center gap-3 border-b border-line pb-3">
         <Link
           href="/messages"
-          aria-label="Back to messages"
-          className="rounded-md p-1.5 text-faint transition-colors duration-150 hover:bg-raised hover:text-ink"
+          aria-label="Back to conversations"
+          // Only a phone needs this: on md+ the list is right there beside us.
+          className="rounded-md p-1.5 text-faint transition-colors duration-150 hover:bg-raised hover:text-ink md:hidden"
         >
           <ArrowLeft className="size-4" aria-hidden />
         </Link>
@@ -102,9 +135,7 @@ export default async function MessageThreadPage({
               <h1 className="text-[15px] font-semibold text-ink">
                 {GROUP_LABEL}
               </h1>
-              <p className="text-[12px] text-faint">
-                Every work member, one room.
-              </p>
+              <p className="text-xs text-faint">{GROUP_HINT}</p>
             </div>
           </>
         ) : (
@@ -147,6 +178,8 @@ export default async function MessageThreadPage({
         initialMessages={thread.messages}
         initialHasOlder={thread.hasOlder}
         readOnly={former}
+        firstUnreadId={firstUnreadId}
+        unreadCount={unread.length}
         meId={ctx.userId}
         otherId={isGroup ? null : userId}
         members={members}
