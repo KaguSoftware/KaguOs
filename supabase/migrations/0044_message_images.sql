@@ -4,13 +4,13 @@
 -- delete-after-send lifecycle here either.
 
 alter table public.messages
-  drop constraint messages_body_check;
+  drop constraint if exists messages_body_check;
 alter table public.messages
   add constraint messages_body_check check (char_length(body) between 0 and 4000);
 -- "must have a body or an image" is enforced in the server action, not in
 -- SQL — a check constraint can't reference another table.
 
-create table public.message_images (
+create table if not exists public.message_images (
   id uuid primary key default gen_random_uuid(),
   message_id uuid not null references public.messages(id) on delete cascade,
   -- Path within the chat-images bucket: "<sender_id>/<uuid>.<ext>".
@@ -22,12 +22,13 @@ create table public.message_images (
   created_at timestamptz not null default now()
 );
 
-create index message_images_message_idx on public.message_images (message_id);
+create index if not exists message_images_message_idx on public.message_images (message_id);
 
 alter table public.message_images enable row level security;
 
 -- Select mirrors messages_select via a join, since message_images carries no
 -- recipient_id of its own.
+drop policy if exists message_images_select on public.message_images;
 create policy message_images_select on public.message_images
   for select to authenticated
   using (
@@ -41,6 +42,7 @@ create policy message_images_select on public.message_images
     )
   );
 
+drop policy if exists message_images_insert on public.message_images;
 create policy message_images_insert on public.message_images
   for insert to authenticated
   with check (
@@ -64,10 +66,12 @@ on conflict (id) do nothing;
 -- had its exact signed-URL-request path, but that path is only discoverable
 -- through the RLS-protected message_images row, so this doesn't leak DM
 -- images to anyone who couldn't already see the message.
+drop policy if exists chat_images_storage_select on storage.objects;
 create policy chat_images_storage_select on storage.objects
   for select to authenticated
   using (bucket_id = 'chat-images' and private.is_member('work'));
 
+drop policy if exists chat_images_storage_insert on storage.objects;
 create policy chat_images_storage_insert on storage.objects
   for insert to authenticated
   with check (bucket_id = 'chat-images' and private.is_member('work'));
