@@ -7,8 +7,14 @@ import {
   getSessionContext,
 } from "@/lib/data/session";
 import { notifyUser } from "@/lib/actions/notify";
-import { getGroupThread, getThread } from "@/lib/data/messages";
 import {
+  getGroupAudience,
+  getGroupThread,
+  getThread,
+} from "@/lib/data/messages";
+import {
+  GROUP_LABEL,
+  GROUP_THREAD,
   isChatImagePath,
   MAX_IMAGE_DIMENSION,
   MAX_IMAGES_PER_MESSAGE,
@@ -65,7 +71,9 @@ export type SendImageInput = {
 export async function sendMessage(
   recipientId: string | null,
   body: string,
-  images: SendImageInput[] = []
+  images: SendImageInput[] = [],
+  /** User ids named with @ in this message. Group chat only — see notifyMentions. */
+  mentions: string[] = []
 ): Promise<SendResult> {
   const showcaseStop = await blockIfShowcase();
   if (showcaseStop) return showcaseStop;
@@ -214,13 +222,45 @@ export async function sendMessage(
     }
   }
 
+  const myName = ctx.profile.full_name || ctx.profile.email;
+
   if (recipientId && shouldNotify) {
-    const myName = ctx.profile.full_name || ctx.profile.email;
     notifyUser(ctx, recipientId, {
       kind: "message",
       title: `${myName} sent you a message`,
       href: `/messages/${ctx.userId}`,
     });
+  }
+
+  /**
+   * MENTIONS. Group chat only: in a DM the recipient is already notified by the
+   * rule above, so naming them would just double it.
+   *
+   * The ids are validated against the real audience rather than trusted, then
+   * recorded and notified. This is the ONLY thing that makes the group chat ring,
+   * and only for the people deliberately named — the "group chat never notifies"
+   * rule is otherwise untouched.
+   */
+  if (!recipientId && mentions.length > 0) {
+    const named = [...new Set(mentions)].filter((id) => id !== ctx.userId);
+    const audience = await getGroupAudience(ctx);
+    const valid = named.filter((id) => audience.includes(id));
+    if (valid.length > 0) {
+      const { error: mentionError } = await ctx.supabase
+        .from("message_mentions")
+        .insert(valid.map((id) => ({ message_id: row.id, user_id: id })));
+      // A mention that failed to record must not silently notify — the bell would
+      // point at a message that doesn't know it named anyone.
+      if (!mentionError) {
+        for (const id of valid) {
+          notifyUser(ctx, id, {
+            kind: "message",
+            title: `${myName} mentioned you in ${GROUP_LABEL}`,
+            href: `/messages/${GROUP_THREAD}`,
+          });
+        }
+      }
+    }
   }
 
   // refresh(), not revalidatePath("/messages"): the docs note that

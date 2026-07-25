@@ -12,6 +12,7 @@ import { Sidebar } from "@/components/shell/sidebar";
 import { CommandPalette } from "@/components/shell/command-palette";
 import { ShowcaseBanner } from "@/components/shell/showcase";
 import { ToastProvider } from "@/components/ui/toast";
+import { TitleUnread } from "@/components/shell/title-unread";
 import { UnreadDmPopups } from "@/components/shell/unread-dm-popups";
 import type { Notification } from "@/lib/types";
 
@@ -107,6 +108,9 @@ export default async function AppLayout({
       {!ctx.showcase && (
         <UnreadDmPopups threads={unreadDMs} members={members} />
       )}
+      {/* Unread in the tab title — this app lives in a background tab, where the
+          sidebar badge can't be seen. */}
+      {!ctx.showcase && <TitleUnread count={unreadMessages ?? 0} />}
       <div className="flex min-h-dvh flex-col md:flex-row">
         <Sidebar
           sections={[...ctx.sections]}

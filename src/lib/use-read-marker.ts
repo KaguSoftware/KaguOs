@@ -54,10 +54,14 @@ export function useReadMarker(
     readyRef.current = ready;
   }, [ready]);
 
+  /** Is the reader actually at the keyboard, looking at this tab? */
+  const present = () =>
+    document.visibilityState === "visible" && document.hasFocus();
+
   /** Send a held mark if the reader is genuinely present; otherwise keep holding. */
   const flush = useCallback(() => {
     if (!pending.current) return;
-    if (document.visibilityState !== "visible" || !document.hasFocus()) return;
+    if (!present()) return;
     if (readyRef.current && !readyRef.current()) return;
     pending.current = false;
     void markThreadRead(otherId);
@@ -72,6 +76,26 @@ export function useReadMarker(
       flush();
     }, COALESCE_MS);
   }, [flush]);
+
+  /**
+   * Mark because the reader DELIBERATELY opened this thread.
+   *
+   * Deliberately skips the `ready` predicate. `ready` exists to stop a line that
+   * arrived off-screen from being reported as seen, which is about the stream —
+   * but a thread now opens scrolled to the "N new" divider rather than to the
+   * bottom, so on open `ready` is false precisely when there IS unread, and the
+   * badge could never clear. Opening a thread is the act of reading it; tab
+   * liveness is the only condition that still applies.
+   */
+  const markNow = useCallback(() => {
+    if (!present()) {
+      // Not looking yet — hold it and let the wake listener deal with it.
+      pending.current = true;
+      return;
+    }
+    pending.current = false;
+    void markThreadRead(otherId);
+  }, [otherId]);
 
   // Coming back to the tab is the moment a held mark becomes true.
   useEffect(() => {
@@ -97,5 +121,5 @@ export function useReadMarker(
     };
   }, [otherId]);
 
-  return { mark, flush };
+  return { mark, markNow, flush };
 }

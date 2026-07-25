@@ -4,6 +4,7 @@ import {
   forwardRef,
   useEffect,
   useImperativeHandle,
+  useMemo,
   useRef,
   useState,
 } from "react";
@@ -72,13 +73,43 @@ function measure(file: File): Promise<{ width: number; height: number } | null> 
 export const Composer = forwardRef<
   ComposerHandle,
   {
-    onSend: (text: string, files: Attachment[]) => void;
+    onSend: (text: string, files: Attachment[], mentions: string[]) => void;
     /** Focus on mount — opening a chat should put the cursor where you type. */
     autoFocus?: boolean;
+    /**
+     * Stable per-thread key for draft persistence. Half-typed messages used to
+     * be destroyed by switching threads (or by a reload), which is punishing
+     * when you left mid-sentence to go and check something.
+     */
+    draftKey?: string;
+    /**
+     * People who can be named with @. Group chat only — a DM's recipient is
+     * already notified, so mentioning them would just double it. Absent = the
+     * `@` key is ordinary text.
+     */
+    mentionable?: { id: string; name: string }[];
   }
->(function Composer({ onSend, autoFocus = false }, ref) {
-  const [draft, setDraft] = useState("");
+>(function Composer(
+  { onSend, autoFocus = false, draftKey, mentionable },
+  ref
+) {
+  // Seeded from storage on mount, so the words are already there on first paint
+  // rather than appearing a frame later.
+  const [draft, setDraft] = useState(() => {
+    if (!draftKey || typeof window === "undefined") return "";
+    try {
+      return window.localStorage.getItem(draftKey) ?? "";
+    } catch {
+      // Private mode / storage disabled — a lost draft is not worth an error.
+      return "";
+    }
+  });
   const [attachments, setAttachments] = useState<Attachment[]>([]);
+  /** Everyone picked from the @ menu this draft — filtered again on submit. */
+  const [named, setNamed] = useState<{ id: string; name: string }[]>([]);
+  /** Caret position, so the @ picker can tell which token it is inside. */
+  const [caretAt, setCaretAt] = useState<number | null>(null);
+  const [pick, setPick] = useState(0);
   const boxRef = useRef<HTMLTextAreaElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const { error: toastError } = useToast();
@@ -103,8 +134,28 @@ export const Composer = forwardRef<
     const el = boxRef.current;
     if (!el) return;
     el.style.height = "auto";
-    el.style.height = `${Math.min(el.scrollHeight, MAX_HEIGHT_PX)}px`;
+    const full = el.scrollHeight;
+    el.style.height = `${Math.min(full, MAX_HEIGHT_PX)}px`;
+    // Overflow is toggled here rather than being a static class: a permanent
+    // `overflow-y-auto` shows the (custom, always-visible) scrollbar track down
+    // the side of a one-line box, which reads as a bug. It appears only once the
+    // text genuinely exceeds the cap.
+    el.style.overflowY = full > MAX_HEIGHT_PX ? "auto" : "hidden";
   }, [draft]);
+
+  // Keep the stored draft in step. Writing on every keystroke is fine —
+  // localStorage is synchronous and this is a few hundred bytes — but an empty
+  // draft is REMOVED rather than stored, so switching threads doesn't leave a
+  // trail of empty keys behind.
+  useEffect(() => {
+    if (!draftKey) return;
+    try {
+      if (draft) window.localStorage.setItem(draftKey, draft);
+      else window.localStorage.removeItem(draftKey);
+    } catch {
+      // Storage unavailable; the draft simply isn't persisted.
+    }
+  }, [draft, draftKey]);
 
   async function addFiles(files: FileList | null) {
     if (!files || files.length === 0) return;
@@ -148,21 +199,121 @@ export const Composer = forwardRef<
     });
   }
 
+  /**
+   * The `@…` word directly before the caret, if the caret is inside one. Null
+   * closes the picker — including when the caret moves away from a token that is
+   * still in the text, which is what makes the picker feel attached to the caret
+   * rather than to the message.
+   */
+  const query = useMemo(() => {
+    if (!mentionable) return null;
+    const caret = caretAt;
+    if (caret === null) return null;
+    const before = draft.slice(0, caret);
+    const at = before.lastIndexOf("@");
+    if (at === -1) return null;
+    // Must start a word — an email address should not open a picker.
+    if (at > 0 && !/\s/.test(before[at - 1]!)) return null;
+    const word = before.slice(at + 1);
+    // A space ends the token. Names are matched on their first word.
+    if (/\s/.test(word)) return null;
+    return { at, word };
+  }, [draft, caretAt, mentionable]);
+
+  const matches = useMemo(() => {
+    if (!query || !mentionable) return [];
+    const needle = query.word.toLowerCase();
+    return mentionable
+      .filter((p) => p.name.toLowerCase().includes(needle))
+      .slice(0, 5);
+  }, [query, mentionable]);
+
+  // Reset the highlighted row whenever the candidate set changes, or the
+  // selection can point past the end of a narrowed list.
+  useEffect(() => {
+    setPick(0);
+  }, [query?.word]);
+
+  /** Replace the `@token` under the caret with `@FirstName ` and record the id. */
+  function choose(person: { id: string; name: string }) {
+    if (!query) return;
+    const token = person.name.split(" ")[0]!;
+    const next =
+      draft.slice(0, query.at) +
+      `@${token} ` +
+      draft.slice(query.at + 1 + query.word.length);
+    setDraft(next);
+    setNamed((prev) =>
+      prev.some((p) => p.id === person.id) ? prev : [...prev, person]
+    );
+    const caret = query.at + token.length + 2;
+    // Restore the caret after React has written the new value.
+    requestAnimationFrame(() => {
+      boxRef.current?.focus();
+      boxRef.current?.setSelectionRange(caret, caret);
+      setCaretAt(caret);
+    });
+  }
+
   function submit() {
     const clean = draft.trim();
     if (!clean && attachments.length === 0) return;
+    // Only ids whose token SURVIVED in the final text are sent — deleting the
+    // "@Kemal" you typed must un-mention Kemal, not leave a silent bell behind.
+    const ids = named
+      .filter((p) =>
+        new RegExp(`@${p.name.split(" ")[0]!}\\b`, "i").test(clean)
+      )
+      .map((p) => p.id);
     // Cleared here, not by the parent: the send pipelines, so the box must be
     // ready for the next line immediately.
     setDraft("");
     setAttachments([]);
+    setNamed([]);
     if (fileRef.current) fileRef.current.value = "";
-    onSend(clean, attachments);
+    onSend(clean, attachments, ids);
   }
 
   const overrun = draft.length >= COUNTER_AT;
 
   return (
-    <div className="border-t border-line pt-3">
+    <div className="relative border-t border-line pt-3">
+      {/* The @ menu. Sits above the composer because there is nothing below it —
+          the composer is already at the bottom of the pane. Frosted like every
+          other transient surface in the app. */}
+      {matches.length > 0 && (
+        <ul
+          role="listbox"
+          aria-label="Mention someone"
+          className="absolute bottom-full left-0 z-10 mb-2 w-64 animate-pop-in overflow-hidden rounded-md border border-line-strong bg-raised/90 py-1 backdrop-blur-md"
+        >
+          {matches.map((p, i) => (
+            <li key={p.id}>
+              <button
+                type="button"
+                role="option"
+                aria-selected={i === pick}
+                // The textarea keeps focus, so this fires on mousedown —
+                // a click would blur first and close the menu.
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  choose(p);
+                }}
+                onMouseEnter={() => setPick(i)}
+                className={cn(
+                  "flex w-full items-center gap-2 px-3 py-1.5 text-left text-[13px]",
+                  i === pick ? "bg-line-strong/40 text-ink" : "text-muted"
+                )}
+              >
+                <span className="truncate">{p.name}</span>
+                <span className="ml-auto shrink-0 font-mono text-xs text-faint">
+                  @{p.name.split(" ")[0]}
+                </span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
       {attachments.length > 0 && (
         <ul className="mb-2 flex flex-wrap gap-2">
           {attachments.map((a, i) => (
@@ -221,8 +372,38 @@ export const Composer = forwardRef<
         <textarea
           ref={boxRef}
           value={draft}
-          onChange={(e) => setDraft(e.target.value)}
+          onChange={(e) => {
+            setDraft(e.target.value);
+            setCaretAt(e.target.selectionStart);
+          }}
+          // The caret can move without the text changing, which has to close or
+          // reopen the picker.
+          onSelect={(e) => setCaretAt(e.currentTarget.selectionStart)}
+          onBlur={() => setCaretAt(null)}
           onKeyDown={(e) => {
+            // While the @ menu is open it owns the arrows, Enter/Tab and Escape.
+            if (matches.length > 0) {
+              if (e.key === "ArrowDown") {
+                e.preventDefault();
+                setPick((p) => (p + 1) % matches.length);
+                return;
+              }
+              if (e.key === "ArrowUp") {
+                e.preventDefault();
+                setPick((p) => (p - 1 + matches.length) % matches.length);
+                return;
+              }
+              if (e.key === "Enter" || e.key === "Tab") {
+                e.preventDefault();
+                choose(matches[pick] ?? matches[0]!);
+                return;
+              }
+              if (e.key === "Escape") {
+                e.preventDefault();
+                setCaretAt(null);
+                return;
+              }
+            }
             // Enter sends, Shift+Enter breaks the line — scoped to this
             // textarea only, nothing global.
             if (e.key === "Enter" && !e.shiftKey) {
@@ -241,7 +422,7 @@ export const Composer = forwardRef<
           // and killing it here made the composer the one input in the app with
           // no visible focus at all.
           className={cn(
-            "min-h-9 flex-1 resize-none overflow-y-auto rounded-md border bg-raised px-3 py-2 text-sm text-ink placeholder:text-muted transition-colors duration-150 hover:border-line-strong focus-visible:border-line-strong",
+            "min-h-9 flex-1 resize-none overflow-y-hidden rounded-md border bg-raised px-3 py-2 text-sm text-ink placeholder:text-muted transition-colors duration-150 hover:border-line-strong focus-visible:border-line-strong",
             overrun ? "border-amber" : "border-line"
           )}
         />

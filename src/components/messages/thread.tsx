@@ -25,6 +25,7 @@ import {
   type Attachment,
   type ComposerHandle,
 } from "@/components/messages/composer";
+import { RichText } from "@/components/messages/rich-text";
 import { CHAT_THUMB_TRANSFORM, chatImagePath } from "@/lib/messages-shared";
 import { buttonClasses, cn } from "@/lib/utils";
 import type { MembersMap, Message, MessageImage } from "@/lib/types";
@@ -188,7 +189,7 @@ export function MessageThread({
 
   // A mark needs real attention (tab visible + focused + newest line on screen)
   // and coalesces a burst into one round trip. See use-read-marker.ts.
-  const { mark, flush: flushRead } = useReadMarker(otherId, nearBottom);
+  const { mark, markNow, flush: flushRead } = useReadMarker(otherId, nearBottom);
   // Held in a ref so the realtime subscription below doesn't take it as a
   // dependency and re-subscribe.
   const markRef = useRef(mark);
@@ -200,7 +201,10 @@ export function MessageThread({
   // marking refreshes the tree (that's how the badge drops), and doing that on
   // every quiet open would be a server round trip for nothing.
   useEffect(() => {
-    if (initialUnread) mark();
+    // markNow, not mark: opening a thread IS reading it, and the "N new" divider
+    // means we deliberately don't land at the bottom, so the near-bottom gate
+    // would hold the mark exactly when there is something to clear.
+    if (initialUnread) markNow();
     // Mount-only by design — later unreads are handled by the INSERT stream.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -315,9 +319,22 @@ export function MessageThread({
   // every server refresh after that; otherwise the one thing telling you where
   // you left off vanishes as you look at it. Never updated after mount, so the
   // initialiser is the whole story.
-  const [unreadAnchorId] = useState(firstUnreadId);
+  const [unreadAnchorId, setUnreadAnchorId] = useState(firstUnreadId);
   const [unreadAtOpen] = useState(unreadCount);
   const unreadRef = useRef<HTMLDivElement>(null);
+
+  /**
+   * Retire the divider once the reader has actually caught up.
+   *
+   * It is frozen against server refreshes on purpose, but it must not become a
+   * lie: a line reading "1 new message" above a message you have just read and
+   * scrolled past is stale furniture. With a single unread the open scroll
+   * already lands at the bottom, so it clears immediately — which is right,
+   * because a divider earns its place at fourteen unread, not at one.
+   */
+  const retireDivider = useCallback(() => {
+    if (unreadAnchorId && nearBottom()) setUnreadAnchorId(null);
+  }, [unreadAnchorId, nearBottom]);
 
   // Keep the right thing in view. On first paint that's the "N new" divider if
   // there is one, and the newest line otherwise. After that: an INCOMING line
@@ -337,6 +354,9 @@ export function MessageThread({
       forceScroll.current = false;
       if (unreadRef.current) {
         unreadRef.current.scrollIntoView({ behavior: "instant", block: "center" });
+        // Checked here as well as on scroll: a thread short enough not to
+        // overflow fires no scroll event at all, and its divider would stick.
+        retireDivider();
         return;
       }
       endRef.current?.scrollIntoView({ behavior: "instant", block: "end" });
@@ -350,7 +370,7 @@ export function MessageThread({
       });
     }
     forceScroll.current = false;
-  }, [messages, nearBottom]);
+  }, [messages, nearBottom, retireDivider]);
 
   /**
    * Thumbnails only. The full-size URL is signed AT CLICK in `openLightbox`,
@@ -533,6 +553,33 @@ export function MessageThread({
     });
   }, [messages, meId, otherId, members, audience, readMarkers]);
 
+  // Which `@word` tokens are real people, for highlighting. Built from the whole
+  // members map rather than the audience, so a name still reads as a mention
+  // after someone leaves the team.
+  const mentionNames = useMemo(
+    () =>
+      new Set(
+        Object.values(members).map((m) => m.name.split(" ")[0]!.toLowerCase())
+      ),
+    [members]
+  );
+  const myFirstName = useMemo(
+    () => members[meId]?.name.split(" ")[0]?.toLowerCase(),
+    [members, meId]
+  );
+
+  /**
+   * Who the @ menu can offer. The group chat's audience minus me; undefined in a
+   * DM, which turns the `@` key back into ordinary text.
+   */
+  const mentionable = useMemo(() => {
+    if (otherId !== null || !audience) return undefined;
+    return audience
+      .filter((id) => id !== meId && members[id])
+      .map((id) => ({ id, name: members[id]!.name }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [otherId, audience, members, meId]);
+
   // Walk backwards through history one page at a time. The cursor is the oldest
   // REAL row we hold — a temp row carries a client clock and would be a false
   // floor.
@@ -577,7 +624,11 @@ export function MessageThread({
   // No `sending` gate: sends PIPELINE. Each line gets its own temp row and its
   // own reconcile, so a quick second message never waits on the first one's
   // round-trip — the composer clears and you keep typing.
-  async function handleSend(clean: string, pending: Attachment[]) {
+  async function handleSend(
+    clean: string,
+    pending: Attachment[],
+    mentions: string[] = []
+  ) {
     if (!clean && pending.length === 0) return;
     const tempId = `temp-${Date.now()}-${Math.random().toString(36).slice(2)}`;
     const now = new Date().toISOString();
@@ -626,7 +677,7 @@ export function MessageThread({
           return { path, width: a.width, height: a.height };
         })
       );
-      const result = await sendMessage(otherId, clean, uploaded);
+      const result = await sendMessage(otherId, clean, uploaded, mentions);
       if (!result.ok) return fail(result.message);
       if (result.warning) toastError(result.warning);
       const row = result.row;
@@ -668,7 +719,10 @@ export function MessageThread({
         // Scrolling back down to the newest line is what makes a held read mark
         // true, so every scroll gives the marker a chance to flush. `flushRead`
         // is a no-op when nothing is pending.
-        onScroll={flushRead}
+        onScroll={() => {
+          flushRead();
+          retireDivider();
+        }}
         // role="log" makes arriving lines announce themselves — the transcript
         // used to be an inert stack of divs, so a screen-reader user was never
         // told a message had come in. `additions` keeps it to new bubbles rather
@@ -778,7 +832,11 @@ export function MessageThread({
                 )}
                 {r.m.body && (
                   <p className="whitespace-pre-wrap wrap-break-word text-sm leading-relaxed">
-                    {r.m.body}
+                    <RichText
+                      body={r.m.body}
+                      mentionNames={mentionNames}
+                      myName={myFirstName}
+                    />
                   </p>
                 )}
                 {r.m.images && r.m.images.length > 0 && (
@@ -839,7 +897,15 @@ export function MessageThread({
           </p>
         </div>
       ) : (
-        <Composer ref={composerRef} onSend={handleSend} autoFocus />
+        <Composer
+          ref={composerRef}
+          onSend={handleSend}
+          autoFocus
+          draftKey={`kagu:draft:${otherId ?? "team"}`}
+          // Group chat only: a DM's recipient is notified anyway, so @ there
+          // would just be a second bell for the same message.
+          mentionable={mentionable}
+        />
       )}
 
       {lightbox && (
