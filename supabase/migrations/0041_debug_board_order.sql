@@ -9,4 +9,4 @@
 -- No RLS change: projects_update already allows work members (which includes
 -- admins), and the reorder server action re-checks requireAdmin() anyway.
 -- No index — projects is a tiny table.
-alter table public.projects add column debug_position integer;
+alter table public.projects add column if not exists debug_position integer;

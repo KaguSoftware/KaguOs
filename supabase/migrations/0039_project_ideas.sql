@@ -29,7 +29,7 @@
 -- debug_tasks.found_by, where the discovered work outlives its audit).
 
 alter table public.ideas
-  add column project_id uuid references public.projects (id) on delete cascade;
+  add column if not exists project_id uuid references public.projects (id) on delete cascade;
 
 -- The project ideas view filters by this column on every load.
-create index ideas_project_idx on public.ideas (project_id);
+create index if not exists ideas_project_idx on public.ideas (project_id);

@@ -22,7 +22,7 @@
 -- ignore the app's notifications entirely. Show and sort only.
 
 alter table public.reminders
-  add column due_on date;
+  add column if not exists due_on date;
 
 -- The dashboard counts overdue reminders per person on every load.
-create index reminders_due_idx on public.reminders (due_on) where due_on is not null;
+create index if not exists reminders_due_idx on public.reminders (due_on) where due_on is not null;
