@@ -754,7 +754,12 @@ export function MessageThread({
               )}
               <div
                 className={cn(
-                  "flex max-w-[min(75%,34rem)] flex-col gap-1.5 rounded-lg px-3 py-1.5",
+                  // 34rem caps the measure at roughly the 70ch prose limit on a
+                  // wide screen. The percentage is what matters on a phone: at
+                  // 75% a 375px viewport gave a ~36ch line and stranded an 85px
+                  // gutter, so it reads wider there while the rem cap still
+                  // governs the desktop.
+                  "flex max-w-[min(88%,34rem)] flex-col gap-1.5 rounded-lg px-3 py-1.5",
                   // Shape, not just fill, carries mine-vs-theirs: the two fills
                   // are 1.14:1 and 1.05:1 against the page, which is no contrast
                   // at all. An asymmetric corner reads at any luminance, and
