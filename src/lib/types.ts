@@ -130,8 +130,37 @@ export type Message = {
   body: string;
   read_at: string | null;
   created_at: string;
+  /** The message this one replies to — same thread, enforced by 0049. */
+  reply_to_id: string | null;
+  /** The debug task this message shares as a card. */
+  task_id: string | null;
   /** Not a DB column — hydrated by the data fetcher from `message_images`. */
   images?: MessageImage[];
+  /** Not a DB column — the replied-to line, hydrated for the preview card.
+   *  Absent when `reply_to_id` is null OR when the original was deleted. */
+  reply_to?: MessageReplyRef | null;
+  /** Not a DB column — the shared task, hydrated for the preview card.
+   *  Absent when `task_id` is null or the reader can't see the debug board. */
+  task?: MessageTaskRef | null;
+};
+
+/** What a reply's quote card needs from the original message. */
+export type MessageReplyRef = {
+  id: string;
+  sender_id: string;
+  body: string;
+  /** The original carried at least one image — shown as "Photo" when the
+   *  body is empty, and worth a camera glyph either way. */
+  has_image: boolean;
+};
+
+/** What a shared task's preview card needs from the task. */
+export type MessageTaskRef = {
+  id: string;
+  title: string;
+  state: DebugState;
+  priority: DebugPriority;
+  kind: DebugKind;
 };
 
 /** One attached image on a chat message. */

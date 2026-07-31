@@ -242,25 +242,28 @@ export function TaskRow({
       : null;
 
   /**
-   * Jump to a DM with whoever filed this task, question already teed up: a
-   * `> title — /debug?q=…` quote line is stored as that thread's draft (the
-   * composer seeds from localStorage on mount) and the deep link reopens the
-   * board searched down to this task. Prepended ABOVE any half-typed draft,
-   * never over it — the same contract as the composer's own quote().
+   * Jump to a DM with whoever filed this task, question already teed up: the
+   * task is pinned as a CARD on the composer (stored under the thread's
+   * `:task` draft key, which the composer seeds from on mount), so the sent
+   * message carries a live task preview — title, kind, priority, state,
+   * clickable back to the board — instead of the old pasted `> title — link`
+   * line. Any half-typed words in the text draft are untouched.
    */
   function messageAuthor() {
     if (!task.created_by) return;
-    const link = `/debug?q=${encodeURIComponent(task.title.slice(0, 60))}`;
-    const line = `> ${task.title.slice(0, 90)} — ${link}\n`;
     try {
-      const key = `kagu:draft:${task.created_by}`;
-      const existing = window.localStorage.getItem(key) ?? "";
       window.localStorage.setItem(
-        key,
-        existing.trim() ? `${line}${existing}` : line
+        `kagu:draft:${task.created_by}:task`,
+        JSON.stringify({
+          id: task.id,
+          title: task.title,
+          state: task.state,
+          priority: task.priority,
+          kind: task.kind,
+        })
       );
     } catch {
-      // Storage unavailable — the chat still opens, just without the prefill.
+      // Storage unavailable — the chat still opens, just without the card.
     }
     router.push(`/messages/${task.created_by}`);
   }

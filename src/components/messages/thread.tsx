@@ -9,9 +9,11 @@ import {
   useState,
 } from "react";
 import Image from "next/image";
+import Link from "next/link";
 import { Loader2, Reply } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import {
+  getMessageRefs,
   loadOlderMessages,
   sendMessage,
   type SendImageInput,
@@ -24,7 +26,14 @@ import {
   Composer,
   type Attachment,
   type ComposerHandle,
+  type SendRefs,
 } from "@/components/messages/composer";
+import {
+  ReplyRefBody,
+  replySnippet,
+  TaskRefBody,
+  taskSearchHref,
+} from "@/components/messages/message-refs";
 import { RichText } from "@/components/messages/rich-text";
 import { CHAT_THUMB_TRANSFORM, chatImagePath } from "@/lib/messages-shared";
 import { buttonClasses, cn } from "@/lib/utils";
@@ -159,7 +168,14 @@ export function MessageThread({
       const fresh = new Map(initialMessages.map((m) => [m.id, m]));
       const merged = prev.map((m) => {
         const next = fresh.get(m.id);
-        return next ? { ...next, images: next.images ?? m.images } : m;
+        return next
+          ? {
+              ...next,
+              images: next.images ?? m.images,
+              reply_to: next.reply_to ?? m.reply_to,
+              task: next.task ?? m.task,
+            }
+          : m;
       });
       const held = new Set(prev.map((m) => m.id));
       for (const m of initialMessages) if (!held.has(m.id)) merged.push(m);
@@ -238,17 +254,46 @@ export function MessageThread({
               // My own line can stream in BEFORE sendMessage resolves — swap
               // it into the matching optimistic temp instead of appending, or
               // the message doubles for a beat until the action reconciles.
+              // The temp's hydrated ref cards ride along: the stream payload
+              // carries only the bare ids.
               if (row.sender_id === meId) {
                 const temp = prev.find(
                   (m) => m.id.startsWith("temp-") && m.body === row.body
                 );
                 if (temp)
                   return prev.map((m) =>
-                    m.id === temp.id ? { ...row, images: m.images } : m
+                    m.id === temp.id
+                      ? {
+                          ...row,
+                          images: m.images,
+                          reply_to: m.reply_to,
+                          task: m.task,
+                        }
+                      : m
                   );
               }
               return [...prev, row];
             });
+            // The stream payload has ids, not cards — one action call turns
+            // them into the quote/task previews. `?? res` in the setter keeps
+            // any hydration that got there first (the temp swap, the send's
+            // own return), so this can never clobber, only fill in.
+            if (row.reply_to_id || row.task_id) {
+              void getMessageRefs(row.reply_to_id, row.task_id).then((res) => {
+                if (!res.ok) return;
+                setMessages((prev) =>
+                  prev.map((m) =>
+                    m.id === row.id
+                      ? {
+                          ...m,
+                          reply_to: m.reply_to ?? res.reply,
+                          task: m.task ?? res.task,
+                        }
+                      : m
+                  )
+                );
+              });
+            }
             // Requests a mark; the helper decides whether the reader is actually
             // present, and coalesces a burst of lines into one round trip.
             if (row.sender_id !== meId) markRef.current();
@@ -261,7 +306,11 @@ export function MessageThread({
             const row = payload.new as Message;
             if (!accepts(row)) return;
             setMessages((prev) =>
-              prev.map((m) => (m.id === row.id ? { ...row, images: m.images } : m))
+              prev.map((m) =>
+                m.id === row.id
+                  ? { ...row, images: m.images, reply_to: m.reply_to, task: m.task }
+                  : m
+              )
             );
           }
         )
@@ -314,6 +363,76 @@ export function MessageThread({
     el.scrollTop = el.scrollHeight - fromBottom;
   }, [messages]);
 
+  /**
+   * Jump-to-original: clicking a reply's quote card scrolls the quoted line
+   * into view and flashes it, so the eye lands on the right bubble.
+   * `pendingJump` carries the target across the async gap when the original
+   * sits behind the loaded pages and has to be fetched first — the messages
+   * scroll effect consumes it after the commit. `flashId` drives a short
+   * ring on the target bubble; one message at a time.
+   */
+  const pendingJump = useRef<string | null>(null);
+  const jumpBusy = useRef(false);
+  const [flashId, setFlashId] = useState<string | null>(null);
+  useEffect(() => {
+    if (!flashId) return;
+    const t = window.setTimeout(() => setFlashId(null), 1600);
+    return () => window.clearTimeout(t);
+  }, [flashId]);
+
+  async function jumpToMessage(targetId: string) {
+    const calm = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const el = listRef.current?.querySelector(
+      `[data-mid="${CSS.escape(targetId)}"]`
+    );
+    if (el) {
+      el.scrollIntoView({
+        behavior: calm ? "instant" : "smooth",
+        block: "center",
+      });
+      setFlashId(targetId);
+      return;
+    }
+    // Behind the loaded pages — walk history back until the target is in
+    // hand, then let the scroll effect land on it. Bounded, so a click can't
+    // silently pull a year of chat; past the bound it simply stops where it
+    // got to, which is still closer to the original than where you were.
+    if (jumpBusy.current || !hasOlder) return;
+    jumpBusy.current = true;
+    setLoadingOlder(true);
+    try {
+      let pages: Message[] = [];
+      let cursor = messages.find((m) => !m.id.startsWith("temp-"))?.created_at;
+      // Annotated: the `!hasOlder` guard above narrows the state to `true`,
+      // and this variable must be allowed to become false again.
+      let more: boolean = hasOlder;
+      let found = false;
+      for (let i = 0; more && cursor && i < 20; i++) {
+        const res = await loadOlderMessages(otherId, cursor);
+        if (!res.ok || !res.messages) break;
+        pages = [...res.messages, ...pages];
+        more = res.hasOlder ?? false;
+        if (res.messages.some((m) => m.id === targetId)) {
+          found = true;
+          break;
+        }
+        cursor = res.messages[0]?.created_at;
+      }
+      if (pages.length === 0) return;
+      setHasOlder(more);
+      pendingJump.current = found ? targetId : null;
+      setMessages((prev) => {
+        const ids = new Set(prev.map((m) => m.id));
+        return [...pages.filter((m) => !ids.has(m.id)), ...prev];
+      });
+    } catch {
+      // A failed walk leaves the thread exactly as it was — not worth a toast.
+    } finally {
+      jumpBusy.current = false;
+      setLoadingOlder(false);
+    }
+  }
+
   // Frozen at mount — state, not a ref, because the render reads it. The divider
   // has to survive the mark-as-read that follows immediately after open, and
   // every server refresh after that; otherwise the one thing telling you where
@@ -348,6 +467,20 @@ export function MessageThread({
     const calm =
       typeof window !== "undefined" &&
       window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+    // A quote-card jump whose target had to be FETCHED lands here, once the
+    // older pages are committed and the target's node exists. Handled before
+    // every other scroll rule, or the near-bottom branch below would yank the
+    // reader straight back down to the newest line.
+    if (pendingJump.current) {
+      const id = pendingJump.current;
+      pendingJump.current = null;
+      listRef.current
+        ?.querySelector(`[data-mid="${CSS.escape(id)}"]`)
+        ?.scrollIntoView({ behavior: "instant", block: "center" });
+      setFlashId(id);
+      return;
+    }
 
     if (firstScroll.current) {
       firstScroll.current = false;
@@ -622,21 +755,19 @@ export function MessageThread({
   }
 
   /**
-   * One click on a bubble's reply control: quote the line into the composer
-   * and put the cursor after it, ready for the answer. A visible `> Name: …`
-   * line rather than a thread model — the messages table is flat, and a quote
-   * that travels in the body works everywhere the body does (exports, search,
-   * the other person's phone). RichText renders `> ` lines as a quote.
+   * One click on a bubble's reply control: pin the message above the composer
+   * as a live reference. The message row carries `reply_to_id` (0049), so the
+   * sent bubble shows a QUOTE CARD of the original — clickable, jumps back to
+   * the quoted line — instead of the old pasted `> Name: …` body text.
    */
   function startReply(r: Row) {
-    const firstLine = r.m.body.split("\n").find((l) => l.trim()) ?? "";
-    const snippet =
-      firstLine.length > 90
-        ? `${firstLine.slice(0, 90).trimEnd()}…`
-        : firstLine || "(image)";
-    composerRef.current?.quote(
-      `> ${firstName(members, r.m.sender_id)}: ${snippet}`
-    );
+    composerRef.current?.reply({
+      id: r.m.id,
+      sender_id: r.m.sender_id,
+      body: r.m.body,
+      has_image: (r.m.images?.length ?? 0) > 0,
+      senderName: firstName(members, r.m.sender_id),
+    });
   }
 
   // No `sending` gate: sends PIPELINE. Each line gets its own temp row and its
@@ -645,9 +776,10 @@ export function MessageThread({
   async function handleSend(
     clean: string,
     pending: Attachment[],
-    mentions: string[] = []
+    mentions: string[] = [],
+    refs: SendRefs = { replyTo: null, task: null }
   ) {
-    if (!clean && pending.length === 0) return;
+    if (!clean && pending.length === 0 && !refs.task) return;
     const tempId = `temp-${Date.now()}-${Math.random().toString(36).slice(2)}`;
     const now = new Date().toISOString();
     const temp: Message = {
@@ -657,6 +789,12 @@ export function MessageThread({
       body: clean,
       read_at: null,
       created_at: now,
+      reply_to_id: refs.replyTo?.id ?? null,
+      task_id: refs.task?.id ?? null,
+      // The optimistic bubble renders the SAME cards the real row will — the
+      // composer's pins already hold everything the previews need.
+      reply_to: refs.replyTo,
+      task: refs.task,
       images: pending.map((a, i) => ({
         id: `${tempId}-img-${i}`,
         message_id: tempId,
@@ -672,7 +810,7 @@ export function MessageThread({
     const fail = (message: string) => {
       setMessages((prev) => prev.filter((m) => m.id !== tempId));
       // Hand the words back — the composer refuses to overwrite new typing.
-      composerRef.current?.restore(clean, pending);
+      composerRef.current?.restore(clean, pending, refs);
       toastError(message);
     };
 
@@ -695,7 +833,10 @@ export function MessageThread({
           return { path, width: a.width, height: a.height };
         })
       );
-      const result = await sendMessage(otherId, clean, uploaded, mentions);
+      const result = await sendMessage(otherId, clean, uploaded, mentions, {
+        replyToId: refs.replyTo?.id ?? null,
+        taskId: refs.task?.id ?? null,
+      });
       if (!result.ok) return fail(result.message);
       if (result.warning) toastError(result.warning);
       const row = result.row;
@@ -780,7 +921,8 @@ export function MessageThread({
           </p>
         )}
         {rows.map((r) => (
-          <div key={r.m.id}>
+          // data-mid is the jump anchor a reply's quote card scrolls to.
+          <div key={r.m.id} data-mid={r.m.id}>
             {r.m.id === unreadAnchorId && (
               <div
                 ref={unreadRef}
@@ -850,7 +992,11 @@ export function MessageThread({
                     // luminance, and side-stripe borders are banned.
                     r.mine
                       ? "rounded-br-sm bg-raised text-ink"
-                      : "rounded-bl-sm border border-line-strong bg-surface text-ink"
+                      : "rounded-bl-sm border border-line-strong bg-surface text-ink",
+                    // The jump target's flash: a ring that appears instantly
+                    // and fades out via the transition when flashId clears.
+                    "transition-shadow duration-500",
+                    flashId === r.m.id && "ring-2 ring-primary-dim/60"
                   )}
                 >
                   {/* In a DM the sender is conveyed by ALIGNMENT only, which
@@ -861,6 +1007,44 @@ export function MessageThread({
                       {r.mine ? "You" : r.senderName}:
                     </span>
                   )}
+                  {/* The quoted original, as a live card — click jumps back to
+                      the quoted line and flashes it. Rendered only once
+                      hydrated; originals can't be deleted (no delete policy),
+                      so "missing" is only ever a beat of realtime lag. */}
+                  {r.m.reply_to && (
+                    <button
+                      type="button"
+                      onClick={() => void jumpToMessage(r.m.reply_to!.id)}
+                      aria-label={`Go to the quoted message from ${firstName(members, r.m.reply_to.sender_id)}`}
+                      className="block w-full rounded-md bg-line-strong/20 px-2 py-1.5 transition-colors duration-150 hover:bg-line-strong/35"
+                    >
+                      <ReplyRefBody
+                        name={firstName(members, r.m.reply_to.sender_id)}
+                        nameColor={
+                          otherId === null
+                            ? members[r.m.reply_to.sender_id]?.color
+                            : undefined
+                        }
+                        snippet={replySnippet(r.m.reply_to)}
+                        hasImage={r.m.reply_to.has_image}
+                      />
+                    </button>
+                  )}
+                  {/* The shared task, as a card that opens the board searched
+                      down to it. A ref that didn't hydrate (no debug access)
+                      degrades to a plain marker rather than a dead link. */}
+                  {r.m.task ? (
+                    <Link
+                      href={taskSearchHref(r.m.task)}
+                      className="block rounded-md border border-line bg-line-strong/15 px-2.5 py-1.5 transition-colors duration-150 hover:border-line-strong"
+                    >
+                      <TaskRefBody task={r.m.task} />
+                    </Link>
+                  ) : r.m.task_id ? (
+                    <span className="block rounded-md border border-line px-2.5 py-1.5 text-xs text-faint">
+                      A task from the debug board
+                    </span>
+                  ) : null}
                   {r.m.body && (
                     <p className="whitespace-pre-wrap wrap-break-word text-sm leading-relaxed">
                       <RichText

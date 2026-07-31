@@ -21,7 +21,12 @@ import {
   MAX_MESSAGE_LEN,
 } from "@/lib/messages-shared";
 import type { ActionResult } from "@/lib/actions/account";
-import type { Message, MessageImage } from "@/lib/types";
+import type {
+  Message,
+  MessageImage,
+  MessageReplyRef,
+  MessageTaskRef,
+} from "@/lib/types";
 
 export type SendResult = ActionResult & {
   row?: Message;
@@ -53,6 +58,12 @@ export type SendImageInput = {
   height: number | null;
 };
 
+/** References a message can carry: the line it replies to, the task it shares. */
+export type SendRefsInput = {
+  replyToId?: string | null;
+  taskId?: string | null;
+};
+
 /**
  * Send a chat message. `recipientId` null = the Work-team group chat.
  * `images` are already-uploaded bytes (browser → `chat-images` bucket
@@ -73,7 +84,8 @@ export async function sendMessage(
   body: string,
   images: SendImageInput[] = [],
   /** User ids named with @ in this message. Group chat only — see notifyMentions. */
-  mentions: string[] = []
+  mentions: string[] = [],
+  refs: SendRefsInput = {}
 ): Promise<SendResult> {
   const showcaseStop = await blockIfShowcase();
   if (showcaseStop) return showcaseStop;
@@ -82,7 +94,9 @@ export async function sendMessage(
     return { ok: false, message: "Chat is for the work team." };
 
   const clean = body.trim().slice(0, MAX_MESSAGE_LEN);
-  if (!clean && images.length === 0)
+  // A task card can travel alone, like an image can — a reply cannot, because
+  // a bare quote with no answer says nothing.
+  if (!clean && images.length === 0 && !refs.taskId)
     return { ok: false, message: "Write something or attach an image." };
   if (recipientId === ctx.userId)
     return { ok: false, message: "That's you." };
@@ -177,19 +191,85 @@ export async function sendMessage(
     shouldNotify = noUnread && quiet;
   }
 
+  /**
+   * Validate the refs BEFORE the insert, under this sender's own RLS — a
+   * reply must point into this very thread (0049 also enforces it in the
+   * database), and both ids must still exist: `on delete set null` protects
+   * rows already written, but INSERTING a dangling id is an FK violation.
+   *
+   * A ref that fails is DROPPED, not fatal — the words still matter, and the
+   * likely cause is a race (the task was deleted while the card sat in the
+   * composer). The sender is told via the same non-fatal `warning` channel the
+   * image path uses. Exception: a task-only send whose task vanished has
+   * nothing left to say, so that one fails outright.
+   */
+  let replyRef: MessageReplyRef | null = null;
+  let taskRef: MessageTaskRef | null = null;
+  let refWarning: string | undefined;
+  if (refs.replyToId || refs.taskId) {
+    const [original, originalImage, task] = await Promise.all([
+      refs.replyToId
+        ? ctx.supabase
+            .from("messages")
+            .select("id, sender_id, recipient_id, body")
+            .eq("id", refs.replyToId)
+            .maybeSingle()
+        : Promise.resolve(null),
+      refs.replyToId
+        ? ctx.supabase
+            .from("message_images")
+            .select("id", { count: "exact", head: true })
+            .eq("message_id", refs.replyToId)
+        : Promise.resolve(null),
+      refs.taskId
+        ? ctx.supabase
+            .from("debug_tasks")
+            .select("id, title, state, priority, kind")
+            .eq("id", refs.taskId)
+            .maybeSingle()
+        : Promise.resolve(null),
+    ]);
+
+    if (refs.replyToId) {
+      const o = original?.data;
+      const sameThread =
+        o != null &&
+        (recipientId === null
+          ? o.recipient_id === null
+          : (o.sender_id === ctx.userId && o.recipient_id === recipientId) ||
+            (o.sender_id === recipientId && o.recipient_id === ctx.userId));
+      if (sameThread)
+        replyRef = {
+          id: o.id,
+          sender_id: o.sender_id,
+          body: o.body,
+          has_image: (originalImage?.count ?? 0) > 0,
+        };
+      else refWarning = "Sent, but the replied-to message is gone.";
+    }
+    if (refs.taskId) {
+      if (task?.data) taskRef = task.data as MessageTaskRef;
+      else if (!clean && images.length === 0)
+        return { ok: false, message: "That task no longer exists." };
+      else refWarning = "Sent, but that task no longer exists.";
+    }
+  }
+
   const { data: row, error } = await ctx.supabase
     .from("messages")
     .insert({
       sender_id: ctx.userId,
       recipient_id: recipientId,
       body: clean,
+      reply_to_id: replyRef?.id ?? null,
+      task_id: taskRef?.id ?? null,
     })
     .select()
     .single();
   if (error) return { ok: false, message: error.message };
 
   let imageRows: MessageImage[] = [];
-  let warning: string | undefined;
+  let warning: string | undefined = refWarning;
   if (bounded.length > 0) {
     const { data: inserted, error: imageError } = await ctx.supabase
       .from("message_images")
@@ -275,7 +355,67 @@ export async function sendMessage(
     ok: true,
     message: "Sent.",
     warning,
-    row: { ...(row as Message), images: imageRows },
+    row: {
+      ...(row as Message),
+      images: imageRows,
+      reply_to: replyRef,
+      task: taskRef,
+    },
+  };
+}
+
+export type MessageRefsResult = ActionResult & {
+  reply?: MessageReplyRef | null;
+  task?: MessageTaskRef | null;
+};
+
+/**
+ * Hydrate the preview cards for ONE message's refs — the realtime INSERT
+ * payload carries bare ids, and the receiving client has to turn them into a
+ * quote card and a task card without a full refetch. Reads under the caller's
+ * own RLS, so it can't show anyone a line or a task they couldn't read anyway.
+ * A read, not a mutation, but a client component can only reach the server
+ * through an action (same note as loadOlderMessages).
+ */
+export async function getMessageRefs(
+  replyToId: string | null,
+  taskId: string | null
+): Promise<MessageRefsResult> {
+  const ctx = await getSessionContext();
+  if (ctx.showcase) return { ok: false, message: "Not available in showcase." };
+  if (!canAccess(ctx, "work"))
+    return { ok: false, message: "Chat is for the work team." };
+
+  const [original, originalImage, task] = await Promise.all([
+    replyToId
+      ? ctx.supabase
+          .from("messages")
+          .select("id, sender_id, body")
+          .eq("id", replyToId)
+          .maybeSingle()
+      : Promise.resolve(null),
+    replyToId
+      ? ctx.supabase
+          .from("message_images")
+          .select("id", { count: "exact", head: true })
+          .eq("message_id", replyToId)
+      : Promise.resolve(null),
+    taskId
+      ? ctx.supabase
+          .from("debug_tasks")
+          .select("id, title, state, priority, kind")
+          .eq("id", taskId)
+          .maybeSingle()
+      : Promise.resolve(null),
+  ]);
+
+  return {
+    ok: true,
+    message: "Loaded.",
+    reply: original?.data
+      ? { ...original.data, has_image: (originalImage?.count ?? 0) > 0 }
+      : null,
+    task: (task?.data as MessageTaskRef | undefined) ?? null,
   };
 }
 

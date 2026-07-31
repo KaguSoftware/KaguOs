@@ -16,7 +16,11 @@ function preview(m: Message, meId: string) {
   const mine = m.sender_id === meId ? "You: " : "";
   // An image-only message has an empty body, so this used to render a blank
   // preview (and a blank toast) — the row looked like it had no message at all.
-  const body = m.body || (m.images?.length ? "Sent an image" : "");
+  // A task card can travel alone too (task_id is a real column, so it's on the
+  // inbox rows even though the card itself is only hydrated in the thread).
+  const body =
+    m.body ||
+    (m.images?.length ? "Sent an image" : m.task_id ? "Shared a task" : "");
   return `${mine}${body}`;
 }
 

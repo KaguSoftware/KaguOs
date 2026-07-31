@@ -2,7 +2,12 @@ import { cache } from "react";
 import { canAccess, type SessionContext } from "@/lib/data/session";
 import { rowsOrThrow, selectOrThrow } from "@/lib/data/query";
 import { getPresence } from "@/lib/data/presence";
-import type { Message, MessageImage } from "@/lib/types";
+import type {
+  Message,
+  MessageImage,
+  MessageReplyRef,
+  MessageTaskRef,
+} from "@/lib/types";
 
 /**
  * Chat data. Audience = the presence audience (Work members, admins included);
@@ -116,6 +121,77 @@ async function attachImages(
   return rows.map((r) => ({ ...r, images: byMessage.get(r.id) }));
 }
 
+/**
+ * Attach each row's reply/task preview cards — batched like `attachImages`,
+ * never one query per message.
+ *
+ * Hydration is a plain SELECT under the READER's RLS, which is the whole
+ * security story: a reply ref into this thread resolves for everyone here
+ * (0049 forbids cross-thread refs at insert), and a task ref resolves only for
+ * readers who hold the debug section. A ref that doesn't resolve — deleted
+ * original, no board access — just stays unhydrated and the card degrades.
+ */
+async function attachRefs(
+  ctx: SessionContext,
+  rows: Message[]
+): Promise<Message[]> {
+  const replyIds = [
+    ...new Set(rows.map((r) => r.reply_to_id).filter((id): id is string => !!id)),
+  ];
+  const taskIds = [
+    ...new Set(rows.map((r) => r.task_id).filter((id): id is string => !!id)),
+  ];
+  if (replyIds.length === 0 && taskIds.length === 0) return rows;
+
+  const [originals, originalImages, tasks] = await Promise.all([
+    replyIds.length
+      ? rowsOrThrow<{ id: string; sender_id: string; body: string }>(
+          ctx.supabase
+            .from("messages")
+            .select("id, sender_id, body")
+            .in("id", replyIds),
+          "messages: reply refs"
+        )
+      : Promise.resolve([]),
+    // Only whether an image EXISTS — the quote card says "Photo", it doesn't
+    // render the pixels.
+    replyIds.length
+      ? rowsOrThrow<{ message_id: string }>(
+          ctx.supabase
+            .from("message_images")
+            .select("message_id")
+            .in("message_id", replyIds),
+          "message_images: reply refs"
+        )
+      : Promise.resolve([]),
+    taskIds.length
+      ? rowsOrThrow<MessageTaskRef>(
+          ctx.supabase
+            .from("debug_tasks")
+            .select("id, title, state, priority, kind")
+            .in("id", taskIds),
+          "debug_tasks: message refs"
+        )
+      : Promise.resolve([]),
+  ]);
+
+  const withImage = new Set(originalImages.map((i) => i.message_id));
+  const replyById = new Map<string, MessageReplyRef>(
+    originals.map((o) => [o.id, { ...o, has_image: withImage.has(o.id) }])
+  );
+  const taskById = new Map(tasks.map((t) => [t.id, t]));
+
+  return rows.map((r) =>
+    r.reply_to_id || r.task_id
+      ? {
+          ...r,
+          reply_to: r.reply_to_id ? (replyById.get(r.reply_to_id) ?? null) : null,
+          task: r.task_id ? (taskById.get(r.task_id) ?? null) : null,
+        }
+      : r
+  );
+}
+
 export type InboxSummary = {
   /** Per-partner: their latest message either direction + my unread from them. */
   direct: Record<string, { last: Message; unread: number }>;
@@ -224,7 +300,7 @@ async function toPage(
   const hasOlder = rows.length > THREAD_PAGE;
   const page = hasOlder ? rows.slice(0, THREAD_PAGE) : rows;
   return {
-    messages: await attachImages(ctx, [...page].reverse()),
+    messages: await attachRefs(ctx, await attachImages(ctx, [...page].reverse())),
     hasOlder,
   };
 }

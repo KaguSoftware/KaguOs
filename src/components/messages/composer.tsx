@@ -12,12 +12,18 @@ import Image from "next/image";
 import { ImagePlus, SendHorizontal, X } from "lucide-react";
 import { useToast } from "@/components/ui/toast";
 import {
+  ReplyRefBody,
+  replySnippet,
+  TaskRefBody,
+} from "@/components/messages/message-refs";
+import {
   ALLOWED_IMAGE_TYPES,
   MAX_IMAGES_PER_MESSAGE,
   MAX_IMAGE_BYTES,
   MAX_MESSAGE_LEN,
 } from "@/lib/messages-shared";
 import { cn } from "@/lib/utils";
+import type { MessageReplyRef, MessageTaskRef } from "@/lib/types";
 
 export type Attachment = {
   file: File;
@@ -26,13 +32,34 @@ export type Attachment = {
   height: number | null;
 };
 
+/** The reply being composed: the ref the server needs + the name the chip
+ *  shows (the composer has no members map of its own). */
+export type ReplyDraft = MessageReplyRef & { senderName: string };
+
+/** What a send carries besides words and images. */
+export type SendRefs = {
+  replyTo: ReplyDraft | null;
+  task: MessageTaskRef | null;
+};
+
 export type ComposerHandle = {
-  /** Hand words and files back after a failed send. */
-  restore: (text: string, files: Attachment[]) => void;
-  /** Drop a `> quoted` reply line into the draft and focus the box. */
-  quote: (line: string) => void;
+  /** Hand words, files and refs back after a failed send. */
+  restore: (text: string, files: Attachment[], refs?: SendRefs) => void;
+  /** Pin the message being replied to above the box and focus it. */
+  reply: (draft: ReplyDraft) => void;
   focus: () => void;
 };
+
+/** A JSON value persisted beside the text draft (reply target, task card). */
+function readStored<T>(key: string | null): T | null {
+  if (!key || typeof window === "undefined") return null;
+  try {
+    const raw = window.localStorage.getItem(key);
+    return raw ? (JSON.parse(raw) as T) : null;
+  } catch {
+    return null;
+  }
+}
 
 /** Tallest the box grows before it starts scrolling instead. */
 const MAX_HEIGHT_PX = 160;
@@ -75,7 +102,12 @@ function measure(file: File): Promise<{ width: number; height: number } | null> 
 export const Composer = forwardRef<
   ComposerHandle,
   {
-    onSend: (text: string, files: Attachment[], mentions: string[]) => void;
+    onSend: (
+      text: string,
+      files: Attachment[],
+      mentions: string[],
+      refs: SendRefs
+    ) => void;
     /** Focus on mount — opening a chat should put the cursor where you type. */
     autoFocus?: boolean;
     /**
@@ -107,6 +139,19 @@ export const Composer = forwardRef<
     }
   });
   const [attachments, setAttachments] = useState<Attachment[]>([]);
+  /**
+   * Pinned refs, persisted beside the text under `${draftKey}:reply` /
+   * `:task` — the task card HAS to survive a navigation, because it is
+   * attached from the debug board (task-row's messageAuthor writes the key,
+   * then routes here), and a reply should survive a reload for the same
+   * reason the words do.
+   */
+  const [replyTo, setReplyTo] = useState<ReplyDraft | null>(() =>
+    readStored<ReplyDraft>(draftKey ? `${draftKey}:reply` : null)
+  );
+  const [task, setTask] = useState<MessageTaskRef | null>(() =>
+    readStored<MessageTaskRef>(draftKey ? `${draftKey}:task` : null)
+  );
   /** Everyone picked from the @ menu this draft — filtered again on submit. */
   const [named, setNamed] = useState<{ id: string; name: string }[]>([]);
   /** Caret position, so the @ picker can tell which token it is inside. */
@@ -117,17 +162,20 @@ export const Composer = forwardRef<
   const { error: toastError } = useToast();
 
   useImperativeHandle(ref, () => ({
-    restore: (text, files) => {
+    restore: (text, files, refs) => {
       // Never overwrite words typed since the failure.
       setDraft((d) => (d.trim() ? d : text));
       setAttachments(files);
+      // Same restraint for the refs: don't clobber ones pinned since.
+      if (refs?.replyTo) setReplyTo((r) => r ?? refs.replyTo);
+      if (refs?.task) setTask((t) => t ?? refs.task);
     },
-    quote: (line) => {
-      // ABOVE the draft, never instead of it — a reply click must not eat a
-      // half-typed message. The caret lands at the very end either way, which
-      // is where the answer gets written.
-      setDraft((d) => (d.trim() ? `${line}\n${d}` : `${line}\n`));
-      // After React has committed the new value, like choose() below.
+    reply: (draft) => {
+      // Pinned ABOVE the draft, never written into it — the words the user
+      // has half-typed stay theirs, and the quote stays a live reference
+      // rather than pasted text. Replying to a second message just retargets.
+      setReplyTo(draft);
+      // After React has committed, like choose() below.
       requestAnimationFrame(() => {
         const el = boxRef.current;
         if (!el) return;
@@ -171,6 +219,32 @@ export const Composer = forwardRef<
       // Storage unavailable; the draft simply isn't persisted.
     }
   }, [draft, draftKey]);
+
+  // The pinned refs persist the same way the words do — removed when cleared,
+  // so cancelling a reply doesn't leave a stale key that re-pins it on reload.
+  useEffect(() => {
+    if (!draftKey) return;
+    try {
+      if (replyTo)
+        window.localStorage.setItem(
+          `${draftKey}:reply`,
+          JSON.stringify(replyTo)
+        );
+      else window.localStorage.removeItem(`${draftKey}:reply`);
+    } catch {
+      // Storage unavailable; the pin simply isn't persisted.
+    }
+  }, [replyTo, draftKey]);
+  useEffect(() => {
+    if (!draftKey) return;
+    try {
+      if (task)
+        window.localStorage.setItem(`${draftKey}:task`, JSON.stringify(task));
+      else window.localStorage.removeItem(`${draftKey}:task`);
+    } catch {
+      // Storage unavailable; the pin simply isn't persisted.
+    }
+  }, [task, draftKey]);
 
   async function addFiles(files: FileList | null) {
     if (!files || files.length === 0) return;
@@ -272,7 +346,9 @@ export const Composer = forwardRef<
 
   function submit() {
     const clean = draft.trim();
-    if (!clean && attachments.length === 0) return;
+    // A task card can go alone (it says something by itself); a bare reply
+    // pin cannot — a quote with no answer is nothing.
+    if (!clean && attachments.length === 0 && !task) return;
     // Only ids whose token SURVIVED in the final text are sent — deleting the
     // "@Kemal" you typed must un-mention Kemal, not leave a silent bell behind.
     const ids = named
@@ -285,8 +361,10 @@ export const Composer = forwardRef<
     setDraft("");
     setAttachments([]);
     setNamed([]);
+    setReplyTo(null);
+    setTask(null);
     if (fileRef.current) fileRef.current.value = "";
-    onSend(clean, attachments, ids);
+    onSend(clean, attachments, ids, { replyTo, task });
   }
 
   const overrun = draft.length >= COUNTER_AT;
@@ -328,6 +406,44 @@ export const Composer = forwardRef<
             </li>
           ))}
         </ul>
+      )}
+      {/* The pinned refs: what this message replies to, the task it shares.
+          Live previews of the referenced rows — not text pasted into the
+          draft — so what you see above the box is exactly the card the
+          message will carry. */}
+      {replyTo && (
+        <div className="mb-2 flex items-center gap-2 rounded-md border border-line bg-raised px-2.5 py-1.5">
+          <div className="min-w-0 flex-1">
+            <ReplyRefBody
+              name={`Replying to ${replyTo.senderName}`}
+              snippet={replySnippet(replyTo)}
+              hasImage={replyTo.has_image}
+            />
+          </div>
+          <button
+            type="button"
+            onClick={() => setReplyTo(null)}
+            aria-label={`Cancel reply to ${replyTo.senderName}`}
+            className="grid size-6 shrink-0 place-items-center rounded-md text-faint transition-colors duration-150 hover:text-ink"
+          >
+            <X className="size-3.5" aria-hidden />
+          </button>
+        </div>
+      )}
+      {task && (
+        <div className="mb-2 flex items-center gap-2 rounded-md border border-line bg-raised px-2.5 py-1.5">
+          <div className="min-w-0 flex-1">
+            <TaskRefBody task={task} />
+          </div>
+          <button
+            type="button"
+            onClick={() => setTask(null)}
+            aria-label={`Remove task ${task.title}`}
+            className="grid size-6 shrink-0 place-items-center rounded-md text-faint transition-colors duration-150 hover:text-ink"
+          >
+            <X className="size-3.5" aria-hidden />
+          </button>
+        </div>
       )}
       {attachments.length > 0 && (
         <ul className="mb-2 flex flex-wrap gap-2">
@@ -419,6 +535,13 @@ export const Composer = forwardRef<
                 return;
               }
             }
+            // With the @ menu closed, Escape unpins the reply — the same key
+            // that dismisses every other transient surface in the app.
+            if (e.key === "Escape" && replyTo) {
+              e.preventDefault();
+              setReplyTo(null);
+              return;
+            }
             // Enter sends, Shift+Enter breaks the line — scoped to this
             // textarea only, nothing global.
             if (e.key === "Enter" && !e.shiftKey) {
@@ -444,7 +567,7 @@ export const Composer = forwardRef<
         <button
           type="button"
           onClick={submit}
-          disabled={!draft.trim() && attachments.length === 0}
+          disabled={!draft.trim() && attachments.length === 0 && !task}
           aria-label="Send"
           className="flex size-9 shrink-0 items-center justify-center rounded-md bg-primary text-primary-ink transition-transform duration-150 active:scale-[0.98] disabled:opacity-40"
         >
