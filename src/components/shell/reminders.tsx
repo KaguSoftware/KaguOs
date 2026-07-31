@@ -49,7 +49,15 @@ export function Reminders({
   }
 
   const pending = false;
-  const openCount = items.filter((r) => !r.done).length;
+
+  // Last line of defence for "Just me": a personal reminder that isn't mine
+  // never renders, whatever the server handed us. The fetch and RLS both
+  // already enforce this — a private note leaking is the one failure this
+  // panel must not have, so the rule is stated at every layer that renders it.
+  const visible = items.filter(
+    (r) => r.scope === "team" || r.owner_id === meId
+  );
+  const openCount = visible.filter((r) => !r.done).length;
 
   /**
    * Dated first, soonest first; undated keep their existing order at the end.
@@ -58,7 +66,7 @@ export function Reminders({
    * looking at the same team reminder must agree on whether it has slipped.
    */
   const today = todayInIstanbul();
-  const sorted = [...items].sort((a, b) => {
+  const sorted = [...visible].sort((a, b) => {
     if (a.due_on && b.due_on) return a.due_on.localeCompare(b.due_on);
     if (a.due_on) return -1;
     if (b.due_on) return 1;
@@ -239,7 +247,7 @@ export function Reminders({
         </div>
       </form>
 
-      {items.length === 0 ? (
+      {visible.length === 0 ? (
         <p className="px-4 py-6 text-center text-[13px] text-faint">
           Nothing to remember yet — jot a note, or Share one with the team.
         </p>

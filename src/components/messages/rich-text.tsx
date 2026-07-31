@@ -1,3 +1,4 @@
+import { Fragment } from "react";
 import Link from "next/link";
 
 /**
@@ -43,7 +44,47 @@ export function RichText({
   mentionNames?: Set<string>;
   myName?: string;
 }) {
-  const parts = body.split(PATTERN);
+  // Line-aware so a `> ` line (what the reply button writes) renders as a
+  // quote. Tokens never span a newline — `[^\s]+` stops at whitespace — so
+  // per-line tokenising changes nothing for links and mentions. The parent's
+  // `whitespace-pre-wrap` turns the re-inserted "\n" strings back into breaks.
+  const lines = body.split("\n");
+  return (
+    <>
+      {lines.map((line, li) => {
+        const quoted = line.startsWith("> ");
+        const content = renderInline(
+          quoted ? line.slice(2) : line,
+          mentionNames,
+          myName
+        );
+        return (
+          <Fragment key={li}>
+            {li > 0 && "\n"}
+            {quoted ? (
+              // The `> ` marker becomes the border — showing both would say
+              // "quote" twice. inline-block so a wrapping quote keeps its
+              // border down the whole left edge, not just the first line.
+              <span className="inline-block max-w-full border-l-2 border-line-strong pl-2 text-faint">
+                {content}
+              </span>
+            ) : (
+              content
+            )}
+          </Fragment>
+        );
+      })}
+    </>
+  );
+}
+
+/** One line's inline content: links and `@mentions` made real, text as-is. */
+function renderInline(
+  text: string,
+  mentionNames?: Set<string>,
+  myName?: string
+) {
+  const parts = text.split(PATTERN);
 
   return (
     <>

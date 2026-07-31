@@ -111,6 +111,9 @@ export default async function DebugPage() {
           meId={ctx.userId}
           isAdmin={ctx.isAdmin}
           showcase={ctx.showcase}
+          // Messages sits behind the WORK gate and is closed in showcase —
+          // "Message author" only renders where the jump can actually land.
+          canMessage={!ctx.showcase && canAccess(ctx, "work")}
           suggestOptions={suggestOptions}
           focusItems={focusItems}
           initialImages={images as DebugTaskImage[]}

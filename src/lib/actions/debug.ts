@@ -239,11 +239,24 @@ export async function setTaskState(
   const ctx = await requireSection("debug");
   if (!STATES.includes(state)) return { ok: false, message: "Invalid state." };
 
-  const { error } = await ctx.supabase
+  // Guarded ON THE ROW, claimTask-style: state is "how far along is the person
+  // on it", so an unclaimed task has no state to report and the pills stay
+  // locked until someone claims it. The filter simply doesn't match an
+  // unclaimed row — zero rows back means "claim it first", no second trip to
+  // ask why. Migration 0048 enforces the same rule in the database.
+  const { data, error } = await ctx.supabase
     .from("debug_tasks")
     .update({ state })
-    .eq("id", taskId);
+    .eq("id", taskId)
+    .not("assignee_id", "is", null)
+    .select("id");
   if (error) return { ok: false, message: error.message };
+  if (!data || data.length === 0) {
+    return {
+      ok: false,
+      message: "Claim the task first — state tracks whoever holds it.",
+    };
+  }
 
   revalidatePath("/debug");
   return { ok: true, message: "State updated." };
@@ -414,11 +427,30 @@ export async function updateTasks(
     return { ok: false, message: "Nothing to change." };
   }
 
+  // Releasing a task and setting its state are two moves that contradict each
+  // other in one write (the row would end unclaimed with a fresh state, which
+  // the state guard exists to prevent). No caller combines them today; refuse
+  // rather than let the database trigger reject it with a raw exception.
+  if (update.state !== undefined && patch.claim === "unclaim") {
+    return {
+      ok: false,
+      message: "Unclaim and set state are separate moves — release them first.",
+    };
+  }
+
   const query = ctx.supabase.from("debug_tasks").update(update).in("id", unique);
   // The ownership guards — see the block comment above.
   if (patch.claim === "claim") query.is("assignee_id", null);
   if (patch.claim === "unclaim" && !ctx.isAdmin) {
     query.eq("assignee_id", ctx.userId);
+  }
+  // State needs a holder — the same rule as setTaskState, applied the same
+  // way: rows without an assignee simply aren't matched, and the changed /
+  // skipped split reports them. When the patch also CLAIMS, the claim guard
+  // above already scopes the write and the rows gain their holder in the same
+  // statement, so the state may ride along.
+  if (update.state !== undefined && patch.claim !== "claim") {
+    query.not("assignee_id", "is", null);
   }
 
   const { data, error } = await query.select("id");
@@ -437,7 +469,9 @@ export async function updateTasks(
           ? "Those are all taken already."
           : patch.claim === "unclaim"
             ? "None of those are yours to unclaim."
-            : "Nothing changed.",
+            : update.state !== undefined
+              ? "Those are all unclaimed — claim a task before setting its state."
+              : "Nothing changed.",
       changed,
       skipped,
     };
@@ -457,7 +491,9 @@ export async function updateTasks(
         ? ` — ${skipped} ${skipped === 1 ? "was" : "were"} already taken.`
         : patch.claim === "unclaim"
           ? ` — ${skipped} ${skipped === 1 ? "wasn't" : "weren't"} yours.`
-          : ` — ${skipped} unchanged.`
+          : update.state !== undefined
+            ? ` — ${skipped} unclaimed.`
+            : ` — ${skipped} unchanged.`
       : ".";
   return { ok: true, message: `${verb} ${changed}${tail}`, changed, skipped };
 }

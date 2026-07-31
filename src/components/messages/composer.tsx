@@ -29,6 +29,8 @@ export type Attachment = {
 export type ComposerHandle = {
   /** Hand words and files back after a failed send. */
   restore: (text: string, files: Attachment[]) => void;
+  /** Drop a `> quoted` reply line into the draft and focus the box. */
+  quote: (line: string) => void;
   focus: () => void;
 };
 
@@ -119,6 +121,19 @@ export const Composer = forwardRef<
       // Never overwrite words typed since the failure.
       setDraft((d) => (d.trim() ? d : text));
       setAttachments(files);
+    },
+    quote: (line) => {
+      // ABOVE the draft, never instead of it — a reply click must not eat a
+      // half-typed message. The caret lands at the very end either way, which
+      // is where the answer gets written.
+      setDraft((d) => (d.trim() ? `${line}\n${d}` : `${line}\n`));
+      // After React has committed the new value, like choose() below.
+      requestAnimationFrame(() => {
+        const el = boxRef.current;
+        if (!el) return;
+        el.focus();
+        el.setSelectionRange(el.value.length, el.value.length);
+      });
     },
     focus: () => boxRef.current?.focus(),
   }));

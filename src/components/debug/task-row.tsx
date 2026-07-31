@@ -2,11 +2,13 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   Copy,
   Hand,
   ListPlus,
   Loader2,
+  MessagesSquare,
   Pencil,
   SearchCheck,
   Sparkles,
@@ -127,6 +129,7 @@ export function TaskRow({
   members,
   meId,
   isAdmin,
+  canMessage,
   projects,
   suggestOptions,
   projectName,
@@ -148,6 +151,8 @@ export function TaskRow({
   members: MembersMap;
   meId: string;
   isAdmin: boolean;
+  /** The viewer can open /messages (work section, not showcase). */
+  canMessage: boolean;
   projects: { id: string; name: string }[];
   /** Work members to "suggest for". Empty outside the work team. */
   suggestOptions: { value: string; label: string }[];
@@ -171,6 +176,7 @@ export function TaskRow({
 }) {
   const { pending, run } = useAction();
   const { success: toastSuccess, error: toastError } = useToast();
+  const router = useRouter();
   const rowRef = useRef<HTMLLIElement>(null);
   const [expanded, setExpanded] = useState(false);
 
@@ -221,6 +227,43 @@ export function TaskRow({
 
   const mine = task.assignee_id === meId;
   const canDelete = isAdmin || task.created_by === meId;
+
+  // The task's author, when a DM with them can actually happen: the viewer can
+  // open Messages (canMessage), the author isn't the viewer (messaging
+  // yourself is a 404 over there), and the author still holds work access —
+  // a former member's thread is read-only, so the button would open a dead
+  // end. suggestOptions doubles as the current work roster.
+  const author =
+    canMessage &&
+    task.created_by &&
+    task.created_by !== meId &&
+    suggestOptions.some((o) => o.value === task.created_by)
+      ? (members[task.created_by] ?? null)
+      : null;
+
+  /**
+   * Jump to a DM with whoever filed this task, question already teed up: a
+   * `> title — /debug?q=…` quote line is stored as that thread's draft (the
+   * composer seeds from localStorage on mount) and the deep link reopens the
+   * board searched down to this task. Prepended ABOVE any half-typed draft,
+   * never over it — the same contract as the composer's own quote().
+   */
+  function messageAuthor() {
+    if (!task.created_by) return;
+    const link = `/debug?q=${encodeURIComponent(task.title.slice(0, 60))}`;
+    const line = `> ${task.title.slice(0, 90)} — ${link}\n`;
+    try {
+      const key = `kagu:draft:${task.created_by}`;
+      const existing = window.localStorage.getItem(key) ?? "";
+      window.localStorage.setItem(
+        key,
+        existing.trim() ? `${line}${existing}` : line
+      );
+    } catch {
+      // Storage unavailable — the chat still opens, just without the prefill.
+    }
+    router.push(`/messages/${task.created_by}`);
+  }
 
   // A deadline is "overdue" only while the task is still open. Compared as
   // plain YYYY-MM-DD strings, both sides date-only, so no time-of-day math.
@@ -502,7 +545,13 @@ export function TaskRow({
             Hidden on a COLLAPSED phone row (the state is already shown as a
             word in the meta line above) and revealed when the row is expanded —
             on desktop it is always visible. This is the difference between 4
-            rows and 6 rows of vertical space per task on a phone. */}
+            rows and 6 rows of vertical space per task on a phone.
+
+            Locked while nobody holds the task: state is "how far along is the
+            person on it", and with no person there is nothing to report. The
+            current state still shows its tint (it's a fact); the other two
+            pills go dead until someone claims. Same rule as the keyboard
+            1/2/3, the bulk dropdown, and the server action. */}
         <div
           className={cn(
             "overflow-hidden rounded-md border border-line md:flex",
@@ -510,12 +559,18 @@ export function TaskRow({
           )}
           role="group"
           aria-label="State"
+          // Why, not just "no" — a dead control with no reason reads as broken.
+          title={
+            task.assignee_id
+              ? undefined
+              : "Claim the task first — state tracks whoever holds it."
+          }
         >
           {(Object.keys(STATE_LABEL) as DebugState[]).map((state) => (
             <button
               key={state}
               type="button"
-              disabled={task.state === state}
+              disabled={task.state === state || !task.assignee_id}
               onClick={() => patchTask(() => setTaskState(task.id, state), { state })}
               className={cn(
                 "px-2 py-1 text-xs transition-colors duration-150",
@@ -525,7 +580,9 @@ export function TaskRow({
                     : state === "in_progress"
                       ? "bg-amber/15 text-amber"
                       : "bg-raised text-ink"
-                  : "text-faint hover:bg-raised hover:text-muted"
+                  : task.assignee_id
+                    ? "text-faint hover:bg-raised hover:text-muted"
+                    : "cursor-not-allowed text-faint opacity-40"
               )}
             >
               {STATE_LABEL[state]}
@@ -629,6 +686,20 @@ export function TaskRow({
                   </Link>
                 )}
               </>
+            )}
+            {/* Ask the person who filed it, in Messages, with the task quoted
+                — the alternative was re-typing the title into a chat by hand
+                every time a task needed a clarifying question. */}
+            {author && (
+              <Button
+                variant="ghost"
+                size="sm"
+                title={`Message ${author.name} about this task`}
+                onClick={messageAuthor}
+              >
+                <MessagesSquare className="size-3.5" aria-hidden />
+                Message author
+              </Button>
             )}
             <Button variant="ghost" size="sm" onClick={copyTask}>
               <Copy className="size-3.5" aria-hidden />

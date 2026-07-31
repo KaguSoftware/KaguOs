@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo } from "react";
+import { useCallback, useEffect, useMemo } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
 import { Search, X } from "lucide-react";
 import { Dropdown, type DropdownOption } from "@/components/ui/dropdown";
@@ -24,10 +24,22 @@ export type FilterState = {
   sort: string;
 };
 
+/**
+ * Last-used filters, cached per browser and per tab prefix so the Work tabs
+ * reopen the way you left them — the URL alone only preserves the view across
+ * a literal reload, not across navigating away and back via the sidebar.
+ *
+ * ⚠️ `q` is deliberately NOT cached: a search is a momentary drill-down, and
+ * replaying last week's query would open the tab mysteriously narrowed.
+ */
+const STORAGE_PREFIX = "kagu-work-filters-";
+const DURABLE_FIELDS = ["status", "sector", "type", "owner", "sort"] as const;
+
 export function useWorkFilters(prefix: string, defaultSort: string) {
   const params = useSearchParams();
   const pathname = usePathname();
   const key = (k: string) => `${prefix}_${k}`;
+  const storageKey = STORAGE_PREFIX + prefix;
 
   const state: FilterState = {
     q: params.get(key("q")) ?? "",
@@ -51,10 +63,57 @@ export function useWorkFilters(prefix: string, defaultSort: string) {
       // replaceState (not router.push) keeps it a pure client update — no
       // navigation, no server round-trip, consistent with the instant tabs.
       window.history.replaceState(null, "", qs ? `${pathname}?${qs}` : pathname);
+      // Cache the durable fields so the view survives leaving the page.
+      try {
+        const merged = { ...state, ...patch };
+        window.localStorage.setItem(
+          storageKey,
+          JSON.stringify(
+            Object.fromEntries(DURABLE_FIELDS.map((f) => [f, merged[f]]))
+          )
+        );
+      } catch {}
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [params, pathname, prefix, defaultSort]
   );
+
+  // Restore the cache when the URL arrives bare. After paint (rAF) — the
+  // server render has no localStorage, so an earlier write would mismatch
+  // hydration (same pattern as the debug board / brainstorm trail). Reads
+  // window.location rather than the `params` snapshot: both tabs' hooks
+  // restore in the same frame, and building from the mount-time snapshot
+  // would drop the keys the other tab just wrote.
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => {
+      try {
+        const current = new URLSearchParams(window.location.search);
+        for (const k of current.keys()) {
+          if (k.startsWith(`${prefix}_`)) return; // an explicit link wins
+        }
+        const raw = window.localStorage.getItem(storageKey);
+        if (!raw) return;
+        const saved = JSON.parse(raw) as Record<string, unknown>;
+        let touched = false;
+        for (const field of DURABLE_FIELDS) {
+          const v = saved[field];
+          // Defaults stay out of the URL, same as `set` above.
+          if (typeof v !== "string" || !v) continue;
+          if (field === "sort" && v === defaultSort) continue;
+          current.set(`${prefix}_${field}`, v);
+          touched = true;
+        }
+        if (!touched) return;
+        const qs = current.toString();
+        window.history.replaceState(null, "", qs ? `${pathname}?${qs}` : pathname);
+      } catch {
+        // Malformed storage — just the defaults.
+      }
+    });
+    return () => cancelAnimationFrame(frame);
+    // Mount-only: a one-time adoption, not a subscription.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const active =
     Boolean(state.q || state.status || state.sector || state.type || state.owner);

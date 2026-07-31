@@ -11,6 +11,7 @@ import {
   getThread,
 } from "@/lib/data/messages";
 import { getMembersMap } from "@/lib/data/members";
+import { DmHeader } from "@/components/messages/dm-header";
 import { MessageThread } from "@/components/messages/thread";
 import { GROUP_HINT, GROUP_LABEL, GROUP_THREAD } from "@/lib/messages-shared";
 
@@ -139,39 +140,17 @@ export default async function MessageThreadPage({
             </div>
           </>
         ) : (
-          <>
-            <span
-              className="flex size-8 shrink-0 items-center justify-center rounded-full text-[13px] font-semibold text-bg"
-              style={{ backgroundColor: partner!.color }}
-              aria-hidden
-            >
-              {partner!.name.slice(0, 1).toUpperCase()}
-            </span>
-            <div className="min-w-0">
-              <h1
-                className="truncate text-[15px] font-semibold"
-                style={{ color: partner!.color }}
-              >
-                {partner!.name}
-                {person?.status_emoji && (
-                  <span className="ml-1.5" aria-hidden>
-                    {person.status_emoji}
-                  </span>
-                )}
-              </h1>
-              {former ? (
-                <p className="truncate text-[12px] text-faint">
-                  No longer on the work team — you can still read this.
-                </p>
-              ) : (
-                person?.status_text && (
-                  <p className="truncate text-[12px] text-faint">
-                    {person.status_text}
-                  </p>
-                )
-              )}
-            </div>
-          </>
+          // Client island: carries the LIVE presence dot + label, which the
+          // list pane provides on desktop but mobile hides while in a thread.
+          <DmHeader
+            meId={ctx.userId}
+            partnerId={userId}
+            name={partner!.name}
+            color={partner!.color}
+            statusEmoji={person?.status_emoji ?? null}
+            statusText={person?.status_text ?? null}
+            former={former}
+          />
         )}
       </header>
       <MessageThread

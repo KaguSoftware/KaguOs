@@ -31,6 +31,7 @@ import {
   StatusButton,
   TeamSheet,
 } from "@/components/shell/sidebar-presence";
+import { useLivePresence } from "@/lib/use-live-presence";
 import type { Pulse } from "@/lib/data/pulse";
 import type { MembersMap, Notification, PresencePerson } from "@/lib/types";
 
@@ -199,9 +200,19 @@ function MobileMenu({
   const greeting =
     hour < 5 ? "Still up" : hour < 12 ? "Morning" : hour < 18 ? "Afternoon" : "Evening";
 
-  // Who's actually around. Presence is null outside Work / in showcase.
-  const online = (presence ?? []).filter(
-    (p) => p.last_seen_at && now - Date.parse(p.last_seen_at) < 5 * 60 * 1000
+  // Who's actually around — the LIVE presence channel, same signal as the
+  // desktop panel and the team sheet. This used to be guessed from
+  // last_seen_at, which is a DB stamp throttled to one write per 5 minutes
+  // (see lib/data/session.ts) and frozen at the layout's render — so on a
+  // phone the row said "Nobody online" mid-conversation. The stamp survives
+  // only as a bridge for the moments before the channel's first sync (an
+  // empty map can't tell "still connecting" from "everyone left").
+  const live = useLivePresence(meId);
+  const synced = Object.keys(live).length > 0;
+  const online = (presence ?? []).filter((p) =>
+    synced
+      ? live[p.id] === "online"
+      : p.last_seen_at && now - Date.parse(p.last_seen_at) < 5 * 60 * 1000
   );
 
   return createPortal(

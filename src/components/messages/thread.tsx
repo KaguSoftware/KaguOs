@@ -9,7 +9,7 @@ import {
   useState,
 } from "react";
 import Image from "next/image";
-import { Loader2 } from "lucide-react";
+import { Loader2, Reply } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import {
   loadOlderMessages,
@@ -621,6 +621,24 @@ export function MessageThread({
     }
   }
 
+  /**
+   * One click on a bubble's reply control: quote the line into the composer
+   * and put the cursor after it, ready for the answer. A visible `> Name: …`
+   * line rather than a thread model — the messages table is flat, and a quote
+   * that travels in the body works everywhere the body does (exports, search,
+   * the other person's phone). RichText renders `> ` lines as a quote.
+   */
+  function startReply(r: Row) {
+    const firstLine = r.m.body.split("\n").find((l) => l.trim()) ?? "";
+    const snippet =
+      firstLine.length > 90
+        ? `${firstLine.slice(0, 90).trimEnd()}…`
+        : firstLine || "(image)";
+    composerRef.current?.quote(
+      `> ${firstName(members, r.m.sender_id)}: ${snippet}`
+    );
+  }
+
   // No `sending` gate: sends PIPELINE. Each line gets its own temp row and its
   // own reconcile, so a quick second message never waits on the first one's
   // round-trip — the composer clears and you keep typing.
@@ -806,76 +824,103 @@ export function MessageThread({
                   {r.senderName}
                 </span>
               )}
+              {/* The bubble plus its reply control share a hover group, so the
+                  control lives beside the bubble (on its open side) and only
+                  surfaces when the pointer is already there — the same
+                  reveal-on-hover the reminders panel uses for its remove
+                  button. `w-full` keeps the bubble's 88% measured against the
+                  pane, exactly as it was before the wrapper existed. */}
               <div
                 className={cn(
-                  // 34rem caps the measure at roughly the 70ch prose limit on a
-                  // wide screen. The percentage is what matters on a phone: at
-                  // 75% a 375px viewport gave a ~36ch line and stranded an 85px
-                  // gutter, so it reads wider there while the rem cap still
-                  // governs the desktop.
-                  "flex max-w-[min(88%,34rem)] flex-col gap-1.5 rounded-lg px-3 py-1.5",
-                  // Shape, not just fill, carries mine-vs-theirs: the two fills
-                  // are 1.14:1 and 1.05:1 against the page, which is no contrast
-                  // at all. An asymmetric corner reads at any luminance, and
-                  // side-stripe borders are banned.
-                  r.mine
-                    ? "rounded-br-sm bg-raised text-ink"
-                    : "rounded-bl-sm border border-line-strong bg-surface text-ink"
+                  "group flex w-full items-center gap-1",
+                  r.mine && "flex-row-reverse"
                 )}
               >
-                {/* In a DM the sender is conveyed by ALIGNMENT only, which does
-                    not exist for a screen reader. Named here, invisibly. */}
-                {otherId !== null && r.newRun && (
-                  <span className="sr-only">
-                    {r.mine ? "You" : r.senderName}:
-                  </span>
-                )}
-                {r.m.body && (
-                  <p className="whitespace-pre-wrap wrap-break-word text-sm leading-relaxed">
-                    <RichText
-                      body={r.m.body}
-                      mentionNames={mentionNames}
-                      myName={myFirstName}
-                    />
-                  </p>
-                )}
-                {r.m.images && r.m.images.length > 0 && (
-                  <div className="flex flex-wrap gap-1.5">
-                    {r.m.images.map((img, idx) => {
-                      const src = thumbUrl(img);
-                      if (!src)
+                <div
+                  className={cn(
+                    // 34rem caps the measure at roughly the 70ch prose limit
+                    // on a wide screen. The percentage is what matters on a
+                    // phone: at 75% a 375px viewport gave a ~36ch line and
+                    // stranded an 85px gutter, so it reads wider there while
+                    // the rem cap still governs the desktop.
+                    "flex max-w-[min(88%,34rem)] flex-col gap-1.5 rounded-lg px-3 py-1.5",
+                    // Shape, not just fill, carries mine-vs-theirs: the two
+                    // fills are 1.14:1 and 1.05:1 against the page, which is
+                    // no contrast at all. An asymmetric corner reads at any
+                    // luminance, and side-stripe borders are banned.
+                    r.mine
+                      ? "rounded-br-sm bg-raised text-ink"
+                      : "rounded-bl-sm border border-line-strong bg-surface text-ink"
+                  )}
+                >
+                  {/* In a DM the sender is conveyed by ALIGNMENT only, which
+                      does not exist for a screen reader. Named here,
+                      invisibly. */}
+                  {otherId !== null && r.newRun && (
+                    <span className="sr-only">
+                      {r.mine ? "You" : r.senderName}:
+                    </span>
+                  )}
+                  {r.m.body && (
+                    <p className="whitespace-pre-wrap wrap-break-word text-sm leading-relaxed">
+                      <RichText
+                        body={r.m.body}
+                        mentionNames={mentionNames}
+                        myName={myFirstName}
+                      />
+                    </p>
+                  )}
+                  {r.m.images && r.m.images.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5">
+                      {r.m.images.map((img, idx) => {
+                        const src = thumbUrl(img);
+                        if (!src)
+                          return (
+                            <Skeleton
+                              key={img.id}
+                              className="h-28 w-36 border border-line"
+                            />
+                          );
                         return (
-                          <Skeleton
+                          <button
                             key={img.id}
-                            className="h-28 w-36 border border-line"
-                          />
+                            type="button"
+                            onClick={() => void openLightbox(img)}
+                            className="block overflow-hidden rounded-md border border-line transition-colors duration-150 hover:border-line-strong"
+                            // Every thumbnail in a bubble used to share one
+                            // label, so a rotor listed N identical entries.
+                            aria-label={
+                              (r.m.images?.length ?? 1) > 1
+                                ? `View image ${idx + 1} of ${r.m.images?.length} full size`
+                                : "View image full size"
+                            }
+                          >
+                            <Image
+                              src={src}
+                              alt=""
+                              width={img.width ?? 240}
+                              height={img.height ?? 160}
+                              unoptimized
+                              className="h-28 w-auto max-w-56 object-cover"
+                            />
+                          </button>
                         );
-                      return (
-                        <button
-                          key={img.id}
-                          type="button"
-                          onClick={() => void openLightbox(img)}
-                          className="block overflow-hidden rounded-md border border-line transition-colors duration-150 hover:border-line-strong"
-                          // Every thumbnail in a bubble used to share one
-                          // label, so a rotor listed N identical entries.
-                          aria-label={
-                            (r.m.images?.length ?? 1) > 1
-                              ? `View image ${idx + 1} of ${r.m.images?.length} full size`
-                              : "View image full size"
-                          }
-                        >
-                          <Image
-                            src={src}
-                            alt=""
-                            width={img.width ?? 240}
-                            height={img.height ?? 160}
-                            unoptimized
-                            className="h-28 w-auto max-w-56 object-cover"
-                          />
-                        </button>
-                      );
-                    })}
-                  </div>
+                      })}
+                    </div>
+                  )}
+                </div>
+                {/* Hidden in a read-only thread — a reply cue above a closed
+                    composer would be an invitation to nowhere. */}
+                {!readOnly && (
+                  <button
+                    type="button"
+                    onClick={() => startReply(r)}
+                    aria-label={`Reply to ${r.mine ? "your message" : r.senderName}`}
+                    title="Reply"
+                    className="shrink-0 rounded-md p-1 text-faint opacity-0 transition-opacity duration-150 hover:text-ink focus-visible:opacity-100 group-hover:opacity-100"
+                  >
+                    <Reply className="size-3.5" aria-hidden />
+                  </button>
                 )}
               </div>
               <span className="px-1 pt-0.5 font-mono text-xs text-faint">

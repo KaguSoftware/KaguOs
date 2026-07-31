@@ -37,7 +37,13 @@ import { Button, ConfirmButton } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/components/ui/toast";
 import { useAction } from "@/lib/use-action";
-import { readBoardFilters, useBoardFilterUrl } from "@/lib/use-board-filters";
+import {
+  hasBoardFilterParams,
+  loadStoredBoardFilters,
+  readBoardFilters,
+  storeBoardFilters,
+  useBoardFilterUrl,
+} from "@/lib/use-board-filters";
 import {
   downloadBlob,
   downloadTaskImages,
@@ -222,6 +228,7 @@ export function DebugBoard({
   meId,
   isAdmin,
   showcase,
+  canMessage,
   suggestOptions,
   focusItems,
   initialImages,
@@ -233,6 +240,8 @@ export function DebugBoard({
   isAdmin: boolean;
   /** Which world this board is showing — realtime must match the page query. */
   showcase: boolean;
+  /** The viewer can open /messages — powers each row's "Message author". */
+  canMessage: boolean;
   /** Work members to "suggest for" from the edit form. Empty outside the work team. */
   suggestOptions: { value: string; label: string }[];
   /** Every active focus item, rank-ordered. Empty = no focus set. */
@@ -249,6 +258,9 @@ export function DebugBoard({
   // user's own edits, since we rewrite the URL as they filter.
   const searchParams = useSearchParams();
   const [initialFilters] = useState(() => readBoardFilters(searchParams));
+  // Whether the URL arrived with explicit filters (a shared/bookmarked link).
+  // If so, the localStorage cache below never overrides it — the link IS the view.
+  const [urlSeeded] = useState(() => hasBoardFilterParams(searchParams));
 
   // ["all"], or one-or-more of "general" / project ids. Pure client-side
   // switching, zero delay. Plain click replaces the selection, ctrl/cmd-click
@@ -319,6 +331,9 @@ export function DebugBoard({
   // The writer no-ops when the resulting URL is unchanged, so the realtime
   // traffic that re-renders this board doesn't rewrite history on every tick.
   const writeFilterUrl = useBoardFilterUrl();
+  // Flipped by the cache-restore effect below; until then the mirror effect
+  // must not write the cache (see the gate inside it).
+  const filtersAdoptedRef = useRef(false);
   useEffect(() => {
     writeFilterUrl({
       board,
@@ -330,6 +345,23 @@ export function DebugBoard({
       sort,
       foundBy,
     });
+    // Cache the durable filters so a bare /debug (nav link, fresh tab) reopens
+    // the way you left it — the URL alone only survives a literal reload.
+    // Gated until the restore below has run: this effect fires on mount with
+    // the defaults, and an ungated write would clobber the cache before the
+    // restore ever read it.
+    if (filtersAdoptedRef.current) {
+      storeBoardFilters({
+        board,
+        state: stateFilter,
+        priority,
+        kind: kindFilter,
+        assignee,
+        q: taskQuery,
+        sort,
+        foundBy,
+      });
+    }
   }, [
     writeFilterUrl,
     board,
@@ -341,6 +373,60 @@ export function DebugBoard({
     sort,
     foundBy,
   ]);
+
+  // Restore the cached filters on a bare URL. After paint (rAF) for the same
+  // reason as the brainstorm trail below: the server render has no
+  // localStorage, so a synchronous set would either mismatch hydration (lazy
+  // init) or trip react-hooks/set-state-in-effect (direct set).
+  //
+  // Values are sanitized against what exists NOW — the cache can be weeks old,
+  // and a deleted project or departed assignee would silently filter the board
+  // down to nothing with no visible chip explaining why.
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => {
+      filtersAdoptedRef.current = true;
+      if (urlSeeded) return; // an explicit link outranks the cache
+      const stored = loadStoredBoardFilters();
+      if (!stored) return;
+      const keep = (values: string[] | undefined, ok: (v: string) => boolean) =>
+        values?.filter(ok) ?? [];
+
+      const projectIds = new Set(projects.map((p) => p.id));
+      const boards = keep(
+        stored.board,
+        (v) => v === "all" || v === "general" || projectIds.has(v)
+      );
+      if (boards.length > 0) setBoard(boards);
+
+      const states = keep(stored.state, (v) =>
+        STATE_FILTER_OPTIONS.some((o) => o.value === v)
+      );
+      // An empty array is a REAL cached value for state (the "All" preset), so
+      // presence of the field — not a non-empty result — is what restores it.
+      // But an array that BECAME empty through sanitizing was garbage, not a
+      // choice; restoring it would silently flip Active to All.
+      if (stored.state && (states.length > 0 || stored.state.length === 0)) {
+        setStateFilter(states);
+      }
+      setPriority(
+        keep(stored.priority, (v) =>
+          PRIORITY_FILTER_OPTIONS.some((o) => o.value === v)
+        )
+      );
+      setKindFilter(
+        keep(stored.kind, (v) => KIND_FILTER_OPTIONS.some((o) => o.value === v))
+      );
+      setAssignee(
+        keep(stored.assignee, (v) => v === "unassigned" || v in members)
+      );
+      if (stored.sort && SORT_OPTIONS.some((o) => o.value === stored.sort)) {
+        setSort(stored.sort as Sort);
+      }
+    });
+    return () => cancelAnimationFrame(frame);
+    // Mount-only: projects/members are only used to sanitize the one-time read.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Server refreshes (revalidatePath after actions) re-send props — adopt them.
   //
@@ -720,6 +806,12 @@ export function DebugBoard({
         case "3": {
           if (!current) break;
           e.preventDefault();
+          // State is locked until someone holds the task — the same rule as
+          // the row's pills and the server action.
+          if (!current.assignee_id) {
+            toastError("Claim the task first — state tracks whoever holds it.");
+            break;
+          }
           const next = (["open", "in_progress", "done"] as DebugState[])[
             Number(e.key) - 1
           ];
@@ -1357,10 +1449,11 @@ export function DebugBoard({
                 disabled={pickedVisible.length === 0 || bulkPending}
                 options={STATE_FILTER_OPTIONS}
                 onChange={(v) =>
-                  applyBulk({ state: v as DebugState }, (t) => ({
-                    ...t,
-                    state: v as DebugState,
-                  }))
+                  applyBulk({ state: v as DebugState }, (t) =>
+                    // Unclaimed rows are skipped server-side (state needs a
+                    // holder) — painting them would flash a lie and snap back.
+                    t.assignee_id ? { ...t, state: v as DebugState } : t
+                  )
                 }
               />
             </span>
@@ -1490,6 +1583,7 @@ export function DebugBoard({
                 members={members}
                 meId={meId}
                 isAdmin={isAdmin}
+                canMessage={canMessage}
                 projects={projects}
                 suggestOptions={suggestOptions}
                 foundCount={foundCounts[task.id] ?? 0}

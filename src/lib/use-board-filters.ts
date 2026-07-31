@@ -77,6 +77,69 @@ function sameSet(a: string[], b: string[]) {
   return a.length === b.length && a.every((v) => b.includes(v));
 }
 
+/** True when the URL carries ANY board filter — an explicit view (a shared or
+ *  bookmarked link) that must win over whatever this browser last had. */
+export function hasBoardFilterParams(params: URLSearchParams): boolean {
+  return Object.values(KEYS).some((k) => params.has(k));
+}
+
+/**
+ * The board's last-used filters, cached per browser so a bare `/debug` (the
+ * sidebar link, a fresh tab) reopens the way you left it — the URL only
+ * preserves the view across a literal reload, not across navigations.
+ *
+ * ⚠️ `q` and `foundBy` are deliberately NOT cached. Both are momentary
+ * drill-downs — a search you typed, one audit's yield — and replaying them
+ * days later would open the board mysteriously narrowed. The durable fields
+ * (board, state, priority, kind, assignee, sort) are the view you chose.
+ */
+const STORAGE_KEY = "kagu-debug-board-filters";
+
+/** The subset of BoardFilterState that persists across sessions. */
+export type StoredBoardFilters = Pick<
+  BoardFilterState,
+  "board" | "state" | "priority" | "kind" | "assignee" | "sort"
+>;
+
+function isStringArray(v: unknown): v is string[] {
+  return Array.isArray(v) && v.every((s) => typeof s === "string");
+}
+
+/** Read the cached filters, shape-validated field-by-field so one malformed
+ *  entry doesn't discard the rest. Null when nothing usable is stored. */
+export function loadStoredBoardFilters(): Partial<StoredBoardFilters> | null {
+  try {
+    const raw = window.localStorage.getItem(STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    if (typeof parsed !== "object" || parsed === null) return null;
+    const out: Partial<StoredBoardFilters> = {};
+    for (const field of ["board", "state", "priority", "kind", "assignee"] as const) {
+      if (isStringArray(parsed[field])) out[field] = parsed[field];
+    }
+    if (typeof parsed.sort === "string") out.sort = parsed.sort;
+    return Object.keys(out).length > 0 ? out : null;
+  } catch {
+    // Malformed storage — same as no cache.
+    return null;
+  }
+}
+
+/** Persist the durable filters. Quota/privacy-mode failures just mean no cache. */
+export function storeBoardFilters(next: BoardFilterState): void {
+  try {
+    const durable: StoredBoardFilters = {
+      board: next.board,
+      state: next.state,
+      priority: next.priority,
+      kind: next.kind,
+      assignee: next.assignee,
+      sort: next.sort,
+    };
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(durable));
+  } catch {}
+}
+
 /**
  * The explicit "no filter" marker.
  *

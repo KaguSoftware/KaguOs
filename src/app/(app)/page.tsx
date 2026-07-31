@@ -163,6 +163,10 @@ export default async function DashboardPage() {
         ctx.supabase
           .from("reminders")
           .select("id", { count: "exact", head: true })
+          // Team ones + MY personal ones, stated in the query. RLS (0008)
+          // already enforces exactly this; saying it here too means a drifted
+          // policy can never count someone else's private notes at me.
+          .or(`scope.eq.team,owner_id.eq.${ctx.userId}`)
           .eq("done", false)
           .lt("due_on", todayInIstanbul()),
         "overdue reminders count"
@@ -337,6 +341,11 @@ export default async function DashboardPage() {
           ctx.supabase
             .from("reminders")
             .select("*")
+            // "Just me" means just me: team reminders + my own personal ones.
+            // RLS (0008) is the real wall — this explicit filter is the app
+            // stating the same rule, so a policy drift in the database can
+            // never surface a teammate's private notes on my dashboard.
+            .or(`scope.eq.team,owner_id.eq.${ctx.userId}`)
             .order("done", { ascending: true })
             .order("created_at", { ascending: false }),
           "reminders"
