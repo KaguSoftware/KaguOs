@@ -3,8 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { getUserId, getSessionContext } from "@/lib/data/session";
-import { notifyWorkTeam } from "@/lib/actions/notify";
+import { canAccess, getUserId, getSessionContext } from "@/lib/data/session";
+import { notifyChatTeam } from "@/lib/actions/notify";
 import { isValidColorKey } from "@/lib/colors";
 import { STATUS_KINDS, STATUS_PRESETS, type StatusKind } from "@/lib/types";
 
@@ -121,6 +121,13 @@ export async function updateMyStatus(fields: {
   // getSessionContext gives us the previous status (no extra query) for the
   // change comparison, plus a SessionContext for the notification fan-out.
   const ctx = await getSessionContext();
+
+  // The status system is its own section (0052). The status columns sit on
+  // profiles, which every signed-in user can update for their own row, so RLS
+  // can't express this — the gate has to live here, on the only write path.
+  if (!canAccess(ctx, "status"))
+    return { ok: false, message: "You don't have access to team status." };
+
   const prev = ctx.profile;
 
   const availableToCall = Boolean(fields.availableToCall);
@@ -152,7 +159,7 @@ export async function updateMyStatus(fields: {
           minute: "2-digit",
         })}`
       : "";
-    notifyWorkTeam(ctx, {
+    notifyChatTeam(ctx, {
       kind: "status_change",
       title: `${name} is now ${label}${tail}`,
       href: "/",

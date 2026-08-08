@@ -1,7 +1,7 @@
 import type { CSSProperties } from "react";
 import Link from "next/link";
 import { ArrowUpRight, Plus } from "lucide-react";
-import { getSessionContext, canAccess } from "@/lib/data/session";
+import { getSessionContext, canAccess, canWrite } from "@/lib/data/session";
 import { getMembersMap } from "@/lib/data/members";
 import { rowsOrThrow, selectOrThrow } from "@/lib/data/query";
 import { getActivity } from "@/lib/data/activity";
@@ -468,21 +468,23 @@ export default async function DashboardPage() {
     expiringContracts > 0 ||
     unvotedIdeas > 0;
 
-  // Quick actions — the one-click primitives, gated by what you can reach.
+  // Quick actions — the one-click primitives, gated by what you can CHANGE, not
+  // merely reach: every one of these opens a create form, and a view-only member
+  // offered "New project" would fill it in and be refused on submit.
   const actions: QuickAction[] = [];
-  if (canAccess(ctx, "debug"))
+  if (canWrite(ctx, "debug"))
     actions.push({ label: "New task", href: "/debug/new" });
-  if (canAccess(ctx, "work")) {
+  if (canWrite(ctx, "work")) {
     actions.push({ label: "New idea", href: "/work/ideas/new" });
     actions.push({ label: "New project", href: "/work/projects/new" });
   }
-  if (canAccess(ctx, "management")) {
+  if (canWrite(ctx, "management")) {
     actions.push({ label: "New transaction", href: "/management/finance/new-transaction" });
     actions.push({ label: "New contract", href: "/management/contracts/new" });
   }
-  if (canAccess(ctx, "marketing"))
+  if (canWrite(ctx, "marketing"))
     actions.push({ label: "New campaign", href: "/marketing/new-campaign" });
-  if (canAccess(ctx, "comms"))
+  if (canWrite(ctx, "comms"))
     actions.push({ label: "New contact", href: "/comms/new" });
   if (ctx.isAdmin)
     actions.push({ label: "New sprint", href: "/learn/new" });
@@ -501,7 +503,7 @@ export default async function DashboardPage() {
   // Messages qualifies on frequency rather than weight: it's checked many times
   // a day, and a cold open means a full presence + inbox wave before anything
   // paints.
-  if (canAccess(ctx, "work")) heavyRoutes.push("/messages");
+  if (canAccess(ctx, "chat")) heavyRoutes.push("/messages");
 
   // Both are null in showcase mode (deliberately skipped), else a real array.
   const reminders = (remindersRes ?? []) as Reminder[];

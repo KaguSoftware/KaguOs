@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { blockIfShowcase, requireAdmin } from "@/lib/data/session";
+import { blockIfReadOnly, requireAdmin } from "@/lib/data/session";
 import type { ActionResult } from "@/lib/actions/account";
 
 /**
@@ -14,8 +14,8 @@ export async function setDebugBoardOrder(
   pinnedIds: string[],
   unpinnedIds: string[]
 ): Promise<ActionResult> {
-  const showcaseStop = await blockIfShowcase();
-  if (showcaseStop) return showcaseStop;
+  const stop = await blockIfReadOnly("debug");
+  if (stop) return stop;
   const ctx = await requireAdmin();
 
   const pinned = pinnedIds.filter(Boolean);

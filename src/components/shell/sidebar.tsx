@@ -16,12 +16,15 @@ import {
   Megaphone,
   Menu,
   MessagesSquare,
+  PanelLeftClose,
+  PanelLeftOpen,
   Search,
   ShieldCheck,
   X,
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { SIDEBAR_COOKIE, SIDEBAR_COOKIE_MAX_AGE } from "@/lib/sidebar-pref";
 import type { Section } from "@/lib/types";
 import { signOut } from "@/lib/actions/account";
 import { Logo } from "@/components/shell/logo";
@@ -54,8 +57,8 @@ const NAV: NavItem[] = [
     section: "management",
   },
   { href: "/debug", label: "Debug", icon: Bug, section: "debug" },
-  // Chat shares Work's gate — the same audience the presence panel shows.
-  { href: "/messages", label: "Messages", icon: MessagesSquare, section: "work" },
+  // Chat has its own gate (0052) — the same audience the presence panel shows.
+  { href: "/messages", label: "Messages", icon: MessagesSquare, section: "chat" },
   { href: "/marketing", label: "Marketing", icon: Megaphone, section: "marketing" },
   { href: "/comms", label: "Comms", icon: ContactIcon, section: "comms" },
 ];
@@ -70,31 +73,56 @@ function NavLink({
   item,
   pathname,
   badge,
+  collapsed,
 }: {
   item: NavItem;
   pathname: string;
   /** Unread count pill, right-aligned. Hidden at 0/null — a permanent "0" is noise. */
   badge?: number | null;
+  /** Icon-only rail: the label moves into the tooltip, the count becomes a dot. */
+  collapsed?: boolean;
 }) {
   const active = isActive(pathname, item.href);
   const Icon = item.icon;
+  const unread = typeof badge === "number" && badge > 0 ? badge : null;
   return (
     <Link
       href={item.href}
       aria-current={active ? "page" : undefined}
+      // The label is the accessible name in both states; collapsed it also
+      // becomes the native tooltip, so the rail stays learnable by hover.
+      aria-label={item.label}
+      title={collapsed ? item.label : undefined}
       className={cn(
-        "flex items-center gap-2.5 rounded-md px-2.5 py-1.5 text-sm transition-colors duration-150",
+        "flex items-center rounded-md py-1.5 text-sm transition-colors duration-150",
+        collapsed ? "justify-center px-0" : "gap-2.5 px-2.5",
         active
           ? "bg-raised text-ink"
           : "text-muted hover:bg-raised/60 hover:text-ink"
       )}
     >
-      <Icon className={cn("size-4", active && "text-primary-dim")} aria-hidden />
-      {item.label}
-      {typeof badge === "number" && badge > 0 && (
+      <span className={cn("relative", collapsed && "grid size-5 place-items-center")}>
+        <Icon
+          className={cn("size-4", active && "text-primary-dim")}
+          aria-hidden
+        />
+        {/* Collapsed there's no room for a count, but silence would be worse
+            than imprecision — an unread dot still says "something's waiting". */}
+        {collapsed && unread !== null && (
+          <span
+            className="absolute -right-1 -top-1 size-2 rounded-full bg-primary ring-2 ring-surface"
+            aria-hidden
+          />
+        )}
+      </span>
+      {!collapsed && item.label}
+      {!collapsed && unread !== null && (
         <span className="ml-auto rounded-full bg-primary px-1.5 font-mono text-[11px] font-medium text-primary-ink">
-          {badge}
+          {unread}
         </span>
+      )}
+      {collapsed && unread !== null && (
+        <span className="sr-only">{unread} unread</span>
       )}
     </Link>
   );
@@ -132,6 +160,7 @@ function MobileMenu({
   presence,
   meId,
   unreadMessages,
+  canStatus,
   onClose,
 }: {
   visible: NavItem[];
@@ -143,6 +172,8 @@ function MobileMenu({
   presence: PresencePerson[] | null;
   meId: string;
   unreadMessages: number | null;
+  /** Status-section access — without it there's no "who's online" row. */
+  canStatus: boolean;
   onClose: () => void;
 }) {
   // The sheet has to outlive the "close" click long enough to animate out, so
@@ -392,7 +423,7 @@ function MobileMenu({
 
           {/* Tap the faces to see everyone's status — the desktop panel does
               this with hover cards, which don't exist on touch. */}
-          {presence && presence.length > 0 && (
+          {canStatus && presence && presence.length > 0 && (
             <button
               type="button"
               onClick={() => setTeamOpen(true)}
@@ -475,6 +506,8 @@ export function Sidebar({
   pulse,
   meId,
   unreadMessages,
+  defaultCollapsed,
+  canStatus,
 }: {
   sections: Section[];
   isAdmin: boolean;
@@ -490,12 +523,25 @@ export function Sidebar({
   meId: string;
   /** Unread chat messages (direct + group); null outside the chat audience. */
   unreadMessages: number | null;
+  /** Read from the cookie in the layout, so the rail's FIRST paint is already right. */
+  defaultCollapsed: boolean;
+  /** Status-section access (0052): live dots, statuses, and the status editor. */
+  canStatus: boolean;
 }) {
   const pathname = usePathname();
   const visible = NAV.filter(
     (item) => !item.section || isAdmin || showcase || sections.includes(item.section)
   );
   const [menuOpen, setMenuOpen] = useState(false);
+
+  // Desktop only — the mobile sheet is a separate, full-screen thing and has
+  // nothing to collapse. Seeded from the cookie so there's no expand-then-snap
+  // on load (see lib/sidebar-pref.ts for why this isn't localStorage).
+  const [collapsed, setCollapsed] = useState(defaultCollapsed);
+  const setRail = useCallback((next: boolean) => {
+    setCollapsed(next);
+    document.cookie = `${SIDEBAR_COOKIE}=${next ? "1" : "0"}; path=/; max-age=${SIDEBAR_COOKIE_MAX_AGE}; SameSite=Lax`;
+  }, []);
 
   // Navigating closes the sheet — otherwise it stays open over the page you
   // just asked for, which reads as a broken tap.
@@ -511,34 +557,78 @@ export function Sidebar({
 
   return (
     <>
-      {/* Desktop sidebar */}
-      <aside className="sticky top-0 z-30 hidden h-dvh w-56 shrink-0 flex-col border-r border-line bg-surface md:flex">
-        <div className="flex items-center justify-between px-4 pb-5 pt-5">
+      {/* Desktop sidebar. Collapsed it keeps every destination reachable —
+          icons stay, labels move into tooltips — so it's a narrower rail, not
+          a hidden menu. Only the width animates; nothing slides, because the
+          content column reflowing beside it is already the motion. */}
+      <aside
+        className={cn(
+          "sticky top-0 z-30 hidden h-dvh shrink-0 flex-col border-r border-line bg-surface md:flex",
+          "transition-[width] duration-200 ease-mac motion-reduce:transition-none",
+          collapsed ? "w-14" : "w-56"
+        )}
+      >
+        <div
+          className={cn(
+            "flex items-center pb-5 pt-5",
+            collapsed ? "flex-col gap-3 px-2" : "justify-between px-4"
+          )}
+        >
           <Link
             href="/"
             aria-label="KaguOs — go to dashboard"
+            title={collapsed ? "KaguOs — go to dashboard" : undefined}
             className="flex items-center gap-2.5 rounded-md transition-opacity duration-150 hover:opacity-80"
           >
             <Logo size={24} />
-            <span className="text-[15px] font-semibold tracking-tight">KaguOs</span>
+            {!collapsed && (
+              <span className="text-[15px] font-semibold tracking-tight">KaguOs</span>
+            )}
           </Link>
-          <NotificationBell
-            notifications={notifications}
-            members={members}
-            align="left"
-          />
+          <div className={cn("flex items-center", collapsed ? "flex-col gap-1" : "gap-0.5")}>
+            <NotificationBell
+              notifications={notifications}
+              members={members}
+              align="left"
+            />
+            {/* Sits with the bell, at the top of the rail — the two controls
+                that act on the sidebar itself, rather than on a destination. */}
+            <button
+              type="button"
+              onClick={() => setRail(!collapsed)}
+              aria-expanded={!collapsed}
+              aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+              title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+              className="shrink-0 rounded-md p-1.5 text-faint transition-colors duration-150 hover:bg-raised hover:text-ink"
+            >
+              {collapsed ? (
+                <PanelLeftOpen className="size-4" aria-hidden />
+              ) : (
+                <PanelLeftClose className="size-4" aria-hidden />
+              )}
+            </button>
+          </div>
         </div>
-        <div className="px-2 pb-2">
+        <div className={cn("pb-2", collapsed ? "px-2" : "px-2")}>
           <button
             type="button"
             onClick={() => window.dispatchEvent(new Event("open-command-palette"))}
-            className="flex w-full items-center gap-2.5 rounded-md border border-line px-2.5 py-1.5 text-[13px] text-faint transition-colors duration-150 hover:border-line-strong hover:text-muted"
+            aria-label="Search"
+            title={collapsed ? "Search  ⌘K" : undefined}
+            className={cn(
+              "flex w-full items-center rounded-md border border-line py-1.5 text-[13px] text-faint transition-colors duration-150 hover:border-line-strong hover:text-muted",
+              collapsed ? "justify-center px-0" : "gap-2.5 px-2.5"
+            )}
           >
             <Search className="size-3.5" aria-hidden />
-            <span>Search…</span>
-            <kbd className="ml-auto rounded border border-line px-1 font-mono text-[10px]">
-              ⌘K
-            </kbd>
+            {!collapsed && (
+              <>
+                <span>Search…</span>
+                <kbd className="ml-auto rounded border border-line px-1 font-mono text-[10px]">
+                  ⌘K
+                </kbd>
+              </>
+            )}
           </button>
         </div>
         <nav className="flex-1 space-y-0.5 px-2" aria-label="Sections">
@@ -548,6 +638,7 @@ export function Sidebar({
               item={item}
               pathname={pathname}
               badge={item.href === "/messages" ? unreadMessages : null}
+              collapsed={collapsed}
             />
           ))}
           {isAdmin && (
@@ -556,33 +647,62 @@ export function Sidebar({
               <NavLink
                 item={{ href: "/admin", label: "Admin", icon: ShieldCheck }}
                 pathname={pathname}
+                collapsed={collapsed}
               />
             </>
           )}
         </nav>
         {presence && presence.length > 0 && (
-          <SidebarPresence people={presence} meId={meId} />
+          <SidebarPresence
+            people={presence}
+            meId={meId}
+            collapsed={collapsed}
+            onExpand={() => setRail(false)}
+            canStatus={canStatus}
+          />
         )}
-        <div className="flex items-center gap-2 border-t border-line p-3">
+        <div
+          className={cn(
+            "flex items-center border-t border-line",
+            collapsed ? "flex-col gap-1 p-2" : "gap-2 p-3"
+          )}
+        >
           <Link
             href="/account"
-            className="min-w-0 flex-1 rounded-md px-2 py-1.5 transition-colors duration-150 hover:bg-raised"
+            aria-label={`Account — ${name || email}`}
+            title={collapsed ? `${name || email} — account` : undefined}
+            className={cn(
+              "rounded-md transition-colors duration-150 hover:bg-raised",
+              collapsed
+                ? "grid size-9 place-items-center text-[11px] font-medium text-muted"
+                : "min-w-0 flex-1 px-2 py-1.5"
+            )}
           >
-            <p className="truncate text-[13px] font-medium text-ink">
-              {name || email}
-            </p>
-            <p className="truncate text-xs text-faint">{email}</p>
+            {collapsed ? (
+              (name || email).slice(0, 2).toUpperCase()
+            ) : (
+              <>
+                <p className="truncate text-[13px] font-medium text-ink">
+                  {name || email}
+                </p>
+                <p className="truncate text-xs text-faint">{email}</p>
+              </>
+            )}
           </Link>
-          <form action={signOut}>
-            <button
-              type="submit"
-              title="Sign out"
-              aria-label="Sign out"
-              className="rounded-md p-2 text-muted transition-colors duration-150 hover:bg-raised hover:text-ink"
-            >
-              <LogOut className="size-4" aria-hidden />
-            </button>
-          </form>
+          {/* Sign-out is destructive and lives behind the label when the rail
+              is narrow — a lone icon next to the avatar is too easy to mis-tap. */}
+          {!collapsed && (
+            <form action={signOut}>
+              <button
+                type="submit"
+                title="Sign out"
+                aria-label="Sign out"
+                className="rounded-md p-2 text-muted transition-colors duration-150 hover:bg-raised hover:text-ink"
+              >
+                <LogOut className="size-4" aria-hidden />
+              </button>
+            </form>
+          )}
         </div>
       </aside>
 
@@ -598,7 +718,7 @@ export function Sidebar({
             <span className="text-[15px] font-semibold tracking-tight">KaguOs</span>
           </Link>
           <div className="flex items-center gap-1">
-            {presence && presence.length > 0 && (
+            {canStatus && presence && presence.length > 0 && (
               <StatusButton people={presence} meId={meId} />
             )}
             <NotificationBell notifications={notifications} members={members} />
@@ -631,6 +751,7 @@ export function Sidebar({
           presence={presence}
           meId={meId}
           unreadMessages={unreadMessages}
+          canStatus={canStatus}
           onClose={() => setMenuOpen(false)}
         />
       )}

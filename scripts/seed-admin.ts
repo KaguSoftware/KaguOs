@@ -12,7 +12,18 @@ import { createClient } from "@supabase/supabase-js";
 
 const ADMIN_EMAIL = "parsaa.mansourii@gmail.com";
 const ADMIN_NAME = "Parsa Mansouri";
-const SECTIONS = ["work", "learn", "management", "debug", "marketing"];
+// Keep in step with SECTIONS in src/lib/types.ts — this drifted once already
+// (comms shipped in 0013 and never made it here).
+const SECTIONS = [
+  "work",
+  "learn",
+  "management",
+  "debug",
+  "marketing",
+  "comms",
+  "chat",
+  "status",
+];
 
 function loadEnvLocal() {
   const envPath = resolve(process.cwd(), ".env.local");

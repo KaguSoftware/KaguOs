@@ -55,12 +55,14 @@ import type {
   DebugState,
   DebugTask,
   DebugTaskImage,
+  DebugTaskNote,
   MembersMap,
 } from "@/lib/types";
 
 /** Stable identity for tasks with no screenshots — a fresh `[]` per render
  *  would re-sign URLs in TaskImages on every parent update. */
 const EMPTY_IMAGES: DebugTaskImage[] = [];
+const EMPTY_NOTES: DebugTaskNote[] = [];
 
 /** Above this many project boards, the tab strip gets a filter box. */
 const BOARD_SEARCH_THRESHOLD = 5;
@@ -232,6 +234,7 @@ export function DebugBoard({
   suggestOptions,
   focusItems,
   initialImages,
+  initialNotes,
 }: {
   initialTasks: DebugTask[];
   projects: BoardProject[];
@@ -248,9 +251,11 @@ export function DebugBoard({
   focusItems: DebugFocus[];
   /** Every screenshot on the board, grouped per task below. */
   initialImages: DebugTaskImage[];
+  initialNotes: DebugTaskNote[];
 }) {
   const [tasks, setTasks] = useState<DebugTask[]>(initialTasks);
   const [images, setImages] = useState<DebugTaskImage[]>(initialImages);
+  const [notes, setNotes] = useState<DebugTaskNote[]>(initialNotes);
 
   // Filters are seeded FROM THE URL so a shared/bookmarked link reproduces the
   // exact view, then mirrored back to it on every change (see the effect below).
@@ -445,6 +450,11 @@ export function DebugBoard({
     setSeenImages(initialImages);
     setImages(initialImages);
   }
+  const [seenNotes, setSeenNotes] = useState(initialNotes);
+  if (seenNotes !== initialNotes) {
+    setSeenNotes(initialNotes);
+    setNotes(initialNotes);
+  }
 
   /** Screenshots grouped by task, so each row gets its own slice in O(1). */
   const imagesByTask = useMemo(() => {
@@ -452,6 +462,13 @@ export function DebugBoard({
     for (const img of images) (map[img.task_id] ??= []).push(img);
     return map;
   }, [images]);
+
+  /** Notes grouped by task, oldest first — a thread reads down the page. */
+  const notesByTask = useMemo(() => {
+    const map: Record<string, DebugTaskNote[]> = {};
+    for (const note of notes) (map[note.task_id] ??= []).push(note);
+    return map;
+  }, [notes]);
 
   /** Replace one task's images after an upload or delete inside a row. */
   function setTaskImages(taskId: string, next: DebugTaskImage[]) {
@@ -596,6 +613,35 @@ export function DebugBoard({
           // nothing to scope on — dropping an id we don't hold is a no-op anyway.
           const gone = payload.old as { id: string };
           setTasks((prev) => prev.filter((t) => t.id !== gone.id));
+        }
+      )
+      // Notes stream on the same channel as the tasks they hang off, so a
+      // teammate's note lands in an already-expanded row without a reload.
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "debug_task_notes", ...scope },
+        (payload) => {
+          const row = payload.new as DebugTaskNote;
+          if (row.is_demo !== showcase) return;
+          setNotes((prev) =>
+            prev.some((n) => n.id === row.id) ? prev : [...prev, row]
+          );
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "debug_task_notes", ...scope },
+        (payload) => {
+          const row = payload.new as DebugTaskNote;
+          setNotes((prev) => prev.map((n) => (n.id === row.id ? row : n)));
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "DELETE", schema: "public", table: "debug_task_notes" },
+        (payload) => {
+          const gone = payload.old as { id: string };
+          setNotes((prev) => prev.filter((n) => n.id !== gone.id));
         }
       )
       // CHANNEL_ERROR / TIMED_OUT / CLOSED all mean "you are no longer seeing
@@ -1594,6 +1640,7 @@ export function DebugBoard({
                 }
                 images={imagesByTask[task.id] ?? EMPTY_IMAGES}
                 onImagesChange={(next) => setTaskImages(task.id, next)}
+                notes={notesByTask[task.id] ?? EMPTY_NOTES}
                 highlight={sessionIds.has(task.id)}
                 selectable={selectMode}
                 selected={picked.has(task.id)}

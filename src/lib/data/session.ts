@@ -2,7 +2,14 @@ import { cache } from "react";
 import { after } from "next/server";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import type { Profile, Section } from "@/lib/types";
+import { SECTION_LABELS, type Profile, type Section } from "@/lib/types";
+
+/**
+ * How much a membership lets you do. 'write' is the default and the only thing
+ * that existed before 0053 — a 'read' member sees the section and can change
+ * nothing in it.
+ */
+export type SectionAccess = "read" | "write";
 
 /** How stale last_seen_at must be before we bother writing a fresh one. */
 const LAST_SEEN_THROTTLE_MS = 5 * 60 * 1000;
@@ -11,7 +18,15 @@ export type SessionContext = {
   supabase: Awaited<ReturnType<typeof createClient>>;
   userId: string;
   profile: Profile;
+  /** Sections you can SEE. Membership alone; says nothing about writing. */
   sections: Set<Section>;
+  /**
+   * Per-section write tier. Kept alongside `sections` rather than folded into
+   * it: canAccess() has 40+ call sites, and a single Map would make "can read"
+   * and "can write" look identical at every one of them — when the whole point
+   * of the tier is that those two questions must stay visibly different.
+   */
+  access: Map<Section, SectionAccess>;
   isAdmin: boolean;
   /** When true, the app shows obviously-fake demo data (client showcase). */
   showcase: boolean;
@@ -47,11 +62,20 @@ export const getSessionContext = cache(async function getSessionContext(): Promi
   // here would turn an expired token into a crash on every route, including the
   // path out to /login.
   const { data: row } = await supabase.rpc("session_context");
-  const ctx = row as { profile: Profile; sections: Section[] } | null;
+  const ctx = row as {
+    profile: Profile;
+    sections: Section[];
+    // Optional so a stale RPC (migration not yet applied, or a rollback) can't
+    // lock the whole company out — see the permissive default in canWrite.
+    access?: Record<Section, SectionAccess>;
+  } | null;
   if (!ctx?.profile) redirect("/login");
 
   const profile = ctx.profile;
   const sections = new Set<Section>(ctx.sections ?? []);
+  const access = new Map<Section, SectionAccess>(
+    Object.entries(ctx.access ?? {}) as [Section, SectionAccess][]
+  );
 
   // Stamp "last seen", throttled + off the critical path. Only write when the
   // stored value is missing or older than the throttle window, so an active user
@@ -72,6 +96,7 @@ export const getSessionContext = cache(async function getSessionContext(): Promi
     userId,
     profile,
     sections,
+    access,
     isAdmin: profile.is_admin,
     showcase: Boolean(profile.showcase_mode),
   };
@@ -81,6 +106,27 @@ export function canAccess(ctx: SessionContext, section: Section) {
   // In showcase mode everyone can roam every section — it's all demo data, so
   // there's nothing real to protect and the point is to show the whole app off.
   return ctx.isAdmin || ctx.showcase || ctx.sections.has(section);
+}
+
+/**
+ * Can this user CHANGE things in the section — the write half of canAccess.
+ *
+ * Mirrors private.can_write() in the database (0053), which is where the rule is
+ * actually enforced; this exists so the UI can hide affordances that would fail,
+ * and so actions can return a sentence instead of an RLS error.
+ *
+ * The `?? "write"` default is deliberate and permissive: if the access map is
+ * empty because the RPC predates 0053, every member behaves exactly as they did
+ * before the tier existed. Failing the other way would lock the company out of
+ * writing during a deploy window.
+ */
+export function canWrite(ctx: SessionContext, section: Section) {
+  // Showcase roams everywhere and writes nowhere — it must not gain a write
+  // path here that blockIfShowcase would otherwise have stopped.
+  if (ctx.showcase) return false;
+  if (ctx.isAdmin) return true;
+  if (!ctx.sections.has(section)) return false;
+  return (ctx.access.get(section) ?? "write") === "write";
 }
 
 /**
@@ -126,6 +172,45 @@ export async function blockIfShowcase(): Promise<{ ok: false; message: string } 
   return ctx.showcase
     ? { ok: false, message: "Showcase mode is read-only — exit showcase to make changes." }
     : null;
+}
+
+/**
+ * The mutating-action guard for anything that belongs to a section.
+ *
+ * SUBSUMES blockIfShowcase — call this INSTEAD of it, not after it. Showcase is
+ * just the strictest read-only case, and getSessionContext is cache()d so this
+ * costs nothing extra. blockIfShowcase stays for the section-less actions
+ * (account, notifications, reminders, announcements, showcase itself), which
+ * have no section to check.
+ *
+ *   const stop = await blockIfReadOnly("debug"); if (stop) return stop;
+ */
+export async function blockIfReadOnly(
+  section: Section
+): Promise<{ ok: false; message: string } | null> {
+  const ctx = await getSessionContext();
+  if (ctx.showcase)
+    return {
+      ok: false,
+      message: "Showcase mode is read-only — exit showcase to make changes.",
+    };
+  return canWrite(ctx, section)
+    ? null
+    : {
+        ok: false,
+        message: `You have view-only access to ${SECTION_LABELS[section]}.`,
+      };
+}
+
+/**
+ * Page guard for routes that exist ONLY to create or edit (/debug/new,
+ * /work/projects/new, …). A view-only member shouldn't be handed a form that
+ * can't submit — send them back rather than let them type into a dead end.
+ */
+export async function requireSectionWrite(section: Section): Promise<SessionContext> {
+  const ctx = await getSessionContext();
+  if (!canWrite(ctx, section)) redirect("/");
+  return ctx;
 }
 
 export async function requireAdmin(): Promise<SessionContext> {

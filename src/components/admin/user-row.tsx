@@ -6,6 +6,7 @@ import {
   deleteUser,
   setUserPassword,
   updateAccess,
+  type AccessMap,
 } from "@/lib/actions/admin";
 import { Button, ConfirmButton } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -15,6 +16,7 @@ import { AdminColorPicker } from "@/components/account/color-form";
 import { useAction } from "@/lib/use-action";
 import { memberColorCss } from "@/lib/colors";
 import { SECTIONS, SECTION_LABELS, type Section } from "@/lib/types";
+import type { SectionAccess } from "@/lib/data/session";
 import { cn, formatRelative } from "@/lib/utils";
 
 export type AdminUser = {
@@ -23,7 +25,8 @@ export type AdminUser = {
   full_name: string | null;
   is_admin: boolean;
   color: string | null;
-  sections: Section[];
+  /** section -> tier. A missing key means no access to that section at all. */
+  access: AccessMap;
   last_seen_at: string | null;
 };
 
@@ -50,26 +53,27 @@ function LastSeen({ at }: { at: string | null }) {
 }
 
 export function UserRow({ user, isSelf }: { user: AdminUser; isSelf: boolean }) {
-  const { pending: busy, run, toast } = useAction();
+  const { pending: busy, run } = useAction();
   const [open, setOpen] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showColor, setShowColor] = useState(false);
   const [newPassword, setNewPassword] = useState("");
 
-  function apply(sections: Section[], isAdmin: boolean) {
-    run(() => updateAccess(user.id, sections, isAdmin));
+  const granted = SECTIONS.filter((s) => user.access[s]);
+
+  function apply(access: AccessMap, isAdmin: boolean) {
+    run(() => updateAccess(user.id, access, isAdmin));
   }
 
-  function toggleSection(section: Section) {
-    const has = user.sections.includes(section);
-    let next = has
-      ? user.sections.filter((s) => s !== section)
-      : [...user.sections, section];
-    if (section === "learn" && has && next.includes("work")) {
-      toast.error("Work members must stay in Learn — remove Work first.");
-      return;
-    }
-    if (section === "work" && !has && !next.includes("learn")) next = [...next, "learn"];
+  /**
+   * Set one section to a tier, or remove it entirely with null. Every section is
+   * independent — no implied grants, nothing that refuses to come off. Work used
+   * to force Learn and Debug on; 0051 removed that rule.
+   */
+  function setSection(section: Section, tier: SectionAccess | null) {
+    const next: AccessMap = { ...user.access };
+    if (tier === null) delete next[section];
+    else next[section] = tier;
     apply(next, user.is_admin);
   }
 
@@ -94,8 +98,12 @@ export function UserRow({ user, isSelf }: { user: AdminUser; isSelf: boolean }) 
 
         {/* Access summary: which sections, compact */}
         <p className="hidden max-w-[45%] truncate text-[13px] text-muted sm:block">
-          {user.sections.length > 0
-            ? user.sections.map(shortLabel).join(" · ")
+          {granted.length > 0
+            ? granted
+                .map((s) =>
+                  user.access[s] === "read" ? `${shortLabel(s)} (view)` : shortLabel(s)
+                )
+                .join(" · ")
             : "No sections"}
         </p>
 
@@ -119,24 +127,60 @@ export function UserRow({ user, isSelf }: { user: AdminUser; isSelf: boolean }) 
         <div className="space-y-4 border-t border-line bg-surface/60 px-4 py-3.5">
           <div>
             <p className="mb-2 text-xs font-medium text-faint">Access</p>
-            <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-              {SECTIONS.map((section) => (
-                <Checkbox
-                  key={section}
-                  size="sm"
-                  className="text-[13px]"
-                  label={shortLabel(section)}
-                  checked={user.sections.includes(section)}
-                  onChange={() => toggleSection(section)}
-                  disabled={busy}
-                />
-              ))}
+            {/* Two decisions per section, kept visually separate: the
+                checkbox says WHETHER, the segmented control says HOW MUCH. A
+                tri-state checkbox would collapse them into one control with a
+                state nobody can name. View/Edit only appears once the section
+                is on — there is no tier for access you don't have. */}
+            <div className="grid gap-1.5 sm:grid-cols-2">
+              {SECTIONS.map((section) => {
+                const tier = user.access[section];
+                return (
+                  <div key={section} className="flex items-center gap-2">
+                    <Checkbox
+                      size="sm"
+                      className="min-w-0 flex-1 text-[13px]"
+                      label={shortLabel(section)}
+                      checked={Boolean(tier)}
+                      onChange={() => setSection(section, tier ? null : "write")}
+                      disabled={busy}
+                    />
+                    {tier && (
+                      <div
+                        role="group"
+                        aria-label={`${shortLabel(section)} access level`}
+                        className="flex shrink-0 overflow-hidden rounded-md border border-line"
+                      >
+                        {(["read", "write"] as const).map((level) => (
+                          <button
+                            key={level}
+                            type="button"
+                            aria-pressed={tier === level}
+                            disabled={busy}
+                            onClick={() => setSection(section, level)}
+                            className={cn(
+                              "px-2 py-0.5 text-[11px] transition-colors duration-150 disabled:opacity-50",
+                              tier === level
+                                ? "bg-raised text-ink"
+                                : "text-faint hover:text-muted"
+                            )}
+                          >
+                            {level === "read" ? "View" : "Edit"}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+            <div className="mt-2.5 border-t border-line pt-2.5">
               <Checkbox
                 size="sm"
-                className="ml-2 text-[13px]"
-                label="Admin"
+                className="text-[13px]"
+                label="Admin — full write access everywhere, plus this page"
                 checked={user.is_admin}
-                onChange={() => apply(user.sections, !user.is_admin)}
+                onChange={() => apply(user.access, !user.is_admin)}
                 disabled={busy || isSelf}
               />
             </div>

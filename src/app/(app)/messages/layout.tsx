@@ -40,7 +40,7 @@ export default async function MessagesLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const ctx = await requireSection("work");
+  const ctx = await requireSection("chat");
 
   // Chat has no demo shape — real names, real words. Showcase sees the door.
   if (ctx.showcase) {

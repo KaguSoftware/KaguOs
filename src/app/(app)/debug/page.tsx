@@ -8,7 +8,12 @@ import { PageHeader } from "@/components/shell/page-header";
 import { DebugBoard } from "@/components/debug/board";
 import { LiveRefresh } from "@/components/shell/live-refresh";
 import { LinkButton } from "@/components/ui/link-button";
-import type { DebugFocus, DebugTask, DebugTaskImage } from "@/lib/types";
+import type {
+  DebugFocus,
+  DebugTask,
+  DebugTaskImage,
+  DebugTaskNote,
+} from "@/lib/types";
 
 export const metadata: Metadata = { title: "Debug" };
 
@@ -24,7 +29,7 @@ export default async function DebugPage() {
     .order("created_at", { ascending: false });
   if (!ctx.isAdmin) taskQuery.is("archived_at", null);
 
-  const [tasks, projects, members, workMemberships, focusRes, images] =
+  const [tasks, projects, members, workMemberships, focusRes, images, notes] =
     await Promise.all([
       rowsOrThrow(taskQuery, "debug_tasks"),
       rowsOrThrow(
@@ -74,6 +79,17 @@ export default async function DebugPage() {
           .order("created_at", { ascending: true }),
         "debug_task_images"
       ),
+      // Same one-trip rule as the images above: every note on the board in a
+      // single query, grouped per task in the client. A per-task fetch on expand
+      // would be a round-trip to Tokyo each time you opened a row.
+      rowsOrThrow(
+        ctx.supabase
+          .from("debug_task_notes")
+          .select("*")
+          .eq("is_demo", ctx.showcase)
+          .order("created_at", { ascending: true }),
+        "debug_task_notes"
+      ),
     ]);
 
   const focusItems = (focusRes ?? []) as DebugFocus[];
@@ -111,12 +127,13 @@ export default async function DebugPage() {
           meId={ctx.userId}
           isAdmin={ctx.isAdmin}
           showcase={ctx.showcase}
-          // Messages sits behind the WORK gate and is closed in showcase —
+          // Messages sits behind the CHAT gate (0052) and is closed in showcase —
           // "Message author" only renders where the jump can actually land.
-          canMessage={!ctx.showcase && canAccess(ctx, "work")}
+          canMessage={!ctx.showcase && canAccess(ctx, "chat")}
           suggestOptions={suggestOptions}
           focusItems={focusItems}
           initialImages={images as DebugTaskImage[]}
+          initialNotes={notes as DebugTaskNote[]}
         />
       </Suspense>
     </>

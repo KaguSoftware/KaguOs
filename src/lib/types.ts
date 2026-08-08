@@ -5,6 +5,8 @@ export const SECTIONS = [
   "debug",
   "marketing",
   "comms",
+  "chat",
+  "status",
 ] as const;
 
 export type Section = (typeof SECTIONS)[number];
@@ -16,6 +18,10 @@ export const SECTION_LABELS: Record<Section, string> = {
   debug: "Kagu Debug",
   marketing: "Kagu Marketing",
   comms: "Kagu Comms",
+  chat: "Kagu Chat",
+  // Not a destination — a feature gate. Owns the presence dots, the status
+  // emoji/note, available-to-call, and the editor for your own status.
+  status: "Team Status",
 };
 
 /**
@@ -179,6 +185,8 @@ export type MessageImageView = MessageImage & { url: string; thumbUrl: string };
 export type SectionMembership = {
   user_id: string;
   section: Section;
+  /** 'read' = see the section, change nothing in it. Defaults to 'write' (0053). */
+  access: "read" | "write";
   created_at: string;
 };
 
@@ -409,6 +417,24 @@ export type DebugTaskImage = {
   created_at: string;
 };
 
+/**
+ * One note on a debug task — the running thread beneath `description`.
+ *
+ * `description` is the reporter's statement of the problem and is overwritten
+ * on every edit. A note is appended and never rewritten by anyone but its
+ * author, which is what makes attribution mean something here.
+ */
+export type DebugTaskNote = {
+  id: string;
+  task_id: string;
+  body: string;
+  is_demo: boolean;
+  /** Null once the author's account is deleted — rendered as "Someone". */
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
 /** An image plus the short-lived signed URL that actually renders it. */
 /**
  * A task screenshot with its short-lived signed URLs.
@@ -492,7 +518,8 @@ export type Notification = {
     | "learn_question"
     | "learn_answer"
     | "status_change"
-    | "message";
+    | "message"
+    | "debug_note";
   title: string;
   href: string | null;
   read_at: string | null;

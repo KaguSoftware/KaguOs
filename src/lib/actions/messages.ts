@@ -2,7 +2,7 @@
 
 import { refresh } from "next/cache";
 import {
-  blockIfShowcase,
+  blockIfReadOnly,
   canAccess,
   getSessionContext,
 } from "@/lib/data/session";
@@ -87,11 +87,11 @@ export async function sendMessage(
   mentions: string[] = [],
   refs: SendRefsInput = {}
 ): Promise<SendResult> {
-  const showcaseStop = await blockIfShowcase();
-  if (showcaseStop) return showcaseStop;
+  const stop = await blockIfReadOnly("chat");
+  if (stop) return stop;
   const ctx = await getSessionContext();
-  if (!canAccess(ctx, "work"))
-    return { ok: false, message: "Chat is for the work team." };
+  if (!canAccess(ctx, "chat"))
+    return { ok: false, message: "You don't have access to chat." };
 
   const clean = body.trim().slice(0, MAX_MESSAGE_LEN);
   // A task card can travel alone, like an image can — a reply cannot, because
@@ -132,7 +132,7 @@ export async function sendMessage(
       ctx.supabase
         .from("section_memberships")
         .select("user_id")
-        .eq("section", "work")
+        .eq("section", "chat")
         .eq("user_id", recipientId)
         .maybeSingle(),
       ctx.supabase
@@ -153,14 +153,14 @@ export async function sendMessage(
     ]);
     // A failed lookup is not a permissions answer. Reporting one as "they're
     // not in the chat audience" told the user their teammate had been removed
-    // from Work when the truth was a dropped request.
+    // from Chat when the truth was a dropped request.
     if (profile.error || membership.error)
       return {
         ok: false,
         message: "Couldn't reach the server. Please try again.",
       };
     if (!profile.data || !(profile.data.is_admin || membership.data))
-      return { ok: false, message: "They're not on the work team." };
+      return { ok: false, message: "They don't have access to chat." };
 
     /**
      * THE ANTI-NOISE CONTRACT, and why it needs two conditions.
@@ -383,8 +383,8 @@ export async function getMessageRefs(
 ): Promise<MessageRefsResult> {
   const ctx = await getSessionContext();
   if (ctx.showcase) return { ok: false, message: "Not available in showcase." };
-  if (!canAccess(ctx, "work"))
-    return { ok: false, message: "Chat is for the work team." };
+  if (!canAccess(ctx, "chat"))
+    return { ok: false, message: "You don't have access to chat." };
 
   const [original, originalImage, task] = await Promise.all([
     replyToId
@@ -431,8 +431,8 @@ export async function loadOlderMessages(
   const ctx = await getSessionContext();
   // Chat is closed in showcase entirely — same answer the loaders give.
   if (ctx.showcase) return { ok: false, message: "Not available in showcase." };
-  if (!canAccess(ctx, "work"))
-    return { ok: false, message: "Chat is for the work team." };
+  if (!canAccess(ctx, "chat"))
+    return { ok: false, message: "You don't have access to chat." };
 
   const page = otherId
     ? await getThread(ctx, otherId, before)
@@ -453,11 +453,11 @@ export async function loadOlderMessages(
 export async function markThreadRead(
   otherId: string | null
 ): Promise<ActionResult> {
-  const showcaseStop = await blockIfShowcase();
-  if (showcaseStop) return showcaseStop;
+  const stop = await blockIfReadOnly("chat");
+  if (stop) return stop;
   const ctx = await getSessionContext();
-  if (!canAccess(ctx, "work"))
-    return { ok: false, message: "Chat is for the work team." };
+  if (!canAccess(ctx, "chat"))
+    return { ok: false, message: "You don't have access to chat." };
 
   if (otherId) {
     const { data, error } = await ctx.supabase

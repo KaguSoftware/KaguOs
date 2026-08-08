@@ -35,6 +35,7 @@ import { useToast } from "@/components/ui/toast";
 import { downloadTaskImages, taskToText } from "@/lib/debug-export";
 import { createClient } from "@/lib/supabase/client";
 import { TaskImages } from "@/components/debug/task-images";
+import { TaskNotes } from "@/components/debug/task-notes";
 import { addDays, cn, formatDate, todayInIstanbul } from "@/lib/utils";
 import type {
   DebugKind,
@@ -42,6 +43,7 @@ import type {
   DebugState,
   DebugTask,
   DebugTaskImage,
+  DebugTaskNote,
   MembersMap,
 } from "@/lib/types";
 
@@ -137,6 +139,7 @@ export function TaskRow({
   foundByTitle,
   images,
   onImagesChange,
+  notes,
   highlight,
   selectable,
   selected,
@@ -164,6 +167,8 @@ export function TaskRow({
   /** Screenshots attached to this task. */
   images: DebugTaskImage[];
   onImagesChange: (next: DebugTaskImage[]) => void;
+  /** The task's notes thread, oldest first. Streams from the board's channel. */
+  notes: DebugTaskNote[];
   /** Part of the brainstorm session trail — tinted until the trail is cleared. */
   highlight?: boolean;
   /** In batch-select mode: show a leading checkbox. */
@@ -657,6 +662,17 @@ export function TaskRow({
               images={images}
               canEdit={!task.archived_at}
               onChange={onImagesChange}
+            />
+            {/* The thread sits directly under the details, because it IS the
+                rest of the details — everything learned after the task was
+                filed, each line with the person who wrote it. */}
+            <TaskNotes
+              taskId={task.id}
+              notes={notes}
+              members={members}
+              meId={meId}
+              isAdmin={isAdmin}
+              canEdit={!task.archived_at}
             />
           </div>
           <div className="flex shrink-0 items-center gap-1.5">

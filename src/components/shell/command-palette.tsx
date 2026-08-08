@@ -30,6 +30,8 @@ type Command = {
   icon: LucideIcon;
   section?: Section;
   adminOnly?: boolean;
+  /** A "New …" command: needs write access to its section, not just sight of it. */
+  write?: true;
   keywords?: string;
 };
 
@@ -62,28 +64,31 @@ const HIT_TYPE_LABEL: Record<SearchHit["type"], string> = {
 const ALL: Command[] = [
   { id: "dashboard", label: "Dashboard", href: "/", icon: LayoutDashboard, keywords: "home" },
   { id: "work", label: "Work", hint: "Projects & ideas", href: "/work", icon: FolderKanban, section: "work" },
-  { id: "work-new-project", label: "New project", href: "/work/projects/new", icon: Plus, section: "work", keywords: "create add" },
-  { id: "work-new-idea", label: "New idea", href: "/work/ideas/new", icon: Plus, section: "work", keywords: "create add" },
+  { id: "work-new-project", label: "New project", href: "/work/projects/new", icon: Plus, write: true, section: "work", keywords: "create add" },
+  { id: "work-new-idea", label: "New idea", href: "/work/ideas/new", icon: Plus, write: true, section: "work", keywords: "create add" },
   { id: "learn", label: "Learn", hint: "Sprints & progress", href: "/learn", icon: GraduationCap, section: "learn" },
   { id: "management", label: "Management", hint: "Finance & contracts", href: "/management/finance", icon: Landmark, section: "management" },
-  { id: "mgmt-new-txn", label: "New transaction", href: "/management/finance/new-transaction", icon: Plus, section: "management", keywords: "create add expense income" },
-  { id: "mgmt-new-contract", label: "New contract", href: "/management/contracts/new", icon: Plus, section: "management", keywords: "create add" },
+  { id: "mgmt-new-txn", label: "New transaction", href: "/management/finance/new-transaction", icon: Plus, write: true, section: "management", keywords: "create add expense income" },
+  { id: "mgmt-new-contract", label: "New contract", href: "/management/contracts/new", icon: Plus, write: true, section: "management", keywords: "create add" },
   { id: "debug", label: "Debug", hint: "Claim-a-task board", href: "/debug", icon: Bug, section: "debug" },
-  { id: "debug-new", label: "New task", href: "/debug/new", icon: Plus, section: "debug", keywords: "create add bug" },
+  { id: "debug-new", label: "New task", href: "/debug/new", icon: Plus, write: true, section: "debug", keywords: "create add bug" },
   { id: "marketing", label: "Marketing", hint: "Campaigns & content", href: "/marketing", icon: Megaphone, section: "marketing" },
-  { id: "mkt-new-campaign", label: "New campaign", href: "/marketing/new-campaign", icon: Plus, section: "marketing", keywords: "create add" },
+  { id: "mkt-new-campaign", label: "New campaign", href: "/marketing/new-campaign", icon: Plus, write: true, section: "marketing", keywords: "create add" },
   { id: "comms", label: "Comms", hint: "Leads & clients", href: "/comms", icon: Contact, section: "comms", keywords: "crm contacts" },
-  { id: "comms-new", label: "New contact", href: "/comms/new", icon: Plus, section: "comms", keywords: "create add lead client" },
+  { id: "comms-new", label: "New contact", href: "/comms/new", icon: Plus, write: true, section: "comms", keywords: "create add lead client" },
   { id: "admin", label: "Admin", hint: "Users & access", href: "/admin", icon: ShieldCheck, adminOnly: true, keywords: "team users" },
   { id: "account", label: "Account settings", href: "/account", icon: ShieldCheck, keywords: "profile name color password" },
 ];
 
 export function CommandPalette({
   sections,
+  writeSections,
   isAdmin,
   showcase,
 }: {
   sections: Section[];
+  /** Sections you can CHANGE, not just see — gates the "New …" commands. */
+  writeSections: Section[];
   isAdmin: boolean;
   showcase: boolean;
 }) {
@@ -110,10 +115,14 @@ export function CommandPalette({
     () =>
       ALL.filter((c) => {
         if (c.adminOnly) return isAdmin;
+        // A "New …" command that lands on a form the user can't submit is worse
+        // than a missing one, so those need the write tier (0053).
+        if (c.section && c.write)
+          return isAdmin || writeSections.includes(c.section);
         if (c.section) return isAdmin || sections.includes(c.section);
         return true;
       }),
-    [sections, isAdmin]
+    [sections, writeSections, isAdmin]
   );
 
   // Nav actions as unified Items (always shown).

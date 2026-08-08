@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { requireSection } from "@/lib/data/session";
+import { requireSectionWrite } from "@/lib/data/session";
 import { rowsOrThrow } from "@/lib/data/query";
 import { CreatePage } from "@/components/ui/create";
 import { MeetingForm } from "@/components/comms/meeting-form";
@@ -7,7 +7,7 @@ import { MeetingForm } from "@/components/comms/meeting-form";
 export const metadata: Metadata = { title: "Record a meeting" };
 
 export default async function NewMeetingPage() {
-  const ctx = await requireSection("comms");
+  const ctx = await requireSectionWrite("comms");
   const profiles = await rowsOrThrow(
     ctx.supabase.from("profiles").select("id, full_name, email").order("full_name"),
     "profiles"
