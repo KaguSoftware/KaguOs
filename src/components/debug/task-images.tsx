@@ -49,11 +49,20 @@ export function TaskImages({
   images,
   canEdit,
   onChange,
+  className,
 }: {
   taskId: string;
   images: DebugTaskImage[];
   canEdit: boolean;
   onChange: (next: DebugTaskImage[]) => void;
+  /**
+   * Outer spacing, so the caller can own it. Defaults to the `mt-2.5` this
+   * always had — the gap that separates the thumbnails from a description
+   * sitting directly above them. The detail panel's two-column layout puts
+   * them SIDE BY SIDE instead, where a top margin would drop the first
+   * thumbnail below the description's first line.
+   */
+  className?: string;
 }) {
   const { success: toastSuccess, error: toastError } = useToast();
   const fileRef = useRef<HTMLInputElement>(null);
@@ -217,7 +226,7 @@ export function TaskImages({
 
   return (
     <div
-      className="mt-2.5"
+      className={cn("mt-2.5", className)}
       // Ctrl+V a screenshot straight onto the task. `Win+Shift+S` → paste is
       // how a screenshot actually reaches a bug report; the alternative is
       // save-to-disk, browse, pick.

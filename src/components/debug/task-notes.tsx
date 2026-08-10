@@ -30,6 +30,7 @@ export function TaskNotes({
   meId,
   isAdmin,
   canEdit,
+  className,
 }: {
   taskId: string;
   notes: DebugTaskNote[];
@@ -38,6 +39,12 @@ export function TaskNotes({
   isAdmin: boolean;
   /** False on archived tasks and for view-only members — read the thread, don't add to it. */
   canEdit: boolean;
+  /**
+   * Outer spacing, so the caller can own it. Defaults to the `mt-3` this always
+   * had, for callers that stack the thread directly under other content. The
+   * detail panel gives the thread its own padded band and passes `mt-0`.
+   */
+  className?: string;
 }) {
   const { pending, run } = useAction();
   const [draft, setDraft] = useState("");
@@ -67,7 +74,7 @@ export function TaskNotes({
   if (notes.length === 0 && !canEdit) return null;
 
   return (
-    <div className="mt-3 max-w-[70ch]">
+    <div className={cn("mt-3 max-w-[70ch]", className)}>
       {notes.length > 0 && (
         <ul className="space-y-2.5 border-l border-line pl-3">
           {notes.map((note) => {

@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
+  ChevronDown,
   Copy,
   Hand,
   ListPlus,
@@ -118,6 +119,23 @@ const PRIORITY_TONE: Record<DebugPriority, BadgeTone> = {
 
 /** Deadlines only earn a chip when they're close enough to act on. */
 const DUE_SOON_DAYS = 7;
+
+/**
+ * Height of every control in the detail drawer's action bar.
+ *
+ * `size="sm"` is 28px: right under a mouse, too small under a thumb — and this
+ * row of buttons sits directly below the note composer, where a miss costs you
+ * a deleted task. 36px on touch widths, back to the compact 28px from `md` up
+ * where the pointer is precise and vertical space is the scarcer resource.
+ */
+const ACTION_HEIGHT = "h-9 md:h-7";
+
+/**
+ * One band of the detail drawer. Every section of an opened task gets the same
+ * padding and the same 1px rule above it, which is the whole reason the drawer
+ * reads as one surface instead of a pile of blocks.
+ */
+const BAND = "border-t border-line px-4 py-3 sm:py-3.5";
 
 const STATE_LABEL: Record<DebugState, string> = {
   open: "Open",
@@ -408,6 +426,39 @@ export function TaskRow({
     });
   }
 
+  /**
+   * The look of one state segment, shared by the row control (desktop) and the
+   * drawer control (phone) so the two can never drift apart.
+   *
+   * Locked while nobody holds the task: state is "how far along is the person
+   * on it", and with no person there is nothing to report. The current state
+   * still shows its tint (it's a fact); the other two go dead until someone
+   * claims. Same rule as the keyboard 1/2/3, the bulk dropdown, and the server
+   * action.
+   */
+  function stateSegmentClass(state: DebugState) {
+    if (task.state === state) {
+      return state === "done"
+        ? "bg-primary/15 text-primary-dim"
+        : state === "in_progress"
+          ? "bg-amber/15 text-amber"
+          : "bg-raised text-ink";
+    }
+    return task.assignee_id
+      ? "text-faint hover:bg-raised hover:text-muted"
+      : "cursor-not-allowed text-faint opacity-40";
+  }
+
+  // Why, not just "no" — a dead control with no reason reads as broken.
+  const stateLockReason = task.assignee_id
+    ? undefined
+    : "Claim the task first — state tracks whoever holds it.";
+
+  // TaskNotes renders nothing when there's no thread and no right to start one.
+  // Ask the same question before framing a band around it, or an archived task
+  // with no notes shows an empty bordered strip.
+  const showNotes = notes.length > 0 || !task.archived_at;
+
   // Done rows recede via the title's own colour + strikethrough, NOT a blanket
   // opacity. `opacity-60` multiplied against text that is already `muted`/
   // `faint` pushed the meta line under 3:1 — the row read as disabled rather
@@ -419,6 +470,11 @@ export function TaskRow({
       // so an opened panel never sits flush against the window edge.
       className={cn(
         "scroll-mb-6 px-4 py-3 transition-colors duration-150",
+        // Nothing used to say a row could be opened. Under a pointer, the row
+        // lighting up on approach IS that signal — cheaper than a permanent
+        // chevron in a list this dense. Touch gets the chevron instead, below,
+        // because there is no hover to hint with.
+        "md:hover:bg-raised/40",
         highlight && "bg-primary/5",
         // The keyboard cursor. An inset ring rather than an outline so it can't
         // be clipped by the list's own overflow, and it reads as "this row is
@@ -456,12 +512,12 @@ export function TaskRow({
         <button
           type="button"
           onClick={toggleExpanded}
-          className="flex min-w-0 items-start gap-2 text-left"
+          className="flex w-full min-w-0 items-start gap-2 text-left"
           aria-expanded={expanded}
         >
           {/* Kind leads the row — see KindMark. */}
           <KindMark kind={task.kind} />
-          <span className="min-w-0">
+          <span className="min-w-0 flex-1">
           {/* A long title used to `truncate` to ONE line, and the elastic column
               is narrow (badges, state and assignee take the rest), so most of
               the title was simply unreadable with no way to recover it. Two
@@ -479,12 +535,19 @@ export function TaskRow({
           >
             {task.title}
           </span>
-          {/* On a phone the state switcher and the claim button are hidden
-              until the row is opened, so the two facts they carry — what state
-              this is in and who holds it — are restated here as plain words.
-              `md:hidden` because from `md` up the real controls are on the row
-              and repeating them would be noise. */}
-          <span className="mt-0.5 block truncate text-xs text-faint md:hidden">
+          {/* On a COLLAPSED phone row the state switcher and the claim button
+              aren't on screen, so the two facts they carry — what state this is
+              in and who holds it — are restated here as plain words. Once the
+              row opens, the drawer's first band carries the real controls a few
+              pixels below, so this line retires rather than saying the same
+              thing twice. `md:hidden` because from `md` up the controls are on
+              the row itself at every moment. */}
+          <span
+            className={cn(
+              "mt-0.5 truncate text-xs text-faint md:hidden",
+              expanded ? "hidden" : "block"
+            )}
+          >
             <span
               className={cn(
                 "font-medium",
@@ -532,6 +595,17 @@ export function TaskRow({
             )}
           </span>
           </span>
+          {/* Touch's disclosure signal. A phone has no hover, so without this
+              nothing distinguishes a row that opens from a row that doesn't.
+              `md:hidden` — the pointer gets the row-hover fill instead, and a
+              permanent chevron in a list this dense would be clutter. */}
+          <ChevronDown
+            className={cn(
+              "mt-0.5 size-4 shrink-0 text-faint transition-transform duration-150 ease-mac md:hidden",
+              expanded && "rotate-180"
+            )}
+            aria-hidden
+          />
         </button>
 
         {/* Badges. Below `md` they take their own grid line under the title,
@@ -549,30 +623,20 @@ export function TaskRow({
           <Badge tone={PRIORITY_TONE[task.priority]}>{task.priority}</Badge>
         </div>
 
-        {/* One-click state switch.
-            Hidden on a COLLAPSED phone row (the state is already shown as a
-            word in the meta line above) and revealed when the row is expanded —
-            on desktop it is always visible. This is the difference between 4
-            rows and 6 rows of vertical space per task on a phone.
+        {/* One-click state switch — DESKTOP ONLY, present at every moment so a
+            state can be flipped without opening anything.
 
-            Locked while nobody holds the task: state is "how far along is the
-            person on it", and with no person there is nothing to report. The
-            current state still shows its tint (it's a fact); the other two
-            pills go dead until someone claims. Same rule as the keyboard
-            1/2/3, the bulk dropdown, and the server action. */}
+            On a phone these last two columns don't exist. The row is a single
+            narrow column there, and injecting a ~200px segmented control plus a
+            claim button into it on expand shoved the detail down and turned the
+            open row into a stack of unrelated fragments. Both controls live in
+            the drawer's first band instead, where they get the full width and
+            real tap targets. Same controls, placed where each screen has room. */}
         <div
-          className={cn(
-            "overflow-hidden rounded-md border border-line md:flex",
-            expanded ? "flex" : "hidden"
-          )}
+          className="hidden overflow-hidden rounded-md border border-line md:flex"
           role="group"
           aria-label="State"
-          // Why, not just "no" — a dead control with no reason reads as broken.
-          title={
-            task.assignee_id
-              ? undefined
-              : "Claim the task first — state tracks whoever holds it."
-          }
+          title={stateLockReason}
         >
           {(Object.keys(STATE_LABEL) as DebugState[]).map((state) => (
             <button
@@ -582,15 +646,7 @@ export function TaskRow({
               onClick={() => patchTask(() => setTaskState(task.id, state), { state })}
               className={cn(
                 "px-2 py-1 text-xs transition-colors duration-150",
-                task.state === state
-                  ? state === "done"
-                    ? "bg-primary/15 text-primary-dim"
-                    : state === "in_progress"
-                      ? "bg-amber/15 text-amber"
-                      : "bg-raised text-ink"
-                  : task.assignee_id
-                    ? "text-faint hover:bg-raised hover:text-muted"
-                    : "cursor-not-allowed text-faint opacity-40"
+                stateSegmentClass(state)
               )}
             >
               {STATE_LABEL[state]}
@@ -598,18 +654,9 @@ export function TaskRow({
           ))}
         </div>
 
-        {/* Assignee / claim. Fixed 10rem from `md` up so the column aligns down
-            the list; fluid below that, where 160px is nearly half the screen.
-            Like the state switcher, this only appears on a phone once the row is
-            open — collapsed, "Claim" used to float in dead space under the state
-            pills, belonging to nothing. Left-aligned on mobile (it starts a line
-            of its own) and right-aligned in its column on desktop. */}
-        <div
-          className={cn(
-            "items-center gap-1.5 md:flex md:w-40 md:justify-end",
-            expanded ? "flex" : "hidden"
-          )}
-        >
+        {/* Assignee / claim. Fixed 10rem so the column aligns down the list.
+            Desktop only, for the same reason as the state switch above. */}
+        <div className="hidden items-center gap-1.5 md:flex md:w-40 md:justify-end">
           {pending && (
             <Loader2 className="size-3.5 animate-spin text-faint" aria-hidden />
           )}
@@ -649,246 +696,426 @@ export function TaskRow({
         </div>
       </div>
 
-      {expanded && !editing && (
-        <div className="mt-2 flex flex-col items-start justify-between gap-4 pl-0.5 sm:flex-row">
-          <div className="min-w-0">
-            <p className="max-w-[70ch] whitespace-pre-wrap text-[13px] leading-relaxed text-muted">
-              {task.description || "No details."}
-            </p>
-            {/* Screenshots live with the details, not in the button cluster —
-                they're part of what the task SAYS, not something you do to it. */}
-            <TaskImages
-              taskId={task.id}
-              images={images}
-              canEdit={!task.archived_at}
-              onChange={onImagesChange}
-            />
-            {/* The thread sits directly under the details, because it IS the
-                rest of the details — everything learned after the task was
-                filed, each line with the person who wrote it. */}
-            <TaskNotes
-              taskId={task.id}
-              notes={notes}
-              members={members}
-              meId={meId}
-              isAdmin={isAdmin}
-              canEdit={!task.archived_at}
-            />
-          </div>
-          <div className="flex shrink-0 items-center gap-1.5">
-            {/* An audit's output IS a list of tasks — filing them is the way
-                this kind of work gets finished. */}
-            {task.kind === "audit" && (
-              <>
+      {/* THE DETAIL DRAWER.
+          One surface holding everything an opened task contains, at every width.
+
+          Before this it was three sibling blocks appended under the row with a
+          bare `mt-2` and no boundary. On desktop a `justify-between` flex put
+          the action cluster top-right level with the FIRST LINE of the
+          description, so "Delete" sat beside "No details." while the note
+          composer — starved inside a shrink-wrapped `min-w-0` column with no
+          `flex-1` — collapsed to a 240px stub. On a phone the same markup, plus
+          the state and claim controls injected into the row's grid, produced a
+          vertical soup of fragments with no grouping at all.
+
+          Note what this is NOT: a bordered, rounded panel. The list is already
+          a card (`rounded-lg border bg-surface` around the `<ul>` in board.tsx),
+          so a framed box in here would be a card inside a card. Instead the
+          drawer BREAKS OUT of the row's `px-4 py-3` with negative margins, so
+          its hairlines run edge to edge of that card and its bottom meets the
+          `divide-y` rule to the next row. It reads as a well cut into the list.
+
+          `bg-bg/60` recedes (--bg 0.10 sits under the card's --surface 0.15) and
+          is translucent on purpose: the row's own `cursored` ring and the
+          brainstorm `highlight` tint must still read across the opened row. */}
+      {expanded && (
+        <div className="-mx-4 -mb-3 mt-3 animate-page-in border-t border-line bg-bg/60">
+          {/* Band 1 — the two controls that live on the row from `md` up.
+              PHONE ONLY, and full width because there IS width to spend once
+              the row has opened: three equal 36px segments instead of the 22px
+              pills the row used to squeeze in. */}
+          <div className="space-y-2.5 px-4 py-3 md:hidden">
+            <div
+              className="grid grid-cols-3 overflow-hidden rounded-md border border-line"
+              role="group"
+              aria-label="State"
+              title={stateLockReason}
+            >
+              {(Object.keys(STATE_LABEL) as DebugState[]).map((state, i) => (
+                <button
+                  key={state}
+                  type="button"
+                  disabled={task.state === state || !task.assignee_id}
+                  onClick={() =>
+                    patchTask(() => setTaskState(task.id, state), { state })
+                  }
+                  className={cn(
+                    "h-9 text-[13px] transition-colors duration-150",
+                    // Dividers on the segments themselves, so the three cells
+                    // stay exactly equal — a gap-separated flex would not.
+                    i > 0 && "border-l border-line",
+                    stateSegmentClass(state)
+                  )}
+                >
+                  {STATE_LABEL[state]}
+                </button>
+              ))}
+            </div>
+            <div className="flex min-h-9 items-center justify-between gap-3">
+              <span className="min-w-0 truncate text-[13px]">
+                {task.assignee_id ? (
+                  <>
+                    <span className="text-faint">Held by </span>
+                    <span
+                      className="font-medium"
+                      style={{ color: members[task.assignee_id]?.color }}
+                    >
+                      {mine ? "you" : (members[task.assignee_id]?.name ?? "someone")}
+                    </span>
+                  </>
+                ) : (
+                  <span className="text-faint">Nobody has claimed this</span>
+                )}
+              </span>
+              {pending && (
+                <Loader2
+                  className="size-3.5 shrink-0 animate-spin text-faint"
+                  aria-hidden
+                />
+              )}
+              {task.assignee_id ? (
+                (mine || isAdmin) && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-9 shrink-0"
+                    onClick={() =>
+                      patchTask(() => unclaimTask(task.id), { assignee_id: null })
+                    }
+                  >
+                    <Undo2 className="size-3.5" aria-hidden />
+                    {/* Named, not a bare glyph. The row can afford an icon-only
+                        unclaim because it has a tooltip and a mouse; a phone
+                        has neither. */}
+                    Unclaim
+                  </Button>
+                )
+              ) : (
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => setFiling((v) => !v)}
+                  className="h-9 shrink-0"
+                  onClick={() =>
+                    patchTask(() => claimTask(task.id), { assignee_id: meId })
+                  }
                 >
-                  <ListPlus className="size-3.5" aria-hidden />
-                  Log findings
+                  <Hand className="size-3.5" aria-hidden />
+                  Claim
                 </Button>
-                {/* The count is its OWN link, not part of the button above.
-                    The button opens the composer — overloading it would mean
-                    one control doing two unrelated things. Before this, an
-                    audit could say "Found 7" with no way to see which seven. */}
-                {foundCount > 0 && (
-                  <Link
-                    href={`/debug?f=${task.id}`}
-                    title={`Show the ${foundCount} task${foundCount === 1 ? "" : "s"} this audit found`}
-                    className="inline-flex items-center gap-1 rounded-md border border-line px-2 py-1 text-[13px] text-muted transition-colors duration-150 hover:border-line-strong hover:bg-raised hover:text-ink"
-                  >
-                    <span className="font-mono text-[11px] tabular-nums text-ink">
-                      {foundCount}
-                    </span>
-                    found
-                  </Link>
-                )}
-              </>
-            )}
-            {/* Ask the person who filed it, in Messages, with the task quoted
-                — the alternative was re-typing the title into a chat by hand
-                every time a task needed a clarifying question. */}
-            {author && (
-              <Button
-                variant="ghost"
-                size="sm"
-                title={`Message ${author.name} about this task`}
-                onClick={messageAuthor}
-              >
-                <MessagesSquare className="size-3.5" aria-hidden />
-                Message author
-              </Button>
-            )}
-            <Button variant="ghost" size="sm" onClick={copyTask}>
-              <Copy className="size-3.5" aria-hidden />
-              Copy
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => {
-                setDraft({
-                  title: task.title,
-                  description: task.description ?? "",
-                  priority: task.priority,
-                  kind: task.kind,
-                  due_on: task.due_on ?? "",
-                  project_id: task.project_id ?? "",
-                  suggested_for: task.suggested_for ?? "",
-                });
-                setEditing(true);
-              }}
+              )}
+            </div>
+          </div>
+
+          {/* Band 2 — what the task SAYS. From `lg` up this is where the
+              desktop's spare width finally does work: the description holds its
+              70ch reading measure on the left and the screenshots take a column
+              beside it, instead of a 620px paragraph with 400px of dead space
+              to its right and the thumbnails pushed below. Stacked under `lg`. */}
+          {!editing && (
+            <div
+              className={cn(
+                BAND,
+                "lg:grid lg:grid-cols-[minmax(0,70ch)_minmax(0,18rem)] lg:items-start lg:gap-6"
+              )}
             >
-              <Pencil className="size-3.5" aria-hidden />
-              Edit
-            </Button>
-            {canDelete && (
-              <ConfirmButton
-                size="sm"
-                confirmLabel="Really delete?"
-                disabled={pending}
-                onConfirm={() => {
-                  const before = { ...task };
-                  run(() => deleteTask(task.id), {
-                    optimistic: () => onRemove(task.id),
-                    rollback: () => onRestore(before),
-                    success: "Task deleted.",
-                  });
-                }}
-              >
-                <Trash2 className="size-3.5" aria-hidden />
-                Delete
-              </ConfirmButton>
-            )}
-          </div>
-        </div>
-      )}
+              <p className="max-w-[70ch] whitespace-pre-wrap text-[13px] leading-relaxed text-muted">
+                {task.description || "No details."}
+              </p>
+              {/* Screenshots are part of what the task SAYS, not something you
+                  do to it — so they belong here, never in the button cluster.
+                  `lg:mt-0` because side by side, a top margin would drop the
+                  first thumbnail below the description's first line. */}
+              <TaskImages
+                taskId={task.id}
+                images={images}
+                canEdit={!task.archived_at}
+                onChange={onImagesChange}
+                className="lg:mt-0"
+              />
+            </div>
+          )}
 
-      {/* Filing what an audit found: one line per finding, filed in one trip.
-          Each becomes a normal task on this audit's board, linked back to it. */}
-      {expanded && filing && (
-        <div className="mt-2 space-y-2 rounded-md border border-line bg-raised/40 p-2.5">
-          <Textarea
-            autoFocus
-            value={findings}
-            onChange={(e) => setFindings(e.target.value)}
-            rows={4}
-            placeholder={"One finding per line…\nCheckout total wrong on discounts\nAvatar 404s on first load"}
-            aria-label="What the audit found, one per line"
-          />
-          <div className="flex items-center gap-2">
-            <p className="text-[11px] text-faint">
-              {findingLines.length > 0
-                ? `${findingLines.length} task${findingLines.length === 1 ? "" : "s"} — they land on this board as fixes.`
-                : "One per line."}
-            </p>
-            <div className="ml-auto flex gap-2">
+          {/* Band 3 — the thread, which IS the rest of the details: everything
+              learned after the task was filed, each line with the person who
+              wrote it. Its own band, so the composer reads as "add to the
+              thread" rather than a stray box under a paragraph. */}
+          {!editing && showNotes && (
+            <div className={BAND}>
+              <TaskNotes
+                taskId={task.id}
+                notes={notes}
+                members={members}
+                meId={meId}
+                isAdmin={isAdmin}
+                canEdit={!task.archived_at}
+                className="mt-0"
+              />
+            </div>
+          )}
+
+          {/* Band 4 — what you can do TO the task, last and on its own footing.
+              The rule above it is the point: these are commands, not content,
+              and they used to share a line with the description. */}
+          {!editing && (
+            <div className="flex flex-wrap items-center gap-1.5 border-t border-line px-4 py-2.5">
+              {/* An audit's output IS a list of tasks — filing them is the way
+                  this kind of work gets finished. */}
+              {task.kind === "audit" && (
+                <>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className={ACTION_HEIGHT}
+                    onClick={() => setFiling((v) => !v)}
+                  >
+                    <ListPlus className="size-3.5" aria-hidden />
+                    Log findings
+                  </Button>
+                  {/* The count is its OWN link, not part of the button above.
+                      The button opens the composer — overloading it would mean
+                      one control doing two unrelated things. Before this, an
+                      audit could say "Found 7" with no way to see which seven. */}
+                  {foundCount > 0 && (
+                    <Link
+                      href={`/debug?f=${task.id}`}
+                      title={`Show the ${foundCount} task${foundCount === 1 ? "" : "s"} this audit found`}
+                      className={cn(
+                        "inline-flex items-center gap-1 rounded-md border border-line px-2.5 text-[13px] text-muted",
+                        "transition-colors duration-150 hover:border-line-strong hover:bg-raised hover:text-ink",
+                        // Hand-rolled, so it needs the height the Buttons get
+                        // from ACTION_HEIGHT rather than a py- pair.
+                        ACTION_HEIGHT
+                      )}
+                    >
+                      <span className="font-mono text-[11px] tabular-nums text-ink">
+                        {foundCount}
+                      </span>
+                      found
+                    </Link>
+                  )}
+                </>
+              )}
+              {/* Ask the person who filed it, in Messages, with the task quoted
+                  — the alternative was re-typing the title into a chat by hand
+                  every time a task needed a clarifying question. */}
+              {author && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className={ACTION_HEIGHT}
+                  title={`Message ${author.name} about this task`}
+                  onClick={messageAuthor}
+                >
+                  <MessagesSquare className="size-3.5" aria-hidden />
+                  Message author
+                </Button>
+              )}
               <Button
                 variant="ghost"
                 size="sm"
+                className={ACTION_HEIGHT}
+                onClick={copyTask}
+              >
+                <Copy className="size-3.5" aria-hidden />
+                Copy
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                className={ACTION_HEIGHT}
                 onClick={() => {
-                  setFiling(false);
-                  setFindings("");
+                  setDraft({
+                    title: task.title,
+                    description: task.description ?? "",
+                    priority: task.priority,
+                    kind: task.kind,
+                    due_on: task.due_on ?? "",
+                    project_id: task.project_id ?? "",
+                    suggested_for: task.suggested_for ?? "",
+                  });
+                  setEditing(true);
                 }}
               >
-                Cancel
+                <Pencil className="size-3.5" aria-hidden />
+                Edit
               </Button>
-              <Button
-                variant="primary"
-                size="sm"
-                disabled={findingLines.length === 0 || pending}
-                onClick={fileFindings}
-              >
-                File {findingLines.length > 0 ? findingLines.length : ""}
-              </Button>
+              {/* Delete is pushed to the far end. On a phone the bar wraps and
+                  it lands alone on the second line — exactly the separation a
+                  destructive action should have from "Copy", which it used to
+                  sit flush against. */}
+              {canDelete && (
+                <ConfirmButton
+                  size="sm"
+                  className={cn("ml-auto", ACTION_HEIGHT)}
+                  confirmLabel="Really delete?"
+                  disabled={pending}
+                  onConfirm={() => {
+                    const before = { ...task };
+                    run(() => deleteTask(task.id), {
+                      optimistic: () => onRemove(task.id),
+                      rollback: () => onRestore(before),
+                      success: "Task deleted.",
+                    });
+                  }}
+                >
+                  <Trash2 className="size-3.5" aria-hidden />
+                  Delete
+                </ConfirmButton>
+              )}
             </div>
-          </div>
-        </div>
-      )}
+          )}
 
-      {expanded && editing && (
-        <div className="mt-2 space-y-2.5 pl-0.5">
-          <Input
-            value={draft.title}
-            onChange={(e) => setDraft((d) => ({ ...d, title: e.target.value }))}
-            maxLength={200}
-            aria-label="Task title"
-          />
-          <Textarea
-            value={draft.description}
-            onChange={(e) => setDraft((d) => ({ ...d, description: e.target.value }))}
-            rows={3}
-            placeholder="Details…"
-            aria-label="Task description"
-          />
-          {/* Also in the editor, not just the read view: reaching for "add a
-              screenshot" while you're already editing the task is the obvious
-              move, and finding it only after cancelling out is a dead end
-              (Parsa, 2026-07-19). Uploads are immediate — they don't wait for
-              Save, because they're already stored against this task id. */}
-          <TaskImages
-            taskId={task.id}
-            images={images}
-            canEdit={!task.archived_at}
-            onChange={onImagesChange}
-          />
-          <div className="flex flex-wrap items-center gap-2">
-            <Dropdown
-              className="w-full sm:w-44"
-              value={draft.project_id}
-              options={[
-                { value: "", label: "General" },
-                ...projects.map((p) => ({ value: p.id, label: p.name })),
-              ]}
-              onChange={(v) => setDraft((d) => ({ ...d, project_id: v }))}
-            />
-            <Dropdown
-              className="w-full sm:w-32"
-              value={draft.kind}
-              options={KIND_OPTIONS}
-              onChange={(v) => setDraft((d) => ({ ...d, kind: v as DebugKind }))}
-            />
-            <Dropdown
-              className="w-full sm:w-32"
-              value={draft.priority}
-              options={PRIORITY_OPTIONS}
-              onChange={(v) => setDraft((d) => ({ ...d, priority: v as DebugPriority }))}
-            />
-            <DatePicker
-              key={task.id}
-              name="due_on"
-              className="w-40"
-              defaultValue={task.due_on ?? ""}
-              placeholder="No deadline"
-              onChange={(iso) => setDraft((d) => ({ ...d, due_on: iso }))}
-            />
-            {suggestOptions.length > 0 && (
-              <Dropdown
-                className="w-full sm:w-44"
-                value={draft.suggested_for}
-                placeholder="No suggestion"
-                options={[
-                  { value: "", label: "No suggestion" },
-                  ...suggestOptions,
-                ]}
-                onChange={(v) => setDraft((d) => ({ ...d, suggested_for: v }))}
+          {/* Band 5 — filing what an audit found: one line per finding, filed
+              in one trip. Each becomes a normal task on this audit's board,
+              linked back to it. It sits directly BELOW the action bar, i.e.
+              under the "Log findings" button that opened it, on a lifted fill
+              so it reads as a drawer off that control rather than a fifth peer
+              section. */}
+          {!editing && filing && (
+            <div className={cn(BAND, "space-y-2 bg-raised/30")}>
+              <Textarea
+                autoFocus
+                value={findings}
+                onChange={(e) => setFindings(e.target.value)}
+                rows={4}
+                placeholder={"One finding per line…\nCheckout total wrong on discounts\nAvatar 404s on first load"}
+                aria-label="What the audit found, one per line"
               />
-            )}
-            <div className="ml-auto flex gap-2">
-              <Button variant="ghost" size="sm" onClick={() => setEditing(false)}>
-                Cancel
-              </Button>
-              <Button
-                variant="primary"
-                size="sm"
-                disabled={pending}
-                onClick={saveEdit}
-              >
-                Save
-              </Button>
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
+                <p className="text-[11px] text-faint">
+                  {findingLines.length > 0
+                    ? `${findingLines.length} task${findingLines.length === 1 ? "" : "s"} — they land on this board as fixes.`
+                    : "One per line."}
+                </p>
+                <div className="ml-auto flex gap-2">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className={ACTION_HEIGHT}
+                    onClick={() => {
+                      setFiling(false);
+                      setFindings("");
+                    }}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    className={ACTION_HEIGHT}
+                    disabled={findingLines.length === 0 || pending}
+                    onClick={fileFindings}
+                  >
+                    File {findingLines.length > 0 ? findingLines.length : ""}
+                  </Button>
+                </div>
+              </div>
             </div>
-          </div>
+          )}
+
+          {/* Editing REPLACES bands 2-4 rather than appending to them — reading
+              a task and editing it are two modes, not two things you do at
+              once. Same drawer, same band padding, so the edges don't move
+              under you when you switch. */}
+          {editing && (
+            <div className={cn(BAND, "space-y-2.5")}>
+              <Input
+                value={draft.title}
+                onChange={(e) => setDraft((d) => ({ ...d, title: e.target.value }))}
+                maxLength={200}
+                aria-label="Task title"
+              />
+              <Textarea
+                value={draft.description}
+                onChange={(e) => setDraft((d) => ({ ...d, description: e.target.value }))}
+                rows={3}
+                placeholder="Details…"
+                aria-label="Task description"
+              />
+              {/* Also in the editor, not just the read view: reaching for "add a
+                  screenshot" while you're already editing the task is the obvious
+                  move, and finding it only after cancelling out is a dead end
+                  (Parsa, 2026-07-19). Uploads are immediate — they don't wait for
+                  Save, because they're already stored against this task id. */}
+              <TaskImages
+                taskId={task.id}
+                images={images}
+                canEdit={!task.archived_at}
+                onChange={onImagesChange}
+              />
+              <div className="flex flex-wrap items-center gap-2">
+                <Dropdown
+                  className="w-full sm:w-44"
+                  value={draft.project_id}
+                  options={[
+                    { value: "", label: "General" },
+                    ...projects.map((p) => ({ value: p.id, label: p.name })),
+                  ]}
+                  onChange={(v) => setDraft((d) => ({ ...d, project_id: v }))}
+                />
+                <Dropdown
+                  className="w-full sm:w-32"
+                  value={draft.kind}
+                  options={KIND_OPTIONS}
+                  onChange={(v) => setDraft((d) => ({ ...d, kind: v as DebugKind }))}
+                />
+                <Dropdown
+                  className="w-full sm:w-32"
+                  value={draft.priority}
+                  options={PRIORITY_OPTIONS}
+                  onChange={(v) => setDraft((d) => ({ ...d, priority: v as DebugPriority }))}
+                />
+                <DatePicker
+                  key={task.id}
+                  name="due_on"
+                  // Full width on a phone like every field beside it — a lone 160px
+                  // control in a stack of full-width ones reads as one that failed
+                  // to lay out.
+                  className="w-full sm:w-40"
+                  defaultValue={task.due_on ?? ""}
+                  placeholder="No deadline"
+                  onChange={(iso) => setDraft((d) => ({ ...d, due_on: iso }))}
+                />
+                {suggestOptions.length > 0 && (
+                  <Dropdown
+                    className="w-full sm:w-44"
+                    value={draft.suggested_for}
+                    placeholder="No suggestion"
+                    options={[
+                      { value: "", label: "No suggestion" },
+                      ...suggestOptions,
+                    ]}
+                    onChange={(v) => setDraft((d) => ({ ...d, suggested_for: v }))}
+                  />
+                )}
+              </div>
+
+              {/* Save and Cancel get their own line above a rule, never a slot in
+                  the field row. `ml-auto` inside that wrapping row put them at
+                  whatever position the last field happened to end at — on a phone,
+                  where every field is full width, that was a line of their own only
+                  by accident. Declared here instead. */}
+              <div className="flex justify-end gap-2 border-t border-line pt-2.5">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className={ACTION_HEIGHT}
+                  onClick={() => setEditing(false)}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  variant="primary"
+                  size="sm"
+                  className={ACTION_HEIGHT}
+                  disabled={pending}
+                  onClick={saveEdit}
+                >
+                  Save
+                </Button>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </li>
