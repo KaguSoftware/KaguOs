@@ -80,12 +80,17 @@ export function FinancePanel({
     if (!ratesUpdatedAt || r.updated_at > ratesUpdatedAt) ratesUpdatedAt = r.updated_at;
   }
 
+  // Pending money hasn't moved — it stays out of the tiles and the cash-flow
+  // chart, which answer "what actually happened", and lives only in the table
+  // (amber badge) until someone marks it paid.
+  const settled = transactions.filter((t) => t.status === "paid");
+
   // This month, in TL
   const thisMonth = monthKey(todayInIstanbul());
   let monthIncome = 0;
   let monthExpense = 0;
   const skipped = new Set<string>();
-  for (const t of transactions) {
+  for (const t of settled) {
     if (monthKey(t.occurred_on) !== thisMonth) continue;
     const value = toTRY(Number(t.amount), t.currency, rates);
     if (value === null) {
@@ -109,7 +114,7 @@ export function FinancePanel({
     else recurringOut += value;
   }
 
-  const { series, skippedCurrencies } = buildCashflowSeries(transactions, rates);
+  const { series, skippedCurrencies } = buildCashflowSeries(settled, rates);
   for (const c of skippedCurrencies) skipped.add(c);
 
   const breakdown: BreakdownItem[] = recurring
@@ -220,12 +225,13 @@ export function FinancePanel({
             action={
               <ExportButton
                 filename="transactions.csv"
-                columns={["Date", "Type", "Amount", "Currency", "Client", "Notes"]}
+                columns={["Date", "Type", "Amount", "Currency", "Status", "Client", "Notes"]}
                 rows={transactions.map((t) => [
                   t.occurred_on,
                   t.type,
                   Number(t.amount),
                   t.currency,
+                  t.status,
                   t.client ?? "",
                   t.notes ?? "",
                 ])}
@@ -248,6 +254,7 @@ export function FinancePanel({
                     <th className="px-4 py-2.5 text-right text-xs font-medium text-faint">
                       Amount
                     </th>
+                    <th className="px-4 py-2.5 text-xs font-medium text-faint">Status</th>
                     <th className="px-4 py-2.5 text-xs font-medium text-faint">Client</th>
                     <th className="px-4 py-2.5 text-xs font-medium text-faint">Notes</th>
                     <th className="px-4 py-2.5" />

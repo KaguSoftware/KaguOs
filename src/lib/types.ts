@@ -309,11 +309,16 @@ export type TransactionType = "income" | "expense";
 export type Currency = "TRY" | "USD" | "EUR";
 export const CURRENCIES: Currency[] = ["TRY", "USD", "EUR"];
 
+/** 'pending' = recorded but not settled (invoice sent, bill due); 'paid' = done. */
+export type TransactionStatus = "pending" | "paid";
+export const TRANSACTION_STATUSES: TransactionStatus[] = ["pending", "paid"];
+
 export type Transaction = {
   id: string;
   type: TransactionType;
   amount: number;
   currency: Currency;
+  status: TransactionStatus;
   occurred_on: string;
   client: string | null;
   project_id: string | null;

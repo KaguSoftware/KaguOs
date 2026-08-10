@@ -6,6 +6,7 @@ import {
   deleteRecurring,
   deleteTransaction,
   setRecurringCanceled,
+  setTransactionPaid,
 } from "@/lib/actions/management";
 import { Badge } from "@/components/ui/badge";
 import { Button, ConfirmButton } from "@/components/ui/button";
@@ -17,6 +18,7 @@ import type { RecurringItem, Transaction } from "@/lib/types";
 export function TransactionRow({ transaction }: { transaction: Transaction }) {
   const { pending, run } = useAction();
   const income = transaction.type === "income";
+  const paid = transaction.status === "paid";
 
   return (
     <tr className="transition-colors duration-150 hover:bg-raised/60">
@@ -29,11 +31,20 @@ export function TransactionRow({ transaction }: { transaction: Transaction }) {
       <td
         className={cn(
           "px-4 py-2.5 text-right font-mono text-sm",
-          income ? "text-primary-dim" : "text-danger"
+          income ? "text-primary-dim" : "text-danger",
+          // Pending money isn't real yet — the amount recedes until it settles,
+          // so a column of figures reads as "what actually moved" at a glance.
+          !paid && "opacity-60"
         )}
       >
         {income ? "+" : "−"}
         {formatMoney(Number(transaction.amount), transaction.currency)}
+      </td>
+      <td className="px-4 py-2.5">
+        {/* Paid is the quiet default state of this table; only pending needs
+            to be loud (amber = "waiting on something", same as everywhere
+            else in the app). */}
+        <Badge tone={paid ? "faint" : "amber"}>{paid ? "paid" : "pending"}</Badge>
       </td>
       <td className="max-w-40 truncate px-4 py-2.5 text-sm text-muted">
         {transaction.client || "—"}
@@ -43,6 +54,21 @@ export function TransactionRow({ transaction }: { transaction: Transaction }) {
       </td>
       <td className="px-4 py-2.5 text-right">
         <span className="inline-flex items-center gap-1">
+          {/* The one-click settle, mirroring RecurringRow's Cancel/Reactivate.
+              Shown as words, not an icon — "Mark paid" is the whole point of
+              the feature and shouldn't hide behind hover-discovery. */}
+          <Button
+            variant="ghost"
+            size="sm"
+            disabled={pending}
+            onClick={() =>
+              run(() => setTransactionPaid(transaction.id, !paid), {
+                success: paid ? "Marked pending." : "Marked paid.",
+              })
+            }
+          >
+            {paid ? "Reopen" : "Mark paid"}
+          </Button>
           <Link
             href={`/management/finance/transactions/${transaction.id}`}
             title="Edit transaction"

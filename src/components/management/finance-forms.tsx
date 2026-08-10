@@ -26,6 +26,11 @@ const CURRENCY_OPTIONS = [
   { value: "EUR", label: "EUR — Euro" },
 ];
 
+const STATUS_OPTIONS = [
+  { value: "paid", label: "Paid", hint: "The money has moved" },
+  { value: "pending", label: "Pending", hint: "Invoice sent / bill due — not settled yet" },
+];
+
 export function NewTransactionForm({
   projects,
   transaction,
@@ -83,13 +88,12 @@ export function NewTransactionForm({
         </Field>
       </div>
       <div className="grid gap-4 sm:grid-cols-2">
-        <Field label="Client" htmlFor="txn-client">
-          <Input
-            id="txn-client"
-            name="client"
-            maxLength={160}
-            defaultValue={transaction?.client ?? ""}
-            placeholder="Who it's from / to"
+        <Field label="Status" htmlFor="txn-status" hint="Pending stays out of totals until paid.">
+          <Dropdown
+            id="txn-status"
+            name="status"
+            defaultValue={transaction?.status ?? "paid"}
+            options={STATUS_OPTIONS}
           />
         </Field>
         <Field label="Project" htmlFor="txn-project">
@@ -104,6 +108,15 @@ export function NewTransactionForm({
           />
         </Field>
       </div>
+      <Field label="Client" htmlFor="txn-client">
+        <Input
+          id="txn-client"
+          name="client"
+          maxLength={160}
+          defaultValue={transaction?.client ?? ""}
+          placeholder="Who it's from / to"
+        />
+      </Field>
       <Field label="Notes" htmlFor="txn-notes">
         <Textarea
           id="txn-notes"

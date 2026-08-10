@@ -9,11 +9,13 @@ import type {
   ContractStatus,
   Currency,
   RecurringCadence,
+  TransactionStatus,
   TransactionType,
 } from "@/lib/types";
 
 const CURRENCIES: Currency[] = ["TRY", "USD", "EUR"];
 const TYPES: TransactionType[] = ["income", "expense"];
+const TRANSACTION_STATUSES: TransactionStatus[] = ["pending", "paid"];
 const CADENCES: RecurringCadence[] = ["monthly", "yearly"];
 const CONTRACT_STATUSES: ContractStatus[] = ["draft", "active", "expired", "terminated"];
 
@@ -65,6 +67,7 @@ export async function createTransaction(
 
   const type = String(formData.get("type") ?? "expense") as TransactionType;
   const currency = String(formData.get("currency") ?? "TRY") as Currency;
+  const status = String(formData.get("status") ?? "paid") as TransactionStatus;
   const amount = parseAmount(formData.get("amount"));
   if (amount === null) return { ok: false, message: "Amount must be a positive number." };
 
@@ -72,6 +75,7 @@ export async function createTransaction(
     type: TYPES.includes(type) ? type : "expense",
     amount,
     currency: CURRENCIES.includes(currency) ? currency : "TRY",
+    status: TRANSACTION_STATUSES.includes(status) ? status : "paid",
     occurred_on: String(formData.get("occurred_on") ?? "") || today(),
     client: String(formData.get("client") ?? "").trim() || null,
     project_id: String(formData.get("project_id") ?? "").trim() || null,
@@ -96,6 +100,7 @@ export async function updateTransaction(
 
   const type = String(formData.get("type") ?? "expense") as TransactionType;
   const currency = String(formData.get("currency") ?? "TRY") as Currency;
+  const status = String(formData.get("status") ?? "paid") as TransactionStatus;
   const amount = parseAmount(formData.get("amount"));
   if (amount === null) return { ok: false, message: "Amount must be a positive number." };
 
@@ -105,6 +110,7 @@ export async function updateTransaction(
       type: TYPES.includes(type) ? type : "expense",
       amount,
       currency: CURRENCIES.includes(currency) ? currency : "TRY",
+      status: TRANSACTION_STATUSES.includes(status) ? status : "paid",
       occurred_on: String(formData.get("occurred_on") ?? "") || today(),
       client: String(formData.get("client") ?? "").trim() || null,
       project_id: String(formData.get("project_id") ?? "").trim() || null,
@@ -115,6 +121,29 @@ export async function updateTransaction(
 
   revalidatePath("/management/finance");
   return { ok: true, message: "Transaction saved." };
+}
+
+/**
+ * The one-click settle. Same shape as setRecurringCanceled: the row's own
+ * button flips the fact, no form. `paid: false` re-opens a transaction marked
+ * paid by mistake.
+ */
+export async function setTransactionPaid(
+  transactionId: string,
+  paid: boolean
+): Promise<ActionResult> {
+  const stop = await blockIfReadOnly("management");
+  if (stop) return stop;
+  const ctx = await requireSection("management");
+
+  const { error } = await ctx.supabase
+    .from("transactions")
+    .update({ status: paid ? "paid" : "pending" })
+    .eq("id", transactionId);
+  if (error) return { ok: false, message: error.message };
+
+  revalidatePath("/management/finance");
+  return { ok: true, message: paid ? "Marked paid." : "Marked pending." };
 }
 
 export async function updateRecurring(
