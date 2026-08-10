@@ -12,7 +12,9 @@ import {
   ChevronDown,
   Copy,
   Download,
+  Keyboard,
   ListPlus,
+  MoreHorizontal,
   Search,
   SearchCheck,
   SlidersHorizontal,
@@ -32,7 +34,7 @@ import { TaskRow } from "@/components/debug/task-row";
 import { BoardOrderOverlay } from "@/components/debug/board-order";
 import { DebugFocusHero } from "@/components/debug/focus-hero";
 import { EmptyState } from "@/components/ui/empty-state";
-import { Dropdown, MultiDropdown } from "@/components/ui/dropdown";
+import { Dropdown } from "@/components/ui/dropdown";
 import { Button, ConfirmButton } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/components/ui/toast";
@@ -64,7 +66,7 @@ import type {
 const EMPTY_IMAGES: DebugTaskImage[] = [];
 const EMPTY_NOTES: DebugTaskNote[] = [];
 
-/** Above this many project boards, the tab strip gets a filter box. */
+/** Above this many options, long dropdowns (bulk "Move to…") get a filter box. */
 const BOARD_SEARCH_THRESHOLD = 5;
 
 type Sort = "smart" | "priority" | "deadline" | "newest";
@@ -271,7 +273,7 @@ export function DebugBoard({
   // switching, zero delay. Plain click replaces the selection, ctrl/cmd-click
   // adds to it, so the common case stays one click.
   const [board, setBoard] = useState<string[]>(initialFilters.board);
-  const [boardQuery, setBoardQuery] = useState("");
+
   // Filters are multi-select: an EMPTY array means "no filter" (show all), and
   // several picks are OR'd together — "urgent or high", "Pet app or Site".
   // That's the shape people actually want on a shared board; a single-value
@@ -1047,15 +1049,20 @@ export function DebugBoard({
     const kind: Record<string, number> = {};
     const state: Record<string, number> = {};
     const priority: Record<string, number> = {};
+    const assignee: Record<string, number> = {};
     for (const t of liveTasks) {
       kind[t.kind] = (kind[t.kind] ?? 0) + 1;
       state[t.state] = (state[t.state] ?? 0) + 1;
       priority[t.priority] = (priority[t.priority] ?? 0) + 1;
+      const holder = t.assignee_id ?? "unassigned";
+      assignee[holder] = (assignee[holder] ?? 0) + 1;
     }
-    return { Kind: kind, State: state, Priority: priority } as Record<
-      string,
-      Record<string, number>
-    >;
+    return {
+      Kind: kind,
+      State: state,
+      Priority: priority,
+      Assignee: assignee,
+    } as Record<string, Record<string, number>>;
   }, [liveTasks]);
 
   // What the user has NARROWED beyond the default view. The state filter opens
@@ -1100,11 +1107,6 @@ export function DebugBoard({
         (key === "general" ? !t.project_id : t.project_id === key)
     ).length;
 
-  // Filter which PROJECT boards show in the strip. "All boards" and "General"
-  // stay pinned so you can always get back to them. If the active board scrolls
-  // out of the filtered set its tab still renders (so the selection stays legible).
-  const showBoardSearch = projects.length >= BOARD_SEARCH_THRESHOLD;
-  const q = boardQuery.trim().toLowerCase();
   // Ordered from the SERVER snapshot (`initialTasks`), not `liveTasks` — both
   // inputs only change on a server re-render, so realtime task churn moves the
   // count pills but never reshuffles the rail mid-session.
@@ -1112,9 +1114,7 @@ export function DebugBoard({
     () => orderBoards(projects, initialTasks),
     [projects, initialTasks]
   );
-  const projectTabs = orderedProjects
-    .filter((p) => !q || p.name.toLowerCase().includes(q) || board.includes(p.id))
-    .map((p) => ({ key: p.id, name: p.name }));
+  const projectTabs = orderedProjects.map((p) => ({ key: p.id, name: p.name }));
 
   /**
    * Plain click selects just this board; ctrl/cmd-click toggles it into a
@@ -1148,53 +1148,28 @@ export function DebugBoard({
         projects={projects}
       />
 
-      {/* Desktop only. The tab rail directly below already scrolls horizontally
-          and is the primary way to switch boards; on a phone this box was a
-          SECOND way to do the same thing, costing a full row of the screen
-          before you reach a single task. It stays on desktop, where the row is
-          free and typing beats scrolling a long rail. */}
-      {showBoardSearch && (
-        <div className="relative hidden max-w-xs sm:block">
-          <Search
-            className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-faint"
-            aria-hidden
-          />
-          <input
-            value={boardQuery}
-            onChange={(e) => setBoardQuery(e.target.value)}
-            onKeyDown={(e) => {
-              // Enter jumps to the board when the filter narrows to one match —
-              // type "pet", hit Enter, you're on Pet app without reaching for it.
-              if (e.key === "Enter" && projectTabs.length === 1) {
-                e.preventDefault();
-                setBoard([projectTabs[0].key]);
-                setBoardQuery("");
-              }
-            }}
-            placeholder="Find a project board…"
-            aria-label="Find a project board"
-            className="h-8 w-full rounded-md border border-line bg-raised pl-8 pr-8 text-sm text-ink placeholder:text-faint transition-colors duration-150 hover:border-line-strong focus-visible:border-line-strong"
-          />
-          {boardQuery && (
-            <button
-              type="button"
-              onClick={() => setBoardQuery("")}
-              aria-label="Clear board search"
-              className="absolute right-2 top-1/2 -translate-y-1/2 text-faint transition-colors duration-150 hover:text-ink"
-            >
-              <X className="size-3.5" aria-hidden />
-            </button>
-          )}
-        </div>
-      )}
-
       {/* Project boards — one table per project, switched locally. The divider
           lives on the wrapper (full-width, always crisp); the inner rail scrolls
           with no visible bar and fades at both edges, so an overflowing strip
-          reads as "there's more this way" instead of exposing a scrollbar. */}
+          reads as "there's more this way" instead of exposing a scrollbar.
+
+          ⚠️ THE RAIL MUST NOT SCROLL VERTICALLY. Two past mistakes, both fixed
+          here, both easy to reintroduce:
+          - `overflow-x-auto` alone makes the OTHER axis compute to `auto` too
+            (CSS spec: one axis non-visible forces the visible one to auto), so
+            without `overflow-y-hidden` the rail is a real vertical scroll
+            container that eats wheel/touch scroll meant for the page.
+          - the tabs used `-mb-px` to pull their active border over the
+            wrapper's line — a negative margin inside a scroll container is 1px
+            of vertical scrollable overflow, i.e. the same trap. The underline
+            now lives inside the rail's height, sitting directly on top of the
+            wrapper's hairline instead of overlapping it.
+          Also: the edge fade was `mask-[…]`, which is not a Tailwind utility —
+          it silently did nothing. `[mask-image:…]` is the arbitrary-property
+          form that actually renders. */}
       <div className="flex items-center border-b border-line">
         <div
-          className="scrollbar-none flex min-w-0 flex-1 gap-1 overflow-x-auto mask-[linear-gradient(to_right,transparent,black_1.25rem,black_calc(100%-1.25rem),transparent)]"
+          className="scrollbar-none flex min-w-0 flex-1 gap-1 overflow-x-auto overflow-y-hidden overscroll-x-contain [mask-image:linear-gradient(to_right,transparent,black_1.25rem,black_calc(100%-1.25rem),transparent)]"
           role="tablist"
           aria-label="Project boards"
         >
@@ -1217,7 +1192,7 @@ export function DebugBoard({
                 }
                 onClick={(e) => pickBoard(tab.key, e.ctrlKey || e.metaKey)}
                 className={cn(
-                  "-mb-px flex shrink-0 items-center gap-1.5 border-b-2 px-3 py-2 text-sm transition-colors duration-150",
+                  "flex shrink-0 items-center gap-1.5 border-b-2 px-3 py-2 text-sm transition-colors duration-150",
                   active
                     ? "border-primary-dim font-medium text-ink"
                     : "border-transparent text-muted hover:border-line-strong hover:text-ink"
@@ -1232,9 +1207,6 @@ export function DebugBoard({
               </button>
             );
           })}
-          {q && projectTabs.length === 0 && (
-            <span className="px-3 py-2 text-sm text-faint">No boards match.</span>
-          )}
         </div>
         {/* Sits OUTSIDE the scrolling rail so it's always reachable, however
             long the strip grows. The rail auto-sorts by open work; this is
@@ -1259,16 +1231,24 @@ export function DebugBoard({
         />
       )}
 
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        {/* Quick views. These WRITE the state/assignee filters below rather
-            than filtering separately — a preset reads as "selected" whenever
-            the controls happen to match it, including when you got there by
-            setting the controls by hand.
+      {/* THE TOOLBAR. One row between the rail and the list — this used to be
+          TWO rows (presets + Select/Brainstorm/live, then search + assignee +
+          filters + sort): with the rail above and a banner below, a phone
+          showed a wall of controls before the first task, and the board's own
+          comments had already fought that battle twice.
 
-            "Reset" lives at the END of this group rather than in the control
-            row below: that row's search box is `flex-1`, so anything appearing
-            or disappearing there resized the search field and shifted the whole
-            line. Here it sits after fixed-width buttons with nothing to push. */}
+          What earned a visible slot: the presets (the switch people actually
+          live in), the task search (the other thing people actually reach
+          for), and Filters — which now carries EVERYTHING else that narrows or
+          orders the list (kind/state/priority/assignee/sort) behind one count-
+          badged button. Actions that aren't filtering at all (Select,
+          Brainstorm, shortcuts) sit in a ⋯ menu. The live dot stays as passive
+          text; it's a fact, not a control. */}
+      <div className="flex flex-wrap items-center gap-2">
+        {/* Quick views. These WRITE the state/assignee filters rather than
+            filtering separately — a preset reads as "selected" whenever the
+            controls happen to match it, including when you got there by
+            setting the controls by hand. */}
         <div className="flex items-center gap-1" role="group" aria-label="Quick views">
           {PRESETS.map((p) => {
             const target = p.apply(meId);
@@ -1285,7 +1265,7 @@ export function DebugBoard({
                   setAssignee(target.assignee);
                 }}
                 className={cn(
-                  "rounded-md px-2.5 py-1 text-[13px] transition-colors duration-150",
+                  "rounded-md px-2.5 py-1.5 text-[13px] transition-colors duration-150",
                   on
                     ? "bg-raised text-ink"
                     : "text-muted hover:bg-raised/60 hover:text-ink"
@@ -1295,6 +1275,8 @@ export function DebugBoard({
               </button>
             );
           })}
+          {/* Reserved-slot Reset: it sits after fixed-width buttons so its
+              mounting never resizes the flex-1 search beside it. */}
           {secondaryActive && (
             <button
               type="button"
@@ -1307,75 +1289,7 @@ export function DebugBoard({
             </button>
           )}
         </div>
-        <div className="flex items-center gap-3">
-          {/* Without this the shortcuts only exist for people who already know
-              to press "?" — which is nobody, the first time. */}
-          <button
-            type="button"
-            onClick={() => setShortcutsOpen(true)}
-            aria-label="Keyboard shortcuts"
-            title="Keyboard shortcuts"
-            className="hidden rounded-md border border-line px-2 py-1 font-mono text-[11px] text-faint transition-colors duration-150 hover:border-line-strong hover:text-ink md:inline-flex"
-          >
-            ?
-          </button>
-          <button
-            type="button"
-            onClick={toggleSelectMode}
-            aria-pressed={selectMode}
-            className={cn(
-              "inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-[13px] transition-colors duration-150",
-              selectMode
-                ? "border-primary-dim bg-primary/10 text-ink"
-                : "border-line text-muted hover:border-line-strong hover:bg-raised hover:text-ink"
-            )}
-          >
-            <CheckSquare className="size-3.5" aria-hidden />
-            {selectMode ? "Done" : "Select"}
-          </button>
-          <Link
-            href="/debug/brainstorm"
-            className="inline-flex items-center gap-1.5 rounded-md border border-line px-2.5 py-1 text-[13px] text-muted transition-colors duration-150 hover:border-line-strong hover:bg-raised hover:text-ink"
-          >
-            <ListPlus className="size-3.5" aria-hidden />
-            Brainstorm
-          </Link>
-          <p className="flex items-center gap-2 text-xs text-faint">
-            <span
-              className={cn(
-                "size-1.5 rounded-full",
-                live === "live"
-                  ? "bg-primary"
-                  : live === "offline"
-                    ? "bg-danger"
-                    : "bg-line-strong"
-              )}
-              aria-hidden
-            />
-            {live === "offline" ? (
-              <button
-                type="button"
-                onClick={() => window.location.reload()}
-                className="text-danger transition-colors duration-150 hover:underline"
-              >
-                offline — refresh
-              </button>
-            ) : (
-              <span>{live === "live" ? "live" : "connecting…"}</span>
-            )}
-            <span aria-hidden>·</span> {openCount} open
-          </p>
-        </div>
-      </div>
-
-      {/* Refine: search + who + the rest behind one control + sort.
-          There used to be six equal-weight controls here, under two tab strips
-          — three tiers of filtering furniture before you reach a task. Search
-          and Assignee stay out (they're the two people actually reach for);
-          Kind, State and Priority moved into one popover that carries a count,
-          so the row states how narrowed you are without spending the width. */}
-      <div className="flex flex-wrap items-center gap-2">
-        <div className="relative min-w-44 flex-1">
+        <div className="relative min-w-36 flex-1">
           <Search
             className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-faint"
             aria-hidden
@@ -1384,27 +1298,11 @@ export function DebugBoard({
             ref={searchRef}
             value={taskQuery}
             onChange={(e) => setTaskQuery(e.target.value)}
-            placeholder="Search tasks…  (press /)"
+            placeholder="Search…  (press /)"
             aria-label="Search tasks"
             className="h-9 w-full rounded-md border border-line bg-raised pl-8 pr-3 text-sm text-ink placeholder:text-muted transition-colors duration-150 hover:border-line-strong focus-visible:border-line-strong"
           />
         </div>
-        {/* ⚠️ These three SHARE one line on a phone. Assignee and Sort used to
-            be `w-full` below `sm`, which sounds tidy and cost two extra rows:
-            with the board search, the tab rail, the presets, Select/Brainstorm
-            and the task search above them, a phone showed NINE stacked controls
-            before the first task. They're `flex-1` now with a sane minimum, so
-            the three sit on one line and wrap only if they genuinely can't. */}
-        <MultiDropdown
-          className="min-w-28 flex-1 sm:w-40 sm:flex-none"
-          label="Assignee"
-          placeholder="Anyone"
-          summaryNoun="people"
-          values={assignee}
-          onChange={setAssignee}
-          options={assigneeOptions}
-          searchThreshold={8}
-        />
         <FiltersPopover
           kindFilter={kindFilter}
           setKindFilter={setKindFilter}
@@ -1412,20 +1310,58 @@ export function DebugBoard({
           setStateFilter={setStateFilter}
           priority={priority}
           setPriority={setPriority}
+          assignee={assignee}
+          setAssignee={setAssignee}
+          assigneeOptions={assigneeOptions}
+          sort={sort}
+          setSort={(v) => setSort(v as Sort)}
           counts={facetCounts}
         />
-        <Dropdown
-          className="min-w-24 flex-1 sm:w-36 sm:flex-none"
-          id="debug-sort"
-          value={sort}
-          onChange={(v) => setSort(v as Sort)}
-          options={SORT_OPTIONS}
+        <BoardMenu
+          selectMode={selectMode}
+          onToggleSelect={toggleSelectMode}
+          onShortcuts={() => setShortcutsOpen(true)}
         />
+        {/* Not hidden on phones: "offline — refresh" is the only recovery
+            affordance when the realtime channel drops, and phones drop it most. */}
+        <p className="flex items-center gap-2 text-xs text-faint">
+          <span
+            className={cn(
+              "size-1.5 rounded-full",
+              live === "live"
+                ? "bg-primary"
+                : live === "offline"
+                  ? "bg-danger"
+                  : "bg-line-strong"
+            )}
+            aria-hidden
+          />
+          {live === "offline" ? (
+            <button
+              type="button"
+              onClick={() => window.location.reload()}
+              className="text-danger transition-colors duration-150 hover:underline"
+            >
+              offline — refresh
+            </button>
+          ) : (
+            <span>{live === "live" ? "live" : "connecting…"}</span>
+          )}
+          <span aria-hidden>·</span> {openCount} open
+        </p>
       </div>
+
+      {/* ONE BANNER SLOT. These three strips share a look (primary-tinted
+          hairline bar) and used to stack — select mode over an audit filter
+          over a brainstorm trail was three banners of chrome before the list.
+          Now exactly one shows, most-actionable first: the bulk bar is a mode
+          you're IN, the audit filter explains a narrowed list, the trail is
+          an afterglow. The hidden ones aren't lost — leaving the winning mode
+          reveals the next. */}
 
       {/* The brainstorm session's tasks stay marked and pinned for triage
           until someone clears the trail. */}
-      {sessionIds.size > 0 && (
+      {!selectMode && !foundBy && sessionIds.size > 0 && (
         <div className="flex flex-wrap items-center gap-2 rounded-lg border border-primary/20 bg-primary/5 px-3 py-1.5">
           <ListPlus className="size-3.5 shrink-0 text-primary-dim" aria-hidden />
           <p className="text-[13px] text-muted">
@@ -1446,7 +1382,7 @@ export function DebugBoard({
       {/* Naming the audit filter. A board narrowed to seven rows with nothing
           saying why reads as a bug — this makes the narrowing visible and
           removable, the same reasoning as the Filters count badge. */}
-      {foundBy && (
+      {!selectMode && foundBy && (
         <div className="flex flex-wrap items-center gap-2 rounded-lg border border-primary/20 bg-primary/5 px-3 py-2 text-[13px]">
           <SearchCheck className="size-3.5 shrink-0 text-primary-dim" aria-hidden />
           <span className="min-w-0 text-muted">
@@ -1682,12 +1618,15 @@ export function DebugBoard({
 }
 
 /**
- * Kind + State + Priority behind one control.
+ * Everything that narrows or orders the list, behind one control: Kind, State,
+ * Priority, Assignee and Sort.
  *
- * These three were three more full-width dropdowns in a row that already held
- * a search box, an assignee picker and a sort — six equal-weight controls, none
- * of which told you how filtered you were. Folded into one button with a count,
- * the row gets its width back and gains the summary it was missing.
+ * These were five separate controls across a row that already held a search
+ * box — six equal-weight widgets, none of which told you how filtered you
+ * were. Folded into one button with a count, the toolbar gets its width back
+ * and gains the summary it was missing. Assignee joined the chips because a
+ * team of eight is a chip row, not a dropdown; Sort joined because "how the
+ * list is arranged" is the same mental act as "what the list shows".
  *
  * Deliberately NOT a modal: it's a refinement, not a decision (DESIGN.md keeps
  * modals for destructive confirms). Same frosted-popover language as Dropdown.
@@ -1699,6 +1638,11 @@ function FiltersPopover({
   setStateFilter,
   priority,
   setPriority,
+  assignee,
+  setAssignee,
+  assigneeOptions,
+  sort,
+  setSort,
   counts,
 }: {
   kindFilter: string[];
@@ -1707,12 +1651,20 @@ function FiltersPopover({
   setStateFilter: (v: string[]) => void;
   priority: string[];
   setPriority: (v: string[]) => void;
+  assignee: string[];
+  setAssignee: (v: string[]) => void;
+  assigneeOptions: { value: string; label: string; count: number }[];
+  sort: string;
+  setSort: (v: string) => void;
   /** Group label → option value → how many tasks on the board match. */
   counts: Record<string, Record<string, number>>;
 }) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
-  const count = kindFilter.length + stateFilter.length + priority.length;
+  // Sort stays out of the badge — it always has a value, so counting it would
+  // read "1 filter active" on a board that isn't filtered at all.
+  const count =
+    kindFilter.length + stateFilter.length + priority.length + assignee.length;
 
   // Same dismissal contract as every other popover in the app: click-away and
   // Escape both close it.
@@ -1740,6 +1692,12 @@ function FiltersPopover({
     { label: "Kind", options: KIND_FILTER_OPTIONS, values: kindFilter, set: setKindFilter },
     { label: "State", options: STATE_FILTER_OPTIONS, values: stateFilter, set: setStateFilter },
     { label: "Priority", options: PRIORITY_FILTER_OPTIONS, values: priority, set: setPriority },
+    {
+      label: "Assignee",
+      options: assigneeOptions.map((o) => ({ value: o.value, label: o.label })),
+      values: assignee,
+      set: setAssignee,
+    },
   ];
 
   return (
@@ -1773,7 +1731,7 @@ function FiltersPopover({
       </button>
 
       {open && (
-        <div className="absolute right-0 z-20 mt-1 w-[min(16rem,calc(100vw-2rem))] origin-top animate-pop-in rounded-md border border-line bg-raised/90 p-3 shadow-lg shadow-black/40 backdrop-blur-md">
+        <div className="absolute right-0 z-20 mt-1 w-[min(19rem,calc(100vw-2rem))] origin-top animate-pop-in rounded-md border border-line bg-raised/90 p-3 shadow-lg shadow-black/40 backdrop-blur-md">
           <div className="space-y-3">
             {GROUPS.map((group) => (
               <div key={group.label}>
@@ -1818,6 +1776,37 @@ function FiltersPopover({
                 </div>
               </div>
             ))}
+
+            {/* Sort is single-select: picking one deselects the rest, and
+                there's always exactly one on — so no counts, and no part in
+                the filter badge. */}
+            <div>
+              <p className="mb-1.5 text-[11px] font-medium uppercase tracking-wide text-faint">
+                Sort
+              </p>
+              <div className="flex flex-wrap gap-1.5">
+                {SORT_OPTIONS.map((o) => {
+                  const on = sort === o.value;
+                  return (
+                    <button
+                      key={o.value}
+                      type="button"
+                      aria-pressed={on}
+                      onClick={() => setSort(o.value)}
+                      className={cn(
+                        "inline-flex items-center rounded-md border px-2 py-0.5 text-[12px]",
+                        "transition-[background-color,border-color,transform] duration-150 ease-mac active:scale-[0.97]",
+                        on
+                          ? "border-primary/50 bg-primary/10 text-ink"
+                          : "border-line text-muted hover:border-line-strong hover:text-ink"
+                      )}
+                    >
+                      {o.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
           </div>
           {count > 0 && (
             <button
@@ -1826,12 +1815,120 @@ function FiltersPopover({
                 setKindFilter([]);
                 setStateFilter([]);
                 setPriority([]);
+                setAssignee([]);
               }}
               className="mt-3 w-full border-t border-line pt-2 text-left text-xs text-muted transition-colors duration-150 hover:text-ink"
             >
               Clear these {count}
             </button>
           )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * The toolbar's ⋯ menu: things you DO on the board rather than ways you
+ * narrow it — select mode, the brainstorm flow, the shortcut reference. They
+ * had a visible button each; none of them is reached often enough to charge
+ * the toolbar three slots of width for the privilege.
+ */
+function BoardMenu({
+  selectMode,
+  onToggleSelect,
+  onShortcuts,
+}: {
+  selectMode: boolean;
+  onToggleSelect: () => void;
+  onShortcuts: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+
+  // Same dismissal contract as every popover in the app.
+  useEffect(() => {
+    if (!open) return;
+    function onPointerDown(event: MouseEvent | TouchEvent) {
+      if (rootRef.current && !rootRef.current.contains(event.target as Node)) {
+        setOpen(false);
+      }
+    }
+    function onKey(event: KeyboardEvent) {
+      if (event.key === "Escape") setOpen(false);
+    }
+    document.addEventListener("mousedown", onPointerDown);
+    document.addEventListener("touchstart", onPointerDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onPointerDown);
+      document.removeEventListener("touchstart", onPointerDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  const itemClass =
+    "flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-[13px] text-muted transition-colors duration-150 hover:bg-raised hover:text-ink";
+
+  return (
+    <div ref={rootRef} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        aria-haspopup="menu"
+        aria-label="Board actions"
+        title="Board actions"
+        className={cn(
+          "flex h-9 items-center rounded-md border px-2.5 transition-colors duration-150",
+          // Select mode tints the trigger so the mode is visible even with
+          // the menu closed — otherwise "why do my rows have checkboxes"
+          // has no answer on screen.
+          selectMode
+            ? "border-primary-dim bg-primary/10 text-ink"
+            : "border-line bg-raised text-muted hover:border-line-strong hover:text-ink"
+        )}
+      >
+        <MoreHorizontal className="size-4" aria-hidden />
+      </button>
+      {open && (
+        <div
+          role="menu"
+          className="absolute right-0 z-20 mt-1 w-48 origin-top animate-pop-in rounded-md border border-line bg-raised/90 p-1 shadow-lg shadow-black/40 backdrop-blur-md"
+        >
+          <button
+            type="button"
+            role="menuitem"
+            className={itemClass}
+            onClick={() => {
+              onToggleSelect();
+              setOpen(false);
+            }}
+          >
+            <CheckSquare className="size-3.5" aria-hidden />
+            {selectMode ? "Exit select mode" : "Select tasks…"}
+          </button>
+          <Link
+            href="/debug/brainstorm"
+            role="menuitem"
+            className={itemClass}
+            onClick={() => setOpen(false)}
+          >
+            <ListPlus className="size-3.5" aria-hidden />
+            Brainstorm
+          </Link>
+          <button
+            type="button"
+            role="menuitem"
+            className={cn(itemClass, "hidden md:flex")}
+            onClick={() => {
+              onShortcuts();
+              setOpen(false);
+            }}
+          >
+            <Keyboard className="size-3.5" aria-hidden />
+            Keyboard shortcuts
+          </button>
         </div>
       )}
     </div>

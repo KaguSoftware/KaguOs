@@ -17,18 +17,15 @@ export default function DebugLoading() {
       {/* project board tabs */}
       <Skeleton className="mb-3 h-9 w-80" />
 
-      {/* presets + live status */}
-      <div className="mb-3 flex items-center justify-between gap-2">
-        <Skeleton className="h-7 w-52" />
-        <Skeleton className="h-7 w-40" />
-      </div>
-
-      {/* search + filter controls */}
-      <div className="mb-3 flex flex-wrap gap-2">
-        <Skeleton className="h-9 flex-1 min-w-44" />
-        {Array.from({ length: 5 }).map((_, i) => (
-          <Skeleton key={i} className="h-9 w-36" />
-        ))}
+      {/* THE toolbar: presets · search · Filters · ⋯ · live. One row, like
+          the real chrome — the skeleton promising two rows of controls would
+          make the loaded page appear to jump. */}
+      <div className="mb-3 flex flex-wrap items-center gap-2">
+        <Skeleton className="h-8 w-44" />
+        <Skeleton className="h-9 min-w-36 flex-1" />
+        <Skeleton className="h-9 w-24" />
+        <Skeleton className="h-9 w-10" />
+        <Skeleton className="h-4 w-20" />
       </div>
 
       {/* the task rows — the thing you actually came for */}
