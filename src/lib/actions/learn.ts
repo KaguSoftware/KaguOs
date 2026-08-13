@@ -359,9 +359,14 @@ export async function joinSprint(sprintId: string): Promise<ActionResult> {
   const ctx = await requireSection("learn");
   if (!sprintId) return { ok: false, message: "Missing sprint id." };
 
+  // DO NOTHING on conflict: joining a sprint you're already in is a no-op, and
+  // the merge form is an UPDATE only admins have a policy for.
   const { error } = await ctx.supabase
     .from("sprint_participants")
-    .upsert({ sprint_id: sprintId, user_id: ctx.userId });
+    .upsert(
+      { sprint_id: sprintId, user_id: ctx.userId },
+      { onConflict: "sprint_id,user_id", ignoreDuplicates: true }
+    );
   if (error) {
     return {
       ok: false,
@@ -855,10 +860,16 @@ export async function toggleGoalProgress(
   if (stop) return stop;
   const ctx = await requireSection("learn");
 
+  // ON CONFLICT DO NOTHING, not merge: ticking an already-ticked goal (a stale
+  // tab, a double click) has nothing to write, and the merge form is an UPDATE
+  // this table has no policy for — see the note in submitProof.
   const { error } = done
     ? await ctx.supabase
         .from("sprint_goal_progress")
-        .upsert({ goal_id: goalId, user_id: ctx.userId })
+        .upsert(
+          { goal_id: goalId, user_id: ctx.userId },
+          { onConflict: "goal_id,user_id", ignoreDuplicates: true }
+        )
     : await ctx.supabase
         .from("sprint_goal_progress")
         .delete()
@@ -893,7 +904,10 @@ export async function toggleResourceWatched(
   const { error } = watched
     ? await ctx.supabase
         .from("sprint_resource_progress")
-        .upsert({ resource_id: resourceId, user_id: ctx.userId })
+        .upsert(
+          { resource_id: resourceId, user_id: ctx.userId },
+          { onConflict: "resource_id,user_id", ignoreDuplicates: true }
+        )
     : await ctx.supabase
         .from("sprint_resource_progress")
         .delete()
@@ -1033,10 +1047,20 @@ export async function submitProof(
 
   // The tick. A failure here is reported, but the hand-in stays: the evidence
   // landing matters more than the checkbox, and re-submitting retries it.
+  //
+  // ignoreDuplicates, i.e. ON CONFLICT DO NOTHING, because the second hand-in
+  // for a stage lands on a goal this action already ticked. The merge form
+  // would be an UPDATE, and this table grants INSERT/DELETE only (0001, 0053) —
+  // a re-submit died on "violates row-level security policy (USING expression)".
+  // Nothing to merge anyway: the row is the fact that you cleared the goal, and
+  // completed_at should stay the moment you first did.
   if (proofGoal) {
     const { error: tickError } = await ctx.supabase
       .from("sprint_goal_progress")
-      .upsert({ goal_id: proofGoal.id, user_id: ctx.userId });
+      .upsert(
+        { goal_id: proofGoal.id, user_id: ctx.userId },
+        { onConflict: "goal_id,user_id", ignoreDuplicates: true }
+      );
     if (tickError) return { ok: false, message: tickError.message };
   }
 
