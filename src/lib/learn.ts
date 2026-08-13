@@ -104,43 +104,55 @@ export function stageHours(stage: SprintStage | null): string | null {
     : `${stage.hours_low} hrs`;
 }
 
-/* ----------------------------------------------------------------- playbook */
+/* --------------------------------------------------------------- techniques */
 
-/** A labelled run of resources — the prompting playbook, grouped as authored. */
-export type PlaybookGroup = {
-  label: string;
-  items: SprintResource[];
-  /** How many of them this person has ticked off. */
-  watched: number;
+/** One resource in a goal's run, carrying the number it's known by. */
+export type Technique = {
+  resource: SprintResource;
+  /** 1-based, counted across the whole stage — see `buildTechniques`. */
+  index: number;
 };
 
 /**
- * Fold the sprint's grouped resources into the playbook. Group order is
- * first-appearance, which is authoring order once the rows come back sorted by
- * `sort_order` — so a group's position is decided by its first item and no
- * separate group table is needed to keep an ordering in sync.
+ * Goal id → the resources that teach it, in order and numbered.
+ *
+ * The number counts across the stage rather than restarting under each goal.
+ * These eighteen videos are referred to by position — "technique 14" is the
+ * name that one has — and four runs of 01–06 would take that name away to buy
+ * nothing. A goal with nothing attached is absent from the map rather than
+ * present and empty, so the caller's check is one lookup.
+ *
+ * Goals arrive sorted by `sort_order` across the whole sprint, and a stage's
+ * goals are contiguous within it, so one counter per stage id is enough — no
+ * grouping pass, and unstaged goals get a run of their own for free.
  */
-export function buildPlaybook(
-  resources: SprintResource[],
-  isWatched: (resourceId: string) => boolean
-): PlaybookGroup[] {
-  const groups: PlaybookGroup[] = [];
-  const byLabel = new Map<string, PlaybookGroup>();
-
+export function buildTechniques(
+  goals: SprintGoal[],
+  resources: SprintResource[]
+): Map<string, Technique[]> {
+  const byGoal = new Map<string, SprintResource[]>();
   for (const resource of resources) {
-    const label = resource.group_label;
-    if (!label) continue;
-    let group = byLabel.get(label);
-    if (!group) {
-      group = { label, items: [], watched: 0 };
-      byLabel.set(label, group);
-      groups.push(group);
-    }
-    group.items.push(resource);
-    if (isWatched(resource.id)) group.watched += 1;
+    if (!resource.goal_id) continue;
+    const list = byGoal.get(resource.goal_id);
+    if (list) list.push(resource);
+    else byGoal.set(resource.goal_id, [resource]);
   }
+  if (byGoal.size === 0) return new Map();
 
-  return groups;
+  const counters = new Map<string, number>();
+  const out = new Map<string, Technique[]>();
+  for (const goal of goals) {
+    const items = byGoal.get(goal.id);
+    if (!items) continue;
+    const key = goal.stage_id ?? UNSTAGED_ID;
+    let n = counters.get(key) ?? 0;
+    out.set(
+      goal.id,
+      items.map((resource) => ({ resource, index: ++n }))
+    );
+    counters.set(key, n);
+  }
+  return out;
 }
 
 /* --------------------------------------------------------------- milestones */

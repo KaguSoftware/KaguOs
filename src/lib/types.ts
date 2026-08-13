@@ -301,14 +301,14 @@ export type SprintResource = {
   id: string;
   sprint_id: string;
   stage_id: string | null;
+  /** Non-null = this teaches exactly that goal, and renders numbered under it. */
+  goal_id: string | null;
   title: string;
   url: string | null;
   file_path: string | null;
   kind: SprintResourceKind;
   /** Who made it — "IBM Technology", "freeCodeCamp · § goal". */
   source: string | null;
-  /** Non-null = part of a named run (the playbook); the label is the heading. */
-  group_label: string | null;
   sort_order: number;
   created_at: string;
 };

@@ -8,13 +8,12 @@ import { Panel, PanelHeader } from "@/components/ui/panel";
 import { RaceStandings, type RacePerson } from "@/components/learn/race-standings";
 import { SprintStages } from "@/components/learn/sprint-stages";
 import { StageRail } from "@/components/learn/stage-rail";
-import { Playbook } from "@/components/learn/playbook";
 import { ProgramMilestones } from "@/components/learn/program-milestones";
 import { ResourceRow } from "@/components/learn/resource-row";
 import {
   buildMilestones,
-  buildPlaybook,
   buildStageViews,
+  buildTechniques,
   toRailStops,
 } from "@/lib/learn";
 import type {
@@ -99,17 +98,15 @@ export function SprintProgress({
     [views, done, meId]
   );
 
-  const playbook = useMemo(
-    () => buildPlaybook(resources, (id) => seen.has(id)),
-    [resources, seen]
-  );
+  const techniques = useMemo(() => buildTechniques(goals, resources), [goals, resources]);
 
-  // A resource belongs to exactly one place: its stage, its playbook group, or
-  // the shelf at the bottom. The three filters below are that split.
+  // A resource belongs to exactly one place: under the goal it teaches, in its
+  // stage's reading list, or on the shelf at the bottom. The three filters here
+  // are that split, and a goal beats a stage — the narrower claim wins.
   const resourcesByStage = useMemo(() => {
     const map = new Map<string, SprintResource[]>();
     for (const resource of resources) {
-      if (!resource.stage_id || resource.group_label) continue;
+      if (!resource.stage_id || resource.goal_id) continue;
       const list = map.get(resource.stage_id);
       if (list) list.push(resource);
       else map.set(resource.stage_id, [resource]);
@@ -118,7 +115,7 @@ export function SprintProgress({
   }, [resources]);
 
   const shelf = useMemo(
-    () => resources.filter((r) => !r.stage_id && !r.group_label),
+    () => resources.filter((r) => !r.stage_id && !r.goal_id),
     [resources]
   );
 
@@ -203,6 +200,7 @@ export function SprintProgress({
           <SprintStages
             views={views}
             resourcesByStage={resourcesByStage}
+            techniques={techniques}
             isDone={isDone}
             onToggle={toggle}
             isWatched={isWatched}
@@ -210,25 +208,6 @@ export function SprintProgress({
             readOnly={readOnly}
           />
         </section>
-      )}
-
-      {playbook.length > 0 && (
-        <Panel>
-          <PanelHeader
-            title="The prompting playbook"
-            action={
-              <span className="font-mono text-xs text-muted">
-                {playbook.reduce((n, g) => n + g.items.length, 0)} techniques
-              </span>
-            }
-          />
-          <Playbook
-            groups={playbook}
-            isWatched={isWatched}
-            onToggle={toggleWatched}
-            readOnly={readOnly}
-          />
-        </Panel>
       )}
 
       {(milestones.length > 0 || build.length > 0) && (

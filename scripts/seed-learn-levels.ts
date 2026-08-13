@@ -1,7 +1,7 @@
 /**
  * Seeds the two Kagu Learn programs (Level 1 Beginner, Level 2 Intermediate)
- * as real, joinable sprints — stages, goals, proofs and stage-scoped resources
- * all included. The source is the two syllabus documents in `public/learn/`;
+ * as real, joinable sprints — stages, goals, proofs, and the resources that
+ * hang off each. The source is the two syllabus documents in `public/learn/`;
  * this script is what turns them from a page you read into a sprint you run.
  *
  * Idempotent: a program is matched by title, and so is every stage, goal and
@@ -26,6 +26,24 @@ type ResourceSeed = {
   source?: string;
 };
 
+/**
+ * A goal, and optionally the run of resources that teaches exactly it — the
+ * prompting playbook lives here, one technique per row, one video each. They
+ * seed with a `goal_id` (0060), which is what makes them render numbered under
+ * their goal rather than in a reading list beside it.
+ */
+type GoalSeed = {
+  title: string;
+  /** Videos for this goal specifically. Default kind is 'video'. */
+  teach?: ResourceSeed[];
+};
+
+/** Most goals are just a line of text; the terse form stays available. */
+type GoalEntry = string | GoalSeed;
+
+const asGoal = (entry: GoalEntry): GoalSeed =>
+  typeof entry === "string" ? { title: entry } : entry;
+
 type StageSeed = {
   title: string;
   summary?: string;
@@ -35,21 +53,11 @@ type StageSeed = {
   day_to?: number;
   hours_low?: number;
   hours_high?: number;
-  goals: string[];
+  goals: GoalEntry[];
   /** The goal that IS the proof. Appended after `goals`. */
   proofGoal?: string;
+  /** Resources for the stage as a whole — its "where to learn it" list. */
   resources?: ResourceSeed[];
-};
-
-/**
- * The prompting playbook: one technique per row, one video each, grouped the
- * way you'd use them. Seeded as resources carrying a `group_label`, which is
- * what makes them render as a numbered run instead of a stage's reading list.
- */
-type PlaybookSeed = {
-  /** The stage these belong to, matched by title. */
-  stageTitle: string;
-  groups: { label: string; items: ResourceSeed[] }[];
 };
 
 type ProgramSeed = {
@@ -63,7 +71,6 @@ type ProgramSeed = {
   days: number;
   syllabus?: { title: string; url: string };
   stages: StageSeed[];
-  playbook?: PlaybookSeed;
   /** Study rules: label "70 / 30", title "Use it live", body why. */
   rules?: { label: string; title: string; body: string }[];
   /** One day, blocked out: label "Review", 15 minutes, body what you do. */
@@ -159,15 +166,126 @@ const LEVEL_1: ProgramSeed = {
       day_to: 7,
       hours_low: 6,
       hours_high: 7,
+      // The eighteen techniques hang off the four goals they teach: one
+      // Framing on the page, not a goal called Framing and a playbook group
+      // called Framing. Every link below was watched end-to-end and confirmed
+      // to teach its exact technique. Where the syllabus deck pointed six of
+      // these at timestamped sections of one long freeCodeCamp tutorial, each
+      // has a dedicated video here instead — a section marker is not a link
+      // you can hand someone.
       goals: [
-        "Framing — role, goal, audience, constraints",
-        "Specification — examples, format, tone, grounding",
-        "Structure — delimiters, decomposition, chain-of-thought",
-        "The iteration loop — refine, self-critique, steer",
+        {
+          title: "Framing — role, goal, audience, constraints",
+          teach: [
+            {
+              title: "Role / persona assignment",
+              url: "https://www.youtube.com/watch?v=XvCq4nPqE0Y",
+              source: "All About AI",
+            },
+            {
+              title: "Explicit goal & desired outcome",
+              url: "https://www.youtube.com/watch?v=1fL_lwsdMd4",
+              source: "Start Giving AI Goals",
+            },
+            {
+              title: "Audience & context",
+              url: "https://www.youtube.com/watch?v=ipIOC55AwyQ",
+              source: "5 Context Levels",
+            },
+            {
+              title: "Guardrails & constraints",
+              url: "https://www.youtube.com/watch?v=9GHYUKYNbag",
+              source: "Constraint-Based Prompts",
+            },
+          ],
+        },
+        {
+          title: "Specification — examples, format, tone, grounding",
+          teach: [
+            {
+              title: "Clear, direct, specific instructions",
+              url: "https://www.youtube.com/watch?v=ISOKIHuK7f8",
+              source: "Prompting Basics",
+            },
+            {
+              title: "Few-shot examples",
+              url: "https://www.youtube.com/watch?v=ojtbHUqw1LA",
+              source: "Elvis Saravia",
+            },
+            {
+              title: "Output format (lists / tables / JSON)",
+              url: "https://www.youtube.com/watch?v=4_H78L9FYb8",
+              source: "Output Formatting",
+            },
+            {
+              title: "Tone & voice",
+              url: "https://www.youtube.com/watch?v=aBNcbyakt1w",
+              source: "Kingy AI",
+            },
+            {
+              title: "Positive instruction (what to do)",
+              url: "https://www.youtube.com/watch?v=aLcqH2lDlGs",
+              source: "AI with Kyle",
+            },
+            {
+              title: "Ground it in reference material",
+              url: "https://www.youtube.com/watch?v=6dxkBftbukI",
+              source: "Moveworks",
+            },
+          ],
+        },
+        {
+          title: "Structure — delimiters, decomposition, chain-of-thought",
+          teach: [
+            {
+              title: "Delimiters & sections",
+              url: "https://www.youtube.com/watch?v=aNsATNgBWqA",
+              source: "Automation Step by Step",
+            },
+            {
+              title: "Task decomposition (break into steps)",
+              url: "https://www.youtube.com/watch?v=1c9iyoVIwDs",
+              source: "IBM Technology",
+            },
+            {
+              title: 'Chain-of-thought ("think step by step")',
+              url: "https://www.youtube.com/watch?v=2kvCNlpDFK0",
+              source: "Google Cloud Tech",
+            },
+            {
+              title: "Instruction placement & ordering",
+              url: "https://www.youtube.com/watch?v=dOxUroR57xs",
+              source: "Elvis Saravia",
+            },
+            {
+              title: "Prefilling / leading the answer",
+              url: "https://www.youtube.com/watch?v=Uz_DeqGhbjs",
+              source: "Lawton Learns",
+            },
+          ],
+        },
+        {
+          title: "The iteration loop — refine, self-critique, steer",
+          teach: [
+            {
+              title: "Progressive refinement (broad → narrow)",
+              url: "https://www.youtube.com/watch?v=FpdtS95T-Qg",
+              source: "Iterative Prompting",
+            },
+            {
+              title: "Self-critique & revise",
+              url: "https://www.youtube.com/shorts/uPEx9BC-aog",
+              source: "Nick Sadler",
+            },
+            {
+              title: "Steering with feedback & clarifying questions",
+              url: "https://www.youtube.com/watch?v=CyAUoZSC8bA",
+              source: "SkillCurb",
+            },
+          ],
+        },
       ],
       proofGoal: "Rebuild a vague prompt with 6+ techniques — before → after",
-      // The eighteen techniques are the playbook, below — a numbered run with
-      // its own ticks, not a reading list bolted to this stage.
     },
     {
       title: "Context",
@@ -239,133 +357,13 @@ const LEVEL_1: ProgramSeed = {
         "Pick a real task that actually matters to you",
         "Choose the right surface + model + effort (and say why)",
         "Connect Claude to the actual data — not pasted descriptions",
-        "Prompt it with 6+ techniques from the playbook",
+        "Prompt it with 6+ of the 18 techniques",
         "Manage context — start fresh if the thread bloats",
         "Verify the result before you rely on it",
       ],
       proofGoal: "Put the finished result to real use",
     },
   ],
-
-  // Every link below was watched end-to-end and confirmed to teach its exact
-  // technique. Where the syllabus deck pointed six of these at timestamped
-  // sections of one long freeCodeCamp tutorial, each has a dedicated video here
-  // instead — a section marker is not a link you can hand someone.
-  playbook: {
-    stageTitle: "Prompting",
-    groups: [
-      {
-        label: "Framing — set the scene",
-        items: [
-          {
-            title: "Role / persona assignment",
-            url: "https://www.youtube.com/watch?v=XvCq4nPqE0Y",
-            source: "All About AI",
-          },
-          {
-            title: "Explicit goal & desired outcome",
-            url: "https://www.youtube.com/watch?v=1fL_lwsdMd4",
-            source: "Start Giving AI Goals",
-          },
-          {
-            title: "Audience & context",
-            url: "https://www.youtube.com/watch?v=ipIOC55AwyQ",
-            source: "5 Context Levels",
-          },
-          {
-            title: "Guardrails & constraints",
-            url: "https://www.youtube.com/watch?v=9GHYUKYNbag",
-            source: "Constraint-Based Prompts",
-          },
-        ],
-      },
-      {
-        label: "Specification — pin down the ask",
-        items: [
-          {
-            title: "Clear, direct, specific instructions",
-            url: "https://www.youtube.com/watch?v=ISOKIHuK7f8",
-            source: "Prompting Basics",
-          },
-          {
-            title: "Few-shot examples",
-            url: "https://www.youtube.com/watch?v=ojtbHUqw1LA",
-            source: "Elvis Saravia",
-          },
-          {
-            title: "Output format (lists / tables / JSON)",
-            url: "https://www.youtube.com/watch?v=4_H78L9FYb8",
-            source: "Output Formatting",
-          },
-          {
-            title: "Tone & voice",
-            url: "https://www.youtube.com/watch?v=aBNcbyakt1w",
-            source: "Kingy AI",
-          },
-          {
-            title: "Positive instruction (what to do)",
-            url: "https://www.youtube.com/watch?v=aLcqH2lDlGs",
-            source: "AI with Kyle",
-          },
-          {
-            title: "Ground it in reference material",
-            url: "https://www.youtube.com/watch?v=6dxkBftbukI",
-            source: "Moveworks",
-          },
-        ],
-      },
-      {
-        label: "Structure — organise the prompt",
-        items: [
-          {
-            title: "Delimiters & sections",
-            url: "https://www.youtube.com/watch?v=aNsATNgBWqA",
-            source: "Automation Step by Step",
-          },
-          {
-            title: "Task decomposition (break into steps)",
-            url: "https://www.youtube.com/watch?v=1c9iyoVIwDs",
-            source: "IBM Technology",
-          },
-          {
-            title: 'Chain-of-thought ("think step by step")',
-            url: "https://www.youtube.com/watch?v=2kvCNlpDFK0",
-            source: "Google Cloud Tech",
-          },
-          {
-            title: "Instruction placement & ordering",
-            url: "https://www.youtube.com/watch?v=dOxUroR57xs",
-            source: "Elvis Saravia",
-          },
-          {
-            title: "Prefilling / leading the answer",
-            url: "https://www.youtube.com/watch?v=Uz_DeqGhbjs",
-            source: "Lawton Learns",
-          },
-        ],
-      },
-      {
-        label: "The iteration loop — improve across turns",
-        items: [
-          {
-            title: "Progressive refinement (broad → narrow)",
-            url: "https://www.youtube.com/watch?v=FpdtS95T-Qg",
-            source: "Iterative Prompting",
-          },
-          {
-            title: "Self-critique & revise",
-            url: "https://www.youtube.com/shorts/uPEx9BC-aog",
-            source: "Nick Sadler",
-          },
-          {
-            title: "Steering with feedback & clarifying questions",
-            url: "https://www.youtube.com/watch?v=CyAUoZSC8bA",
-            source: "SkillCurb",
-          },
-        ],
-      },
-    ],
-  },
 
   rules: [
     {
@@ -509,14 +507,97 @@ const LEVEL_2: ProgramSeed = {
       day_to: 8,
       hours_low: 6,
       hours_high: 7,
+      // The thirteen techniques, filed under the goal each one serves. Level 1's
+      // playbook grouped by A / B / C, which was a second taxonomy laid over the
+      // goals; these are the goals themselves.
       goals: [
-        "Prompt as spec, not request · reusable templates",
-        "Testing repeatably, not once · structured outputs",
-        "System vs turn prompt · tool-use prompting",
-        "Evaluation, golden sets, LLM-as-judge, versioning",
+        {
+          title: "Prompt as spec, not request · reusable templates",
+          teach: [
+            {
+              title: "Prompt-as-spec (not a casual request)",
+              url: "https://www.youtube.com/watch?v=8rABwKRsec4",
+              source: "AI Engineer",
+            },
+            {
+              title: "Reusable, parameterized templates",
+              url: "https://www.youtube.com/watch?v=hVs8MVydN3A",
+              source: "Leon van Zyl",
+            },
+            {
+              title: "Prompt chaining & pipelines",
+              url: "https://www.youtube.com/watch?v=5kWLBdzM114",
+              source: "Sundeep S. Kanthety",
+            },
+            {
+              title: "Meta-prompting (AI writes your prompts)",
+              url: "https://www.youtube.com/watch?v=0JZisMktcbA",
+              source: "Maven Analytics",
+            },
+          ],
+        },
+        {
+          title: "Testing repeatably, not once · structured outputs",
+          teach: [
+            {
+              title: "Structured outputs (JSON / schema)",
+              url: "https://www.youtube.com/watch?v=CllLqPwCjD4",
+              source: "Telusko",
+            },
+            {
+              title: "Output validation & auto-retry",
+              url: "https://www.youtube.com/watch?v=r3JdQxtxVuM",
+              source: "Apply AI like a Pro",
+            },
+          ],
+        },
+        {
+          title: "System vs turn prompt · tool-use prompting",
+          teach: [
+            {
+              title: "System prompt vs turn prompt",
+              url: "https://www.youtube.com/watch?v=sxPg_ZmbPlc",
+              source: "Dan Cleary",
+            },
+            {
+              title: "Tool-use / function-calling prompting",
+              url: "https://www.youtube.com/watch?v=h8gMhXYAv1k",
+              source: "IBM Technology",
+            },
+            {
+              title: "Controlling reasoning depth",
+              url: "https://www.youtube.com/watch?v=AFE6x81AP4k",
+              source: "CodeEmporium",
+            },
+          ],
+        },
+        {
+          title: "Evaluation, golden sets, LLM-as-judge, versioning",
+          teach: [
+            {
+              title: "Prompt evaluation (across many inputs)",
+              url: "https://www.youtube.com/watch?v=a3SMraZWNNs",
+              source: "Dave Ebbelaar",
+            },
+            {
+              title: "Golden sets & regression testing",
+              url: "https://www.youtube.com/watch?v=7vqU_Yj5kUc",
+              source: "Latitude",
+            },
+            {
+              title: "LLM-as-judge & rubrics",
+              url: "https://www.youtube.com/watch?v=zaNR3WaPTfo",
+              source: "Microsoft Reactor",
+            },
+            {
+              title: "Versioning & iteration discipline",
+              url: "https://www.youtube.com/watch?v=R0l4xogVG4s",
+              source: "LangChain",
+            },
+          ],
+        },
       ],
       proofGoal: "A spec-prompt + 5-case eval that holds across 3 runs",
-      // The thirteen techniques are the playbook, below.
     },
     {
       title: "Context orchestration",
@@ -594,92 +675,6 @@ const LEVEL_2: ProgramSeed = {
       proofGoal: "Ship it, and prove the eval passes twice",
     },
   ],
-
-  playbook: {
-    stageTitle: "Prompting",
-    groups: [
-      {
-        label: "A · Prompt as an engineered artifact",
-        items: [
-          {
-            title: "Prompt-as-spec (not a casual request)",
-            url: "https://www.youtube.com/watch?v=8rABwKRsec4",
-            source: "AI Engineer",
-          },
-          {
-            title: "System prompt vs turn prompt",
-            url: "https://www.youtube.com/watch?v=sxPg_ZmbPlc",
-            source: "Dan Cleary",
-          },
-          {
-            title: "Reusable, parameterized templates",
-            url: "https://www.youtube.com/watch?v=hVs8MVydN3A",
-            source: "Leon van Zyl",
-          },
-          {
-            title: "Prompt chaining & pipelines",
-            url: "https://www.youtube.com/watch?v=5kWLBdzM114",
-            source: "Sundeep S. Kanthety",
-          },
-          {
-            title: "Meta-prompting (AI writes your prompts)",
-            url: "https://www.youtube.com/watch?v=0JZisMktcbA",
-            source: "Maven Analytics",
-          },
-        ],
-      },
-      {
-        label: "B · Making outputs machine-reliable",
-        items: [
-          {
-            title: "Structured outputs (JSON / schema)",
-            url: "https://www.youtube.com/watch?v=CllLqPwCjD4",
-            source: "Telusko",
-          },
-          {
-            title: "Tool-use / function-calling prompting",
-            url: "https://www.youtube.com/watch?v=h8gMhXYAv1k",
-            source: "IBM Technology",
-          },
-          {
-            title: "Controlling reasoning depth",
-            url: "https://www.youtube.com/watch?v=AFE6x81AP4k",
-            source: "CodeEmporium",
-          },
-          {
-            title: "Output validation & auto-retry",
-            url: "https://www.youtube.com/watch?v=r3JdQxtxVuM",
-            source: "Apply AI like a Pro",
-          },
-        ],
-      },
-      {
-        label: "C · Proving it works twice",
-        items: [
-          {
-            title: "Prompt evaluation (across many inputs)",
-            url: "https://www.youtube.com/watch?v=a3SMraZWNNs",
-            source: "Dave Ebbelaar",
-          },
-          {
-            title: "Golden sets & regression testing",
-            url: "https://www.youtube.com/watch?v=7vqU_Yj5kUc",
-            source: "Latitude",
-          },
-          {
-            title: "LLM-as-judge & rubrics",
-            url: "https://www.youtube.com/watch?v=zaNR3WaPTfo",
-            source: "Microsoft Reactor",
-          },
-          {
-            title: "Versioning & iteration discipline",
-            url: "https://www.youtube.com/watch?v=R0l4xogVG4s",
-            source: "LangChain",
-          },
-        ],
-      },
-    ],
-  },
 
   rules: [
     {
@@ -913,11 +908,11 @@ async function seedProgram(
   for (const stage of program.stages) {
     const stageId = stageIds.get(stage.title);
     if (!stageId) continue;
-    for (const title of stage.goals) {
+    for (const entry of stage.goals) {
       goalRows.push({
         sprint_id: sprintId,
         stage_id: stageId,
-        title,
+        title: asGoal(entry).title,
         is_proof: false,
         sort_order: order++,
       });
@@ -932,16 +927,19 @@ async function seedProgram(
       });
     }
   }
-  await reconcile(supabase, "sprint_goals", sprintId, goalRows);
+  // Goal ids are needed below: a technique points at the goal it teaches, and
+  // goal titles are unique per sprint (reconcile refuses duplicates), so the
+  // returned title → id map is the lookup.
+  const goalIds = await reconcile(supabase, "sprint_goals", sprintId, goalRows);
 
   const resourceRows: {
     sprint_id: string;
     stage_id: string | null;
+    goal_id: string | null;
     title: string;
     url: string;
     kind: string;
     source: string | null;
-    group_label: string | null;
     sort_order: number;
   }[] = [];
   let resourceOrder = 0;
@@ -951,11 +949,11 @@ async function seedProgram(
     resourceRows.push({
       sprint_id: sprintId,
       stage_id: null,
+      goal_id: null,
       title: program.syllabus.title,
       url: program.syllabus.url,
       kind: "read",
       source: "the original deck",
-      group_label: null,
       sort_order: resourceOrder++,
     });
   }
@@ -963,32 +961,37 @@ async function seedProgram(
   for (const stage of program.stages) {
     const stageId = stageIds.get(stage.title);
     if (!stageId) continue;
+
+    // The stage's own reading list first, then each goal's run of techniques.
+    // A technique keeps its stage_id as well as its goal_id, so retiring the
+    // goal drops it back into the reading list rather than off the page.
     for (const resource of stage.resources ?? []) {
       resourceRows.push({
         sprint_id: sprintId,
         stage_id: stageId,
+        goal_id: null,
         title: resource.title,
         url: resource.url,
         kind: resource.kind ?? "link",
         source: resource.source ?? null,
-        group_label: null,
         sort_order: resourceOrder++,
       });
     }
-  }
 
-  if (program.playbook) {
-    const stageId = stageIds.get(program.playbook.stageTitle) ?? null;
-    for (const group of program.playbook.groups) {
-      for (const item of group.items) {
+    for (const entry of stage.goals) {
+      const goal = asGoal(entry);
+      if (!goal.teach) continue;
+      const goalId = goalIds.get(goal.title);
+      if (!goalId) continue;
+      for (const item of goal.teach) {
         resourceRows.push({
           sprint_id: sprintId,
           stage_id: stageId,
+          goal_id: goalId,
           title: item.title,
           url: item.url,
           kind: item.kind ?? "video",
           source: item.source ?? null,
-          group_label: group.label,
           sort_order: resourceOrder++,
         });
       }

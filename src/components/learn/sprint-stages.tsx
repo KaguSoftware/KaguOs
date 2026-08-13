@@ -3,7 +3,13 @@
 import { useEffect, useRef, useState } from "react";
 import { Check, ChevronDown, Flag, Lock } from "lucide-react";
 import { ResourceRow } from "@/components/learn/resource-row";
-import { stageDays, stageHours, stageViewId, type StageView } from "@/lib/learn";
+import {
+  stageDays,
+  stageHours,
+  stageViewId,
+  type StageView,
+  type Technique,
+} from "@/lib/learn";
 import { cn } from "@/lib/utils";
 import type { SprintGoal, SprintResource } from "@/lib/types";
 
@@ -26,6 +32,7 @@ import type { SprintGoal, SprintResource } from "@/lib/types";
 export function SprintStages({
   views,
   resourcesByStage,
+  techniques,
   isDone,
   onToggle,
   isWatched,
@@ -35,6 +42,8 @@ export function SprintStages({
   views: StageView[];
   /** Stage id (or "unstaged") → its resources. */
   resourcesByStage: Map<string, SprintResource[]>;
+  /** Goal id → the numbered run of resources that teaches it. */
+  techniques: Map<string, Technique[]>;
   isDone: (goalId: string) => boolean;
   onToggle: (goalId: string, next: boolean) => void;
   isWatched: (resourceId: string) => boolean;
@@ -219,6 +228,9 @@ export function SprintStages({
                             done={isDone(goal.id)}
                             readOnly={readOnly}
                             onToggle={onToggle}
+                            teaches={techniques.get(goal.id)}
+                            isWatched={isWatched}
+                            onToggleWatched={onToggleWatched}
                           />
                         ))}
                       </ul>
@@ -236,6 +248,9 @@ export function SprintStages({
                               done={isDone(view.proof.id)}
                               readOnly={readOnly}
                               onToggle={onToggle}
+                              teaches={techniques.get(view.proof.id)}
+                              isWatched={isWatched}
+                              onToggleWatched={onToggleWatched}
                               hint={view.stage?.proof ?? undefined}
                               proof
                             />
@@ -360,11 +375,24 @@ function Pips({ total, done, dim }: { total: number; done: number; dim: boolean 
   );
 }
 
+/**
+ * One goal, and — when it has them — the numbered techniques that teach it.
+ *
+ * The two ticks on this row mean different things and stay separate. The goal's
+ * tick says you did the thing; a technique's tick says you watched it. Nesting
+ * them under one heading is the whole point: watching four videos about framing
+ * is what you do to clear "Framing", and it should not need a second panel to
+ * say so. The count on the right is watched-of-total, which is why it can read
+ * 4/4 on a goal you haven't ticked.
+ */
 function GoalRow({
   goal,
   done,
   readOnly,
   onToggle,
+  teaches,
+  isWatched,
+  onToggleWatched,
   hint,
   proof,
 }: {
@@ -372,10 +400,17 @@ function GoalRow({
   done: boolean;
   readOnly: boolean;
   onToggle: (goalId: string, next: boolean) => void;
+  /** The run of resources that teaches this goal, if any. */
+  teaches?: Technique[];
+  isWatched: (resourceId: string) => boolean;
+  onToggleWatched: (resourceId: string, next: boolean) => void;
   hint?: string;
   /** The stage's gate: marked as a diamond, echoing the capstone node. */
   proof?: boolean;
 }) {
+  const watched = teaches?.filter((t) => isWatched(t.resource.id)).length ?? 0;
+  const seenAll = teaches !== undefined && watched === teaches.length;
+
   const mark = (
     <span
       aria-hidden
@@ -407,27 +442,57 @@ function GoalRow({
     </span>
   );
 
-  if (readOnly) {
-    return (
-      <li className="flex items-start gap-2.5 px-0.5 py-1.5">
-        {mark}
-        {label}
-      </li>
-    );
-  }
+  const tally = teaches && (
+    <span
+      className={cn(
+        "mt-px shrink-0 font-mono text-[11px] tabular-nums transition-colors duration-150",
+        seenAll ? "text-primary-dim" : "text-faint"
+      )}
+    >
+      {watched}/{teaches.length}
+    </span>
+  );
+
+  // The run sits outside the goal's button — it's full of links, and a link
+  // inside a button is neither. The rule down its left is what says "these
+  // belong to the line above" without a second heading to read.
+  const run = teaches && (
+    <ul className="mb-1.5 ml-2.75 grid border-l border-line pl-2.5">
+      {teaches.map(({ resource, index }) => (
+        <ResourceRow
+          key={resource.id}
+          resource={resource}
+          index={index}
+          watched={isWatched(resource.id)}
+          readOnly={readOnly}
+          onToggle={onToggleWatched}
+        />
+      ))}
+    </ul>
+  );
 
   return (
     <li>
-      <button
-        type="button"
-        aria-pressed={done}
-        aria-label={`${goal.title}: ${done ? "done — click to untick" : "mark done"}`}
-        onClick={() => onToggle(goal.id, !done)}
-        className="flex w-full cursor-pointer items-start gap-2.5 rounded-md px-0.5 py-1.5 text-left transition-colors duration-150 hover:bg-raised/50"
-      >
-        {mark}
-        {label}
-      </button>
+      {readOnly ? (
+        <div className="flex items-start gap-2.5 px-0.5 py-1.5">
+          {mark}
+          {label}
+          {tally}
+        </div>
+      ) : (
+        <button
+          type="button"
+          aria-pressed={done}
+          aria-label={`${goal.title}: ${done ? "done — click to untick" : "mark done"}`}
+          onClick={() => onToggle(goal.id, !done)}
+          className="flex w-full cursor-pointer items-start gap-2.5 rounded-md px-0.5 py-1.5 text-left transition-colors duration-150 hover:bg-raised/50"
+        >
+          {mark}
+          {label}
+          {tally}
+        </button>
+      )}
+      {run}
     </li>
   );
 }

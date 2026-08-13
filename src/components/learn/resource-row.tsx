@@ -28,7 +28,7 @@ export function ResourceRow({
   /** Not a participant, or view-only: the row reads, it doesn't record. */
   readOnly: boolean;
   onToggle: (resourceId: string, next: boolean) => void;
-  /** 1-based position, shown only inside a numbered playbook group. */
+  /** 1-based position, shown only inside a goal's numbered run of techniques. */
   index?: number;
 }) {
   const Icon =
