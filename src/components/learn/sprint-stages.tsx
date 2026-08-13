@@ -464,6 +464,11 @@ function Pips({ total, done, dim }: { total: number; done: number; dim: boolean 
  * say so. The count on the right is watched-of-total, which is why it can read
  * 4/4 on a goal you haven't ticked.
  *
+ * They stay separate, but they're ordered: a goal that has a run is locked
+ * until the run is finished (see `locked`). Watching everything still doesn't
+ * tick the goal for you — you say when you did the work — but you can't say it
+ * before you've seen what the work is.
+ *
  * The stage's proof is NOT one of these rows — it's handed in, not ticked, and
  * lives in its own block (see ProofBlock).
  */
@@ -493,15 +498,31 @@ function GoalRow({
   const watched = teaches?.filter((t) => isWatched(t.resource.id)).length ?? 0;
   const seenAll = teaches !== undefined && watched === teaches.length;
 
+  // A goal with a run under it isn't tickable until every technique in that run
+  // is watched. The run IS the goal — "Framing" is those four videos — so a
+  // tick with two of them unwatched claims work that hasn't happened.
+  //
+  // Unticking is never blocked. A goal ticked before its run grew would
+  // otherwise be stuck done forever, and the tick is yours to take back.
+  const locked = teaches !== undefined && !seenAll && !done;
+
   const mark = (
     <span
       aria-hidden
       className={cn(
         "mt-px flex size-[18px] shrink-0 items-center justify-center rounded-full transition-colors duration-150 motion-reduce:transition-none",
-        done ? "bg-primary text-primary-ink" : "border border-line-strong bg-surface"
+        done
+          ? "bg-primary text-primary-ink"
+          : locked
+            ? "border border-dashed border-line-strong bg-surface text-faint"
+            : "border border-line-strong bg-surface"
       )}
     >
-      {done && <Check className="size-2.5" />}
+      {done ? (
+        <Check className="size-2.5" />
+      ) : (
+        locked && <Lock className="size-2.5" />
+      )}
     </span>
   );
 
@@ -512,7 +533,11 @@ function GoalRow({
     <span
       className={cn(
         "min-w-0 flex-1 text-[13px] leading-relaxed transition-colors duration-150",
-        done ? "text-faint line-through decoration-line-strong" : "text-ink"
+        done
+          ? "text-faint line-through decoration-line-strong"
+          : locked
+            ? "text-muted"
+            : "text-ink"
       )}
     >
       {goal.title}
@@ -566,6 +591,25 @@ function GoalRow({
             {label}
             {tally}
           </div>
+        ) : locked ? (
+          // Not a disabled button: a dead row tells you nothing about why it's
+          // dead. Clicking opens the run instead, so the answer — these four,
+          // one of them watched — is the thing your click produces. It only
+          // ever opens; closing the explanation you just asked for would be
+          // the click landing on nothing all over again.
+          <button
+            type="button"
+            aria-disabled
+            aria-label={`${goal.title}: watch all ${teaches?.length} techniques to tick this — ${watched} watched so far`}
+            onClick={() => {
+              if (!detailOpen) onToggleDetail();
+            }}
+            className="flex min-w-0 flex-1 cursor-pointer items-start gap-2.5 rounded-md px-0.5 py-1.5 text-left transition-colors duration-150 hover:bg-raised/50"
+          >
+            {mark}
+            {label}
+            {tally}
+          </button>
         ) : (
           <button
             type="button"
@@ -602,6 +646,11 @@ function GoalRow({
             </p>
           )}
           {run}
+          {locked && (
+            <p className="mb-1.5 ml-2.75 border-l border-line pl-2.5 font-mono text-[11px] text-faint">
+              {(teaches?.length ?? 0) - watched} left to watch before this goal ticks
+            </p>
+          )}
         </>
       )}
     </li>
