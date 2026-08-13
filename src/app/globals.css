@@ -56,6 +56,36 @@
   --animate-pop-in: pop-in 180ms var(--ease-mac) both;
   --animate-overlay-in: overlay-in 220ms var(--ease-mac) both;
   --animate-page-in: page-in 250ms var(--ease-mac) both;
+  /* Learn: the one moment a stage changes hands. Fires on the tick that
+     completes a stage, never on load — state, not celebration. */
+  --animate-stage-clear: stage-clear 620ms var(--ease-mac) both;
+  --animate-node-pop: node-pop 420ms var(--ease-mac) both;
+}
+
+/* The cleared stage's own edge lights once and settles back. */
+@keyframes stage-clear {
+  0% {
+    box-shadow: 0 0 0 0 oklch(0.86 0.14 160 / 0%);
+  }
+  30% {
+    box-shadow: 0 0 0 3px oklch(0.86 0.14 160 / 35%);
+  }
+  100% {
+    box-shadow: 0 0 0 3px oklch(0.86 0.14 160 / 0%);
+  }
+}
+
+/* Its node takes the check with a single, unbouncy overshoot. */
+@keyframes node-pop {
+  0% {
+    transform: scale(1);
+  }
+  45% {
+    transform: scale(1.22);
+  }
+  100% {
+    transform: scale(1);
+  }
 }
 
 @keyframes pop-in {

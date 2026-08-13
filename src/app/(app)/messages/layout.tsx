@@ -5,6 +5,7 @@ import { getInboxSummary } from "@/lib/data/messages";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PageHeader } from "@/components/shell/page-header";
 import { MessagesPanes } from "@/components/messages/panes";
+import { ChatAlertsPrompt } from "@/components/messages/alerts-prompt";
 import {
   ThreadList,
   type ThreadSummary,
@@ -88,6 +89,8 @@ export default async function MessagesLayout({
     // The height constant is the one the thread page used to carry; it lives here
     // now so both panes share it and the thread simply fills its column.
     <div className="flex h-[calc(100dvh-8rem)] min-h-0 flex-col md:h-[calc(100dvh-11rem)]">
+      {/* Renders nothing once this device has answered — see alerts-prompt.tsx. */}
+      <ChatAlertsPrompt />
       <MessagesPanes
         list={
           <ThreadList

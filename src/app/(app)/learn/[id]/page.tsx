@@ -1,23 +1,26 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, FileText, Link2, Pencil } from "lucide-react";
+import { ArrowLeft, Pencil } from "lucide-react";
 import { canWrite, requireSection } from "@/lib/data/session";
 import { rowsOrThrow, selectOrThrow } from "@/lib/data/query";
 import { PageHeader } from "@/components/shell/page-header";
 import { Panel, PanelHeader } from "@/components/ui/panel";
 import { Badge, type BadgeTone } from "@/components/ui/badge";
 import { LinkButton } from "@/components/ui/link-button";
-import { SignedFileLink } from "@/components/ui/signed-file-link";
 import { SprintProgress } from "@/components/learn/sprint-progress";
 import { SprintQuestions } from "@/components/learn/sprint-questions";
 import { JoinSprintButton } from "@/components/learn/join-sprint-button";
+import { ProgramStatsRow } from "@/components/learn/program-stats";
+import { ProgramMethod } from "@/components/learn/program-method";
 import { memberColorCss } from "@/lib/colors";
 import { demoName } from "@/lib/data/members";
+import { programStats } from "@/lib/learn";
 import { formatDate, todayInIstanbul } from "@/lib/utils";
 import type {
   Sprint,
   SprintGoal,
+  SprintPractice,
   SprintQuestion,
   SprintQuestionReply,
   SprintResource,
@@ -51,6 +54,7 @@ export default async function SprintPage({
     learnMembers,
     questions,
     stages,
+    practices,
   ] = await Promise.all([
     // Gate the sprint on the demo/real split — a real sprint id is notFound in
     // showcase, so its real resources/goals/questions/files never render in a
@@ -70,6 +74,7 @@ export default async function SprintPage({
         .select("*")
         .eq("sprint_id", id)
         .eq("is_demo", ctx.showcase)
+        .order("sort_order")
         .order("created_at"),
       "sprint_resources"
     ),
@@ -117,14 +122,25 @@ export default async function SprintPage({
         .order("created_at"),
       "sprint_stages"
     ),
+    rowsOrThrow(
+      ctx.supabase
+        .from("sprint_practices")
+        .select("*")
+        .eq("sprint_id", id)
+        .eq("is_demo", ctx.showcase)
+        .order("sort_order")
+        .order("created_at"),
+      "sprint_practices"
+    ),
   ]);
   if (!sprint) notFound();
 
-  // Second wave: both reads depend on ids from the first (goal ids, question
-  // ids) — still ONE wave, per the perf doctrine.
+  // Second wave: all three reads depend on ids from the first (goal, resource
+  // and question ids) — still ONE wave, per the perf doctrine.
   const goalIds = goals.map((g) => g.id);
+  const resourceIds = resources.map((r) => r.id);
   const questionIds = questions.map((q) => q.id);
-  const [progress, replies] = await Promise.all([
+  const [progress, watched, replies] = await Promise.all([
     goalIds.length
       ? rowsOrThrow(
           ctx.supabase
@@ -132,6 +148,18 @@ export default async function SprintPage({
             .select("goal_id, user_id")
             .in("goal_id", goalIds),
           "sprint_goal_progress"
+        )
+      : Promise.resolve([]),
+    // Only mine: a watched video is a private note-to-self, not a standing. The
+    // race is run on goals, so nobody needs everyone else's watch list.
+    resourceIds.length
+      ? rowsOrThrow(
+          ctx.supabase
+            .from("sprint_resource_progress")
+            .select("resource_id")
+            .in("resource_id", resourceIds)
+            .eq("user_id", ctx.userId),
+          "sprint_resource_progress"
         )
       : Promise.resolve([]),
     questionIds.length
@@ -177,10 +205,11 @@ export default async function SprintPage({
   // a back-navigation), so clicking a PDF an hour later hit an expired token and
   // looked like a dead button. `SignedFileLink` signs at click instead, which
   // also takes the signing round-trip off this page's critical path entirely.
-  const resourceList = resources as SprintResource[];
-  // Stage-scoped resources render inside their stage; only the sprint-wide ones
-  // reach the shelf at the bottom.
-  const shelfResources = resourceList.filter((r) => !r.stage_id);
+  const stageList = stages as SprintStage[];
+  const practiceList = practices as SprintPractice[];
+  const rules = practiceList.filter((p) => p.kind === "rule");
+  const session = practiceList.filter((p) => p.kind === "session");
+  const build = practiceList.filter((p) => p.kind === "build");
 
   const phase = phaseOf(sprint as Sprint);
 
@@ -213,6 +242,7 @@ export default async function SprintPage({
   const iParticipate = participantSet.has(ctx.userId);
   const canJoin =
     !iParticipate && sprint.join_mode === "open" && phase.label !== "past";
+  const stats = programStats(stageList, totalDays);
 
   return (
     <>
@@ -225,7 +255,10 @@ export default async function SprintPage({
       </Link>
       <PageHeader
         title={sprint.title}
-        description={`${formatDate(sprint.starts_on)} → ${formatDate(sprint.ends_on)}`}
+        description={
+          sprint.tagline ??
+          `${formatDate(sprint.starts_on)} → ${formatDate(sprint.ends_on)}`
+        }
         action={
           <span className="flex items-center gap-2">
             <Badge tone={phase.tone}>{phase.label}</Badge>
@@ -246,9 +279,17 @@ export default async function SprintPage({
         }
       />
 
-      {(timeline || teamPct !== null) && (
+      {(sprint.tagline || timeline || teamPct !== null) && (
         <div className="mb-6 max-w-md">
-          <p className="flex items-center gap-3 font-mono text-xs text-faint">
+          <p className="flex flex-wrap items-center gap-x-3 font-mono text-xs text-faint">
+            {sprint.tagline && (
+              <>
+                <span>
+                  {formatDate(sprint.starts_on)} → {formatDate(sprint.ends_on)}
+                </span>
+                <span aria-hidden>·</span>
+              </>
+            )}
             {timeline && <span>{timeline}</span>}
             {phase.label === "active" && timeline && teamPct !== null && (
               <span aria-hidden>·</span>
@@ -279,75 +320,39 @@ export default async function SprintPage({
         </p>
       )}
 
+      {stageList.length > 0 && (
+        <div className="mb-6">
+          <ProgramStatsRow stats={stats} />
+        </div>
+      )}
+
       <div className="grid gap-6">
         <SprintProgress
           sprintId={sprint.id}
-          stages={stages as SprintStage[]}
+          stages={stageList}
           goals={goals as SprintGoal[]}
-          resources={resourceList}
+          resources={resources as SprintResource[]}
+          build={build}
           participants={gridPeople}
           progress={progress}
+          watched={watched as { resource_id: string }[]}
           meId={ctx.userId}
           isAdmin={ctx.isAdmin}
           mayWrite={mayWrite}
+          method={
+            rules.length > 0 || session.length > 0 ? (
+              <Panel>
+                <PanelHeader title="How to actually learn this" />
+                <ProgramMethod rules={rules} session={session} />
+              </Panel>
+            ) : undefined
+          }
         />
 
-        {shelfResources.length > 0 && (
-          <Panel>
-            <PanelHeader title="Resources" />
-            <ul className="divide-y divide-line">
-              {shelfResources.map((resource) => {
-                const filePath = resource.file_path;
-                const Icon = resource.url ? Link2 : FileText;
-                return (
-                  <li
-                    key={resource.id}
-                    className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2.5 text-sm transition-colors duration-150 hover:bg-raised/60"
-                  >
-                    <Icon className="size-3.5 shrink-0 text-faint" aria-hidden />
-                    {resource.url ? (
-                      <a
-                        href={resource.url}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="min-w-0 truncate text-ink underline-offset-2 hover:text-primary-dim hover:underline"
-                      >
-                        {resource.title}
-                      </a>
-                    ) : filePath ? (
-                      // An attachment with no external link: the title itself
-                      // opens the file, signed on click.
-                      <SignedFileLink
-                        bucket="learn"
-                        path={filePath}
-                        title={resource.title}
-                        className="flex min-w-0 items-center gap-1.5 truncate text-left text-ink underline-offset-2 hover:text-primary-dim hover:underline"
-                      >
-                        <span className="min-w-0 truncate">{resource.title}</span>
-                      </SignedFileLink>
-                    ) : (
-                      <span className="min-w-0 truncate text-muted">
-                        {resource.title}
-                      </span>
-                    )}
-                    {/* A resource can be both a link and an attachment; the chip
-                        is the second affordance for the file. */}
-                    {resource.url && filePath && (
-                      <SignedFileLink
-                        bucket="learn"
-                        path={filePath}
-                        ariaLabel={`Open the file attached to ${resource.title}`}
-                        className="inline-flex shrink-0 items-center gap-1 rounded-full border border-line px-2 py-0.5 text-xs text-muted transition-colors duration-150 hover:border-line-strong hover:text-ink"
-                      >
-                        <FileText className="size-3" aria-hidden />
-                        file
-                      </SignedFileLink>
-                    )}
-                  </li>
-                );
-              })}
-            </ul>
-          </Panel>
+        {sprint.outro && (
+          <p className="max-w-[70ch] whitespace-pre-wrap text-sm leading-relaxed text-muted">
+            {sprint.outro}
+          </p>
         )}
 
         <Panel>

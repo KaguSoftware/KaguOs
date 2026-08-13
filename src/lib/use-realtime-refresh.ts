@@ -38,7 +38,18 @@ export function useRealtimeRefresh(
    *
    * Must be referentially stable (useCallback) or the channel re-subscribes.
    */
-  shouldRefresh?: (payload: ChangePayload) => boolean
+  shouldRefresh?: (payload: ChangePayload) => boolean,
+  /**
+   * Side effect per event, for a caller that needs the ROW and not just the
+   * repaint — the shell's chat alerts, which chime and post a desktop
+   * notification. Runs for every event, BEFORE and independently of
+   * `shouldRefresh`: the two answer different questions, and a message in the
+   * open thread (no refresh) may still deserve an alert when the tab is hidden.
+   *
+   * Exists so that caller can ride this channel instead of joining a second one
+   * to the same tables — see the note in (app)/messages/layout.tsx.
+   */
+  onChange?: (payload: ChangePayload) => void
 ) {
   const router = useRouter();
   // Stringify so the effect re-subscribes only when the actual table set
@@ -59,6 +70,13 @@ export function useRealtimeRefresh(
   useEffect(() => {
     filterRef.current = shouldRefresh;
   }, [shouldRefresh]);
+
+  // Same again for the side effect: it closes over props that change on every
+  // server refresh (the members map), and none of that may re-open the socket.
+  const changeRef = useRef(onChange);
+  useEffect(() => {
+    changeRef.current = onChange;
+  }, [onChange]);
 
   useEffect(() => {
     const list = key.split(",").filter(Boolean);
@@ -98,6 +116,7 @@ export function useRealtimeRefresh(
           "postgres_changes",
           { event: "*", schema: "public", table },
           (payload) => {
+            changeRef.current?.(payload);
             const filter = filterRef.current;
             if (filter && !filter(payload)) return;
             scheduleRefresh();

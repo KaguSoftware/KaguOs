@@ -4,15 +4,27 @@
  * all included. The source is the two syllabus documents in `public/learn/`;
  * this script is what turns them from a page you read into a sprint you run.
  *
- * Idempotent: a program is matched by title. Re-running replaces that sprint's
- * stages, goals and resources but keeps the sprint row, its participants, and
- * everyone's ticks — so it's safe to re-run after editing the content below.
+ * Idempotent: a program is matched by title, and so is every stage, goal and
+ * resource inside it. Re-running edits rows in place rather than replacing
+ * them, so the sprint keeps its participants and everyone keeps their ticks —
+ * it's safe to re-run after editing the content below. Reword a goal and you
+ * retire it: the old row (and the ticks on it) goes, because nobody has done
+ * the new thing yet.
  *
  * Usage:  npx tsx scripts/seed-learn-levels.ts [--start YYYY-MM-DD]
  */
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+
+type ResourceSeed = {
+  title: string;
+  url: string;
+  /** Decides the row's mark: a play triangle or an open book. */
+  kind?: "video" | "read" | "link";
+  /** Who made it — shown small and right-aligned. */
+  source?: string;
+};
 
 type StageSeed = {
   title: string;
@@ -26,24 +38,49 @@ type StageSeed = {
   goals: string[];
   /** The goal that IS the proof. Appended after `goals`. */
   proofGoal?: string;
-  resources?: { title: string; url: string }[];
+  resources?: ResourceSeed[];
+};
+
+/**
+ * The prompting playbook: one technique per row, one video each, grouped the
+ * way you'd use them. Seeded as resources carrying a `group_label`, which is
+ * what makes them render as a numbered run instead of a stage's reading list.
+ */
+type PlaybookSeed = {
+  /** The stage these belong to, matched by title. */
+  stageTitle: string;
+  groups: { label: string; items: ResourceSeed[] }[];
 };
 
 type ProgramSeed = {
   title: string;
+  /** Sits under the title: "Using Claude — the beginner program". */
+  tagline: string;
   description: string;
+  /** The sign-off at the foot of the run. */
+  outro: string;
   /** Length in days, inclusive of both ends. */
   days: number;
   syllabus?: { title: string; url: string };
   stages: StageSeed[];
+  playbook?: PlaybookSeed;
+  /** Study rules: label "70 / 30", title "Use it live", body why. */
+  rules?: { label: string; title: string; body: string }[];
+  /** One day, blocked out: label "Review", 15 minutes, body what you do. */
+  session?: { label: string; minutes: number; body: string }[];
+  /** The capstone's build timeline: label "D12", body what to do that day. */
+  build?: { label: string; body: string }[];
 };
 
 /* ------------------------------------------------------------------ level 1 */
 
 const LEVEL_1: ProgramSeed = {
   title: "Level 1 · Getting a Good Answer",
+  tagline: "Using Claude — the beginner program",
   description:
     "A structured 2-week sprint to getting genuinely useful answers out of Claude: knowing what to reach for, prompting it properly, and trusting what comes back. Five stages, each unlocking the next, ending in one real task done start to finish.",
+  outro:
+    "By day 14 you'll reach for the right tool, prompt it like a spec, know when to start fresh, and know when to believe it — the difference between typing questions and getting real work done. Consistency beats intensity: twenty focused minutes a day beats a five-hour weekend once.",
   days: 14,
   syllabus: {
     title: "Level 1 syllabus (full document)",
@@ -71,10 +108,14 @@ const LEVEL_1: ProgramSeed = {
         {
           title: "Claude AI Full Tutorial: From Basics to Agentic AI (2026)",
           url: "https://www.youtube.com/watch?v=XTWb5oEfqdY",
+          kind: "video",
+          source: "YouTube",
         },
         {
-          title: "Claude Models Explained (2026): Opus vs Sonnet vs Haiku vs Fable",
+          title: "Claude Models Explained: Opus vs Sonnet vs Haiku vs Fable",
           url: "https://www.usecarly.com/blog/claude-models-explained/",
+          kind: "read",
+          source: "usecarly",
         },
       ],
     },
@@ -97,10 +138,14 @@ const LEVEL_1: ProgramSeed = {
         {
           title: "FULL Claude Cowork Tutorial for Beginners (2026)",
           url: "https://www.youtube.com/watch?v=JdQ_FHgP5ms",
+          kind: "video",
+          source: "AI Foundations",
         },
         {
           title: "Set Up Claude Cowork: Files, Instructions, Plugins & Connectors",
           url: "https://cohorte.co/ai-articles/how-to-set-up-claude-cowork-files-instructions-plugins-and-connectors-2026",
+          kind: "read",
+          source: "Cohorte",
         },
       ],
     },
@@ -121,80 +166,8 @@ const LEVEL_1: ProgramSeed = {
         "The iteration loop — refine, self-critique, steer",
       ],
       proofGoal: "Rebuild a vague prompt with 6+ techniques — before → after",
-      resources: [
-        {
-          title: "01 · Role / persona assignment — Personas and Roles",
-          url: "https://www.youtube.com/watch?v=XvCq4nPqE0Y",
-        },
-        {
-          title: "02 · Explicit goal & desired outcome — Start Giving AI Goals",
-          url: "https://www.youtube.com/watch?v=1fL_lwsdMd4",
-        },
-        {
-          title: "03 · Audience & context — 5 Context Levels",
-          url: "https://www.youtube.com/watch?v=ipIOC55AwyQ",
-        },
-        {
-          title: "04 · Guardrails & constraints — Constraint-Based Prompts",
-          url: "https://www.youtube.com/watch?v=9GHYUKYNbag",
-        },
-        {
-          title: "05 · Clear, direct, specific instructions",
-          url: "https://www.youtube.com/watch?v=ISOKIHuK7f8",
-        },
-        {
-          title: "06 · Few-shot examples",
-          url: "https://www.youtube.com/watch?v=ojtbHUqw1LA",
-        },
-        {
-          title: "07 · Output format (lists / tables / JSON)",
-          url: "https://www.youtube.com/watch?v=4_H78L9FYb8",
-        },
-        {
-          title: "08 · Tone & voice",
-          url: "https://www.youtube.com/watch?v=aBNcbyakt1w",
-        },
-        {
-          title: "09 · Positive instruction (what to do)",
-          url: "https://www.youtube.com/watch?v=aLcqH2lDlGs",
-        },
-        {
-          title: "10 · Ground it in reference material",
-          url: "https://www.youtube.com/watch?v=6dxkBftbukI",
-        },
-        {
-          title: "11 · Delimiters & sections",
-          url: "https://www.youtube.com/watch?v=aNsATNgBWqA",
-        },
-        {
-          title: "12 · Task decomposition (break into steps)",
-          url: "https://www.youtube.com/watch?v=1c9iyoVIwDs",
-        },
-        {
-          title: "13 · Chain-of-thought (\"think step by step\")",
-          url: "https://www.youtube.com/watch?v=2kvCNlpDFK0",
-        },
-        {
-          title: "14 · Instruction placement & ordering",
-          url: "https://www.youtube.com/watch?v=dOxUroR57xs",
-        },
-        {
-          title: "15 · Prefilling / leading the answer",
-          url: "https://www.youtube.com/watch?v=Uz_DeqGhbjs",
-        },
-        {
-          title: "16 · Progressive refinement (broad → narrow)",
-          url: "https://www.youtube.com/watch?v=FpdtS95T-Qg",
-        },
-        {
-          title: "17 · Self-critique & revise",
-          url: "https://www.youtube.com/shorts/uPEx9BC-aog",
-        },
-        {
-          title: "18 · Steering with feedback & clarifying questions",
-          url: "https://www.youtube.com/watch?v=CyAUoZSC8bA",
-        },
-      ],
+      // The eighteen techniques are the playbook, below — a numbered run with
+      // its own ticks, not a reading list bolted to this stage.
     },
     {
       title: "Context",
@@ -216,6 +189,8 @@ const LEVEL_1: ProgramSeed = {
         {
           title: "What is a Context Window?",
           url: "https://www.ibm.com/think/topics/context-window",
+          kind: "read",
+          source: "IBM Technology",
         },
       ],
     },
@@ -239,10 +214,14 @@ const LEVEL_1: ProgramSeed = {
         {
           title: "Why Large Language Models Hallucinate",
           url: "https://www.youtube.com/watch?v=cfqtFvWOfg0",
+          kind: "video",
+          source: "IBM Technology",
         },
         {
           title: "What Are AI Hallucinations?",
           url: "https://www.ibm.com/think/topics/ai-hallucinations",
+          kind: "read",
+          source: "IBM",
         },
       ],
     },
@@ -267,14 +246,184 @@ const LEVEL_1: ProgramSeed = {
       proofGoal: "Put the finished result to real use",
     },
   ],
+
+  // Every link below was watched end-to-end and confirmed to teach its exact
+  // technique. Where the syllabus deck pointed six of these at timestamped
+  // sections of one long freeCodeCamp tutorial, each has a dedicated video here
+  // instead — a section marker is not a link you can hand someone.
+  playbook: {
+    stageTitle: "Prompting",
+    groups: [
+      {
+        label: "Framing — set the scene",
+        items: [
+          {
+            title: "Role / persona assignment",
+            url: "https://www.youtube.com/watch?v=XvCq4nPqE0Y",
+            source: "All About AI",
+          },
+          {
+            title: "Explicit goal & desired outcome",
+            url: "https://www.youtube.com/watch?v=1fL_lwsdMd4",
+            source: "Start Giving AI Goals",
+          },
+          {
+            title: "Audience & context",
+            url: "https://www.youtube.com/watch?v=ipIOC55AwyQ",
+            source: "5 Context Levels",
+          },
+          {
+            title: "Guardrails & constraints",
+            url: "https://www.youtube.com/watch?v=9GHYUKYNbag",
+            source: "Constraint-Based Prompts",
+          },
+        ],
+      },
+      {
+        label: "Specification — pin down the ask",
+        items: [
+          {
+            title: "Clear, direct, specific instructions",
+            url: "https://www.youtube.com/watch?v=ISOKIHuK7f8",
+            source: "Prompting Basics",
+          },
+          {
+            title: "Few-shot examples",
+            url: "https://www.youtube.com/watch?v=ojtbHUqw1LA",
+            source: "Elvis Saravia",
+          },
+          {
+            title: "Output format (lists / tables / JSON)",
+            url: "https://www.youtube.com/watch?v=4_H78L9FYb8",
+            source: "Output Formatting",
+          },
+          {
+            title: "Tone & voice",
+            url: "https://www.youtube.com/watch?v=aBNcbyakt1w",
+            source: "Kingy AI",
+          },
+          {
+            title: "Positive instruction (what to do)",
+            url: "https://www.youtube.com/watch?v=aLcqH2lDlGs",
+            source: "AI with Kyle",
+          },
+          {
+            title: "Ground it in reference material",
+            url: "https://www.youtube.com/watch?v=6dxkBftbukI",
+            source: "Moveworks",
+          },
+        ],
+      },
+      {
+        label: "Structure — organise the prompt",
+        items: [
+          {
+            title: "Delimiters & sections",
+            url: "https://www.youtube.com/watch?v=aNsATNgBWqA",
+            source: "Automation Step by Step",
+          },
+          {
+            title: "Task decomposition (break into steps)",
+            url: "https://www.youtube.com/watch?v=1c9iyoVIwDs",
+            source: "IBM Technology",
+          },
+          {
+            title: 'Chain-of-thought ("think step by step")',
+            url: "https://www.youtube.com/watch?v=2kvCNlpDFK0",
+            source: "Google Cloud Tech",
+          },
+          {
+            title: "Instruction placement & ordering",
+            url: "https://www.youtube.com/watch?v=dOxUroR57xs",
+            source: "Elvis Saravia",
+          },
+          {
+            title: "Prefilling / leading the answer",
+            url: "https://www.youtube.com/watch?v=Uz_DeqGhbjs",
+            source: "Lawton Learns",
+          },
+        ],
+      },
+      {
+        label: "The iteration loop — improve across turns",
+        items: [
+          {
+            title: "Progressive refinement (broad → narrow)",
+            url: "https://www.youtube.com/watch?v=FpdtS95T-Qg",
+            source: "Iterative Prompting",
+          },
+          {
+            title: "Self-critique & revise",
+            url: "https://www.youtube.com/shorts/uPEx9BC-aog",
+            source: "Nick Sadler",
+          },
+          {
+            title: "Steering with feedback & clarifying questions",
+            url: "https://www.youtube.com/watch?v=CyAUoZSC8bA",
+            source: "SkillCurb",
+          },
+        ],
+      },
+    ],
+  },
+
+  rules: [
+    {
+      label: "70 / 30",
+      title: "Use it live",
+      body: "Spend 70% of your time in an actual Claude window trying things, 30% watching or reading.",
+    },
+    {
+      label: "1 at a time",
+      title: "One technique a day",
+      body: "Take a single technique, use it on a real task today, feel the difference, then add the next.",
+    },
+    {
+      label: "Steal it",
+      title: "Steal the prompt",
+      body: "When a video shows a prompt, pause and run your own version immediately. Muscle memory beats notes.",
+    },
+    {
+      label: "Verify",
+      title: "Trust, then verify",
+      body: 'Every important answer gets one check. Assume "confident" does not mean "correct" until you have looked.',
+    },
+    {
+      label: "Journal",
+      title: "Keep a prompt journal",
+      body: "Save the prompts that worked. Your best asset is a personal library of what gets good answers.",
+    },
+    {
+      label: "Ship it",
+      title: "Ship the capstone",
+      body: "Theory without a finished task is tutorial hell. Build the real thing by day 12.",
+    },
+  ],
+
+  session: [
+    { label: "Review", minutes: 15, body: "Yesterday's technique + a warm-up prompt" },
+    { label: "Learn", minutes: 40, body: "The day's stage — one resource" },
+    { label: "Break", minutes: 10, body: "Step away from the screen" },
+    { label: "Practice", minutes: 40, body: "Use it on a real task of your own" },
+    { label: "Reflect", minutes: 15, body: "What worked; one thing to reuse tomorrow" },
+  ],
+
+  build: [
+    { label: "D12", body: "Pick the task, choose surface / model, connect your data" },
+    { label: "D13", body: "Draft with strong prompts; iterate to a genuinely good answer" },
+    { label: "D14", body: "Verify, polish, and put it to real use" },
+  ],
 };
 
 /* ------------------------------------------------------------------ level 2 */
 
 const LEVEL_2: ProgramSeed = {
   title: "Level 2 · Build Something That Works Twice",
+  tagline: "Using Claude — the intermediate program",
   description:
     "A structured 2-week sprint to building AI systems that work the same way twice: skills, agents, evals, and the context discipline behind reliable results. Ends in a small system you ship, with an eval that proves it works twice.",
+  outro:
+    "By day 14 you'll have shipped something repeatable — scoped, evaluated, verified, and versioned. The instincts that separate a lucky answer from a reliable system come from building one and proving it runs twice. If it only worked once, it didn't work.",
   days: 14,
   syllabus: {
     title: "Level 2 syllabus (full document)",
@@ -302,10 +451,14 @@ const LEVEL_2: ProgramSeed = {
         {
           title: "Claude Agent Skills Explained in 20 Minutes",
           url: "https://www.youtube.com/watch?v=3FuwsUvasVM",
+          kind: "video",
+          source: "Simplilearn",
         },
         {
           title: "Claude Plugins Explained: Skills, Marketplaces & How to Install",
           url: "https://sitegpt.ai/claude-plugins",
+          kind: "read",
+          source: "SiteGPT",
         },
       ],
     },
@@ -330,14 +483,20 @@ const LEVEL_2: ProgramSeed = {
         {
           title: "AI Agents Explained — How They Actually Work",
           url: "https://www.youtube.com/watch?v=g24tJk8Flsk",
+          kind: "video",
+          source: "YouTube",
         },
         {
           title: "Model Context Protocol, clearly explained (why it matters)",
           url: "https://www.youtube.com/watch?v=7j_NE6Pjv-E",
+          kind: "video",
+          source: "YouTube",
         },
         {
           title: "Prompt injection explained (video + slides + transcript)",
           url: "https://simonw.substack.com/p/prompt-injection-explained-with-video",
+          kind: "read",
+          source: "Simon Willison",
         },
       ],
     },
@@ -357,60 +516,7 @@ const LEVEL_2: ProgramSeed = {
         "Evaluation, golden sets, LLM-as-judge, versioning",
       ],
       proofGoal: "A spec-prompt + 5-case eval that holds across 3 runs",
-      resources: [
-        {
-          title: "01 · Prompt-as-spec (not a casual request) — The New Code",
-          url: "https://www.youtube.com/watch?v=8rABwKRsec4",
-        },
-        {
-          title: "02 · System prompt vs turn prompt",
-          url: "https://www.youtube.com/watch?v=sxPg_ZmbPlc",
-        },
-        {
-          title: "03 · Reusable, parameterized templates",
-          url: "https://www.youtube.com/watch?v=hVs8MVydN3A",
-        },
-        {
-          title: "04 · Prompt chaining & pipelines",
-          url: "https://www.youtube.com/watch?v=5kWLBdzM114",
-        },
-        {
-          title: "05 · Meta-prompting (AI writes your prompts)",
-          url: "https://www.youtube.com/watch?v=0JZisMktcbA",
-        },
-        {
-          title: "06 · Structured outputs (JSON / schema)",
-          url: "https://www.youtube.com/watch?v=CllLqPwCjD4",
-        },
-        {
-          title: "07 · Tool-use / function-calling prompting",
-          url: "https://www.youtube.com/watch?v=h8gMhXYAv1k",
-        },
-        {
-          title: "08 · Controlling reasoning depth",
-          url: "https://www.youtube.com/watch?v=AFE6x81AP4k",
-        },
-        {
-          title: "09 · Output validation & auto-retry",
-          url: "https://www.youtube.com/watch?v=r3JdQxtxVuM",
-        },
-        {
-          title: "10 · Prompt evaluation (across many inputs)",
-          url: "https://www.youtube.com/watch?v=a3SMraZWNNs",
-        },
-        {
-          title: "11 · Golden sets & regression testing",
-          url: "https://www.youtube.com/watch?v=7vqU_Yj5kUc",
-        },
-        {
-          title: "12 · LLM-as-judge & rubrics",
-          url: "https://www.youtube.com/watch?v=zaNR3WaPTfo",
-        },
-        {
-          title: "13 · Versioning & iteration discipline",
-          url: "https://www.youtube.com/watch?v=R0l4xogVG4s",
-        },
-      ],
+      // The thirteen techniques are the playbook, below.
     },
     {
       title: "Context orchestration",
@@ -431,6 +537,8 @@ const LEVEL_2: ProgramSeed = {
         {
           title: "Context Engineering: A Practical Guide for AI Agents (2026)",
           url: "https://sourcegraph.com/blog/context-engineering",
+          kind: "read",
+          source: "Sourcegraph",
         },
       ],
     },
@@ -454,10 +562,14 @@ const LEVEL_2: ProgramSeed = {
         {
           title: "Why Large Language Models Hallucinate",
           url: "https://www.youtube.com/watch?v=cfqtFvWOfg0",
+          kind: "video",
+          source: "IBM Technology",
         },
         {
           title: "LLM Hallucinations in 2026: Understand & Tackle Them",
           url: "https://www.lakera.ai/blog/guide-to-hallucinations-in-large-language-models",
+          kind: "read",
+          source: "Lakera",
         },
       ],
     },
@@ -481,6 +593,138 @@ const LEVEL_2: ProgramSeed = {
       ],
       proofGoal: "Ship it, and prove the eval passes twice",
     },
+  ],
+
+  playbook: {
+    stageTitle: "Prompting",
+    groups: [
+      {
+        label: "A · Prompt as an engineered artifact",
+        items: [
+          {
+            title: "Prompt-as-spec (not a casual request)",
+            url: "https://www.youtube.com/watch?v=8rABwKRsec4",
+            source: "AI Engineer",
+          },
+          {
+            title: "System prompt vs turn prompt",
+            url: "https://www.youtube.com/watch?v=sxPg_ZmbPlc",
+            source: "Dan Cleary",
+          },
+          {
+            title: "Reusable, parameterized templates",
+            url: "https://www.youtube.com/watch?v=hVs8MVydN3A",
+            source: "Leon van Zyl",
+          },
+          {
+            title: "Prompt chaining & pipelines",
+            url: "https://www.youtube.com/watch?v=5kWLBdzM114",
+            source: "Sundeep S. Kanthety",
+          },
+          {
+            title: "Meta-prompting (AI writes your prompts)",
+            url: "https://www.youtube.com/watch?v=0JZisMktcbA",
+            source: "Maven Analytics",
+          },
+        ],
+      },
+      {
+        label: "B · Making outputs machine-reliable",
+        items: [
+          {
+            title: "Structured outputs (JSON / schema)",
+            url: "https://www.youtube.com/watch?v=CllLqPwCjD4",
+            source: "Telusko",
+          },
+          {
+            title: "Tool-use / function-calling prompting",
+            url: "https://www.youtube.com/watch?v=h8gMhXYAv1k",
+            source: "IBM Technology",
+          },
+          {
+            title: "Controlling reasoning depth",
+            url: "https://www.youtube.com/watch?v=AFE6x81AP4k",
+            source: "CodeEmporium",
+          },
+          {
+            title: "Output validation & auto-retry",
+            url: "https://www.youtube.com/watch?v=r3JdQxtxVuM",
+            source: "Apply AI like a Pro",
+          },
+        ],
+      },
+      {
+        label: "C · Proving it works twice",
+        items: [
+          {
+            title: "Prompt evaluation (across many inputs)",
+            url: "https://www.youtube.com/watch?v=a3SMraZWNNs",
+            source: "Dave Ebbelaar",
+          },
+          {
+            title: "Golden sets & regression testing",
+            url: "https://www.youtube.com/watch?v=7vqU_Yj5kUc",
+            source: "Latitude",
+          },
+          {
+            title: "LLM-as-judge & rubrics",
+            url: "https://www.youtube.com/watch?v=zaNR3WaPTfo",
+            source: "Microsoft Reactor",
+          },
+          {
+            title: "Versioning & iteration discipline",
+            url: "https://www.youtube.com/watch?v=R0l4xogVG4s",
+            source: "LangChain",
+          },
+        ],
+      },
+    ],
+  },
+
+  rules: [
+    {
+      label: "70 / 30",
+      title: "Build it live",
+      body: "70% of your time inside a real project wiring things up, 30% watching or reading.",
+    },
+    {
+      label: "Run twice",
+      title: "Twice or it doesn't count",
+      body: "A result that worked once is a demo. Re-run it on new inputs before you believe it.",
+    },
+    {
+      label: "Steal it",
+      title: "Steal the prompt & eval",
+      body: "When a video shows a prompt or an eval, rebuild your own version on your own data now.",
+    },
+    {
+      label: "Gate it",
+      title: "Cheap gates beat hope",
+      body: "Add the smallest verification that would catch the failure you fear most.",
+    },
+    {
+      label: "Version",
+      title: "Treat prompts like code",
+      body: "Version every working prompt so you can improve it without silently breaking it.",
+    },
+    {
+      label: "Ship it",
+      title: "Ship the system",
+      body: "A reusable system shipped by day 13 beats a perfect one you never finish.",
+    },
+  ],
+
+  session: [
+    { label: "Review", minutes: 15, body: "Re-run yesterday's build; confirm it still holds" },
+    { label: "Learn", minutes: 40, body: "The day's stage — one resource" },
+    { label: "Break", minutes: 10, body: "Step away from the screen" },
+    { label: "Build", minutes: 40, body: "Wire it into your own project" },
+    { label: "Verify", minutes: 15, body: "Run it twice; note what to version" },
+  ],
+
+  build: [
+    { label: "D13", body: "Build the system and its 5-case eval set" },
+    { label: "D14", body: "Run it 3×, add the verification gate, version and ship" },
   ],
 };
 
@@ -506,6 +750,82 @@ function addDays(date: string, days: number): string {
   return d.toISOString().slice(0, 10);
 }
 
+/**
+ * Reconcile a list of seeded rows against what's already in the table, matched
+ * by title.
+ *
+ * The obvious implementation — delete everything, insert everything — is what
+ * this script used to do, and it was quietly destructive: `sprint_goal_progress`
+ * cascades from `sprint_goals`, so every re-run wiped the ticks it claimed to
+ * keep. Matching by title means a goal whose wording didn't change keeps its id,
+ * and therefore keeps everyone's progress against it.
+ *
+ * Titles are the key because they're what a person recognises. Rewording a goal
+ * IS retiring it and adding a new one, and losing the ticks on it is correct:
+ * nobody has done the new thing yet.
+ */
+async function reconcile<T extends { title: string }>(
+  supabase: SupabaseClient,
+  table: "sprint_stages" | "sprint_goals" | "sprint_resources",
+  sprintId: string,
+  rows: T[]
+): Promise<Map<string, string>> {
+  // Title is the identity here, so two seeded rows sharing one would silently
+  // collapse into a single row. Cheaper to refuse than to debug the missing
+  // goal later.
+  const titles = new Set<string>();
+  for (const row of rows) {
+    if (titles.has(row.title)) {
+      throw new Error(`Duplicate ${table} title in the seed: "${row.title}"`);
+    }
+    titles.add(row.title);
+  }
+
+  const { data: existing, error: readError } = await supabase
+    .from(table)
+    .select("id, title")
+    .eq("sprint_id", sprintId);
+  if (readError) throw new Error(`Reading ${table}: ${readError.message}`);
+
+  const idByTitle = new Map<string, string>();
+  for (const row of existing ?? []) {
+    // A duplicate title in the table can only be matched once; the extra copy
+    // falls through to the sweep below and is removed.
+    if (!idByTitle.has(row.title)) idByTitle.set(row.title, row.id);
+  }
+
+  const kept = new Map<string, string>();
+  const inserts: T[] = [];
+  for (const row of rows) {
+    const id = idByTitle.get(row.title);
+    if (id) {
+      const { error } = await supabase.from(table).update(row).eq("id", id);
+      if (error) throw new Error(`Updating ${table} "${row.title}": ${error.message}`);
+      kept.set(row.title, id);
+    } else {
+      inserts.push(row);
+    }
+  }
+
+  if (inserts.length > 0) {
+    const { data, error } = await supabase.from(table).insert(inserts).select("id, title");
+    if (error) throw new Error(`Inserting ${table}: ${error.message}`);
+    for (const row of data ?? []) kept.set(row.title, row.id);
+  }
+
+  // Anything in the table that the seed no longer lists is gone from the
+  // program, so its rows (and any progress hanging off them) go with it.
+  const staleIds = (existing ?? [])
+    .filter((row) => kept.get(row.title) !== row.id)
+    .map((row) => row.id);
+  if (staleIds.length > 0) {
+    const { error } = await supabase.from(table).delete().in("id", staleIds);
+    if (error) throw new Error(`Pruning ${table}: ${error.message}`);
+  }
+
+  return kept;
+}
+
 async function seedProgram(
   supabase: SupabaseClient,
   program: ProgramSeed,
@@ -514,7 +834,7 @@ async function seedProgram(
   const endsOn = addDays(startsOn, program.days - 1);
 
   // Match on title so re-running edits the same sprint rather than piling up
-  // copies. Participants and ticks are never touched.
+  // copies. Participants and ticks survive — see `reconcile` above.
   const { data: existing, error: findError } = await supabase
     .from("sprints")
     .select("id")
@@ -523,35 +843,24 @@ async function seedProgram(
     .maybeSingle();
   if (findError) throw new Error(`Looking up "${program.title}": ${findError.message}`);
 
+  const fields = {
+    description: program.description,
+    tagline: program.tagline,
+    outro: program.outro,
+    starts_on: startsOn,
+    ends_on: endsOn,
+    join_mode: "open",
+  };
+
   let sprintId: string;
   if (existing) {
     sprintId = existing.id;
-    const { error } = await supabase
-      .from("sprints")
-      .update({
-        description: program.description,
-        starts_on: startsOn,
-        ends_on: endsOn,
-        join_mode: "open",
-      })
-      .eq("id", sprintId);
+    const { error } = await supabase.from("sprints").update(fields).eq("id", sprintId);
     if (error) throw new Error(`Updating "${program.title}": ${error.message}`);
-
-    // Stages cascade to their goals and null out their resources, so clearing
-    // stages first leaves only the unstaged leftovers to sweep.
-    await supabase.from("sprint_stages").delete().eq("sprint_id", sprintId);
-    await supabase.from("sprint_goals").delete().eq("sprint_id", sprintId);
-    await supabase.from("sprint_resources").delete().eq("sprint_id", sprintId);
   } else {
     const { data, error } = await supabase
       .from("sprints")
-      .insert({
-        title: program.title,
-        description: program.description,
-        starts_on: startsOn,
-        ends_on: endsOn,
-        join_mode: "open",
-      })
+      .insert({ title: program.title, ...fields })
       .select("id")
       .single();
     if (error || !data) {
@@ -560,31 +869,30 @@ async function seedProgram(
     sprintId = data.id;
   }
 
-  // Stages first — goals and resources both reference them.
-  const { data: stageRows, error: stageError } = await supabase
-    .from("sprint_stages")
-    .insert(
-      program.stages.map((stage, index) => ({
-        sprint_id: sprintId,
-        title: stage.title,
-        summary: stage.summary ?? null,
-        proof: stage.proof ?? null,
-        kind: stage.kind ?? "stage",
-        day_from: stage.day_from ?? null,
-        day_to: stage.day_to ?? null,
-        hours_low: stage.hours_low ?? null,
-        hours_high: stage.hours_high ?? null,
-        sort_order: index,
-      }))
-    )
-    .select("id, sort_order");
-  if (stageError) throw new Error(`Stages for "${program.title}": ${stageError.message}`);
-
-  const stageIdByOrder = new Map<number, string>();
-  for (const row of stageRows ?? []) stageIdByOrder.set(row.sort_order, row.id);
+  // Stages first — goals and resources both reference them. Note the order:
+  // goals and resources are repointed at the surviving stage ids BEFORE any
+  // stage is pruned, so a stage that goes away never cascades a goal that
+  // simply moved.
+  const stageIds = await reconcile(
+    supabase,
+    "sprint_stages",
+    sprintId,
+    program.stages.map((stage, index) => ({
+      sprint_id: sprintId,
+      title: stage.title,
+      summary: stage.summary ?? null,
+      proof: stage.proof ?? null,
+      kind: stage.kind ?? "stage",
+      day_from: stage.day_from ?? null,
+      day_to: stage.day_to ?? null,
+      hours_low: stage.hours_low ?? null,
+      hours_high: stage.hours_high ?? null,
+      sort_order: index,
+    }))
+  );
 
   // Goals: sort_order runs across the whole sprint so the standings race and
-  // the "on · <goal>" line follow the stage order.
+  // the "next · <goal>" line follow the stage order.
   const goalRows: {
     sprint_id: string;
     stage_id: string;
@@ -593,9 +901,9 @@ async function seedProgram(
     sort_order: number;
   }[] = [];
   let order = 0;
-  program.stages.forEach((stage, index) => {
-    const stageId = stageIdByOrder.get(index);
-    if (!stageId) return;
+  for (const stage of program.stages) {
+    const stageId = stageIds.get(stage.title);
+    if (!stageId) continue;
     for (const title of stage.goals) {
       goalRows.push({
         sprint_id: sprintId,
@@ -614,16 +922,21 @@ async function seedProgram(
         sort_order: order++,
       });
     }
-  });
-  const { error: goalError } = await supabase.from("sprint_goals").insert(goalRows);
-  if (goalError) throw new Error(`Goals for "${program.title}": ${goalError.message}`);
+  }
+  await reconcile(supabase, "sprint_goals", sprintId, goalRows);
 
   const resourceRows: {
     sprint_id: string;
     stage_id: string | null;
     title: string;
     url: string;
+    kind: string;
+    source: string | null;
+    group_label: string | null;
+    sort_order: number;
   }[] = [];
+  let resourceOrder = 0;
+
   if (program.syllabus) {
     // Sprint-wide: the document itself, on the shelf rather than in a stage.
     resourceRows.push({
@@ -631,23 +944,92 @@ async function seedProgram(
       stage_id: null,
       title: program.syllabus.title,
       url: program.syllabus.url,
+      kind: "read",
+      source: "the original deck",
+      group_label: null,
+      sort_order: resourceOrder++,
     });
   }
-  program.stages.forEach((stage, index) => {
-    const stageId = stageIdByOrder.get(index);
-    if (!stageId) return;
+
+  for (const stage of program.stages) {
+    const stageId = stageIds.get(stage.title);
+    if (!stageId) continue;
     for (const resource of stage.resources ?? []) {
       resourceRows.push({
         sprint_id: sprintId,
         stage_id: stageId,
         title: resource.title,
         url: resource.url,
+        kind: resource.kind ?? "link",
+        source: resource.source ?? null,
+        group_label: null,
+        sort_order: resourceOrder++,
       });
     }
-  });
-  if (resourceRows.length > 0) {
-    const { error } = await supabase.from("sprint_resources").insert(resourceRows);
-    if (error) throw new Error(`Resources for "${program.title}": ${error.message}`);
+  }
+
+  if (program.playbook) {
+    const stageId = stageIds.get(program.playbook.stageTitle) ?? null;
+    for (const group of program.playbook.groups) {
+      for (const item of group.items) {
+        resourceRows.push({
+          sprint_id: sprintId,
+          stage_id: stageId,
+          title: item.title,
+          url: item.url,
+          kind: item.kind ?? "video",
+          source: item.source ?? null,
+          group_label: group.label,
+          sort_order: resourceOrder++,
+        });
+      }
+    }
+  }
+
+  await reconcile(supabase, "sprint_resources", sprintId, resourceRows);
+
+  // Practices carry no per-person state, so replacing them wholesale costs
+  // nothing and keeps the reconcile helper to the three tables that do.
+  const { error: practiceWipe } = await supabase
+    .from("sprint_practices")
+    .delete()
+    .eq("sprint_id", sprintId);
+  if (practiceWipe) {
+    throw new Error(`Clearing practices for "${program.title}": ${practiceWipe.message}`);
+  }
+
+  const practiceRows = [
+    ...(program.rules ?? []).map((rule, index) => ({
+      sprint_id: sprintId,
+      kind: "rule",
+      label: rule.label,
+      title: rule.title,
+      body: rule.body,
+      minutes: null,
+      sort_order: index,
+    })),
+    ...(program.session ?? []).map((block, index) => ({
+      sprint_id: sprintId,
+      kind: "session",
+      label: block.label,
+      title: null,
+      body: block.body,
+      minutes: block.minutes,
+      sort_order: index,
+    })),
+    ...(program.build ?? []).map((step, index) => ({
+      sprint_id: sprintId,
+      kind: "build",
+      label: step.label,
+      title: null,
+      body: step.body,
+      minutes: null,
+      sort_order: index,
+    })),
+  ];
+  if (practiceRows.length > 0) {
+    const { error } = await supabase.from("sprint_practices").insert(practiceRows);
+    if (error) throw new Error(`Practices for "${program.title}": ${error.message}`);
   }
 
   return {
@@ -656,6 +1038,7 @@ async function seedProgram(
     stages: program.stages.length,
     goals: goalRows.length,
     resources: resourceRows.length,
+    practices: practiceRows.length,
   };
 }
 
@@ -687,8 +1070,8 @@ async function main() {
     const result = await seedProgram(supabase, program, startsOn);
     console.log(
       `${result.created ? "Created" : "Refreshed"} "${program.title}" — ` +
-        `${result.stages} stages, ${result.goals} goals, ${result.resources} resources ` +
-        `(${result.id})`
+        `${result.stages} stages, ${result.goals} goals, ${result.resources} resources, ` +
+        `${result.practices} practice blocks (${result.id})`
     );
   }
   console.log(`\nBoth programs start ${startsOn} and are open to join.`);

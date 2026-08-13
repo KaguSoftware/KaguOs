@@ -1,4 +1,4 @@
--- 0051: Learn sprints gain stages — a sprint is no longer a flat goal list but
+-- 0056: Learn sprints gain stages — a sprint is no longer a flat goal list but
 -- an ordered run of stages, each holding its own goals and ending in a "proof"
 -- (the one goal that says you actually cleared it). Progression is legible
 -- without being a game: no points, no badges, no streaks. A stage is cleared

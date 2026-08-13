@@ -265,6 +265,10 @@ export type Sprint = {
   id: string;
   title: string;
   description: string | null;
+  /** Sits under the title on a full program; null on an ordinary sprint. */
+  tagline: string | null;
+  /** The sign-off at the foot of the run. */
+  outro: string | null;
   starts_on: string;
   ends_on: string;
   join_mode: SprintJoinMode;
@@ -290,6 +294,9 @@ export type SprintStage = {
   created_at: string;
 };
 
+/** What the resource IS, which decides its mark and its verb. */
+export type SprintResourceKind = "link" | "video" | "read";
+
 export type SprintResource = {
   id: string;
   sprint_id: string;
@@ -297,6 +304,34 @@ export type SprintResource = {
   title: string;
   url: string | null;
   file_path: string | null;
+  kind: SprintResourceKind;
+  /** Who made it — "IBM Technology", "freeCodeCamp · § goal". */
+  source: string | null;
+  /** Non-null = part of a named run (the playbook); the label is the heading. */
+  group_label: string | null;
+  sort_order: number;
+  created_at: string;
+};
+
+/**
+ * A program's prose blocks — everything it carries that isn't a goal.
+ *
+ *   rule    — a study rule: label "70 / 30", title "Use it live", body why.
+ *   session — one block of the daily session: label "Review", minutes 15.
+ *   build   — a line of the capstone timeline: label "D12", body what to do.
+ */
+export type SprintPracticeKind = "rule" | "session" | "build";
+
+export type SprintPractice = {
+  id: string;
+  sprint_id: string;
+  kind: SprintPracticeKind;
+  label: string;
+  title: string | null;
+  body: string | null;
+  /** Only read for 'session' — it drives the proportional day meter. */
+  minutes: number | null;
+  sort_order: number;
   created_at: string;
 };
 

@@ -110,7 +110,7 @@ export default async function AppLayout({
       {!ctx.showcase && (
         <>
           <LiveRefresh tables={["notifications", "profiles"]} />
-          <ChatLiveRefresh meId={ctx.userId} />
+          <ChatLiveRefresh meId={ctx.userId} members={members} />
         </>
       )}
       {!ctx.showcase && (

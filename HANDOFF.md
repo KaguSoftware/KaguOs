@@ -99,6 +99,36 @@ Two board asks ("board order sorting", "built in messaging system") + two mid-se
    - ⚠️ **Anti-noise contract:** a direct message notifies (`kind: "message"`) ONLY when the
      recipient has no unread from that sender — one bell per unread thread, re-arms on read.
      **The group chat never notifies**; the sidebar badge carries it. Don't add per-line pings.
+   - **Desk alerts — chime + OS notification (`lib/chat-alerts.ts`).** Everything above is
+     visible only to someone whose eyes are on this window; `title-unread.tsx` says so and
+     settles for the tab title. These two reach a window sitting behind an editor. Rules,
+     deliberately different because they cost different amounts: the **chime** plays for any
+     line you aren't already looking at (rate-limited to one per 1.5s, so a burst is one event);
+     the **notification** fires only when the app isn't in front of you at all
+     (`!visible || !hasFocus`) — in-app it would be the third announcement after the badge and
+     the DM toast. Never for your own sends, incl. the ones streaming back from your phone.
+     * The chime is **synthesised** (two sine oscillators + an envelope) — no asset, no request,
+       no file to 404. Browsers keep an AudioContext suspended until a user gesture, so every
+       click that turns alerts on calls `primeChime()`; don't remove those.
+     * Notification text is ONE line by design: `Parsa` / the message. The OS banner already
+       says which app it is — Parsa asked for exactly `parsa: xxxx`, not a sentence. `tag`
+       collapses a thread's banners into one, `silent: true` stops the OS doubling our chime,
+       and the click does `router.push`, not a full reload.
+     * ⚠️ This is the one place a **group** line does reach you unprompted. It does NOT break
+       the contract above (no `notifications` row, nothing to clear, banners collapse per
+       thread) but it is the closest thing to it in the app — keep it transient.
+     * ⚠️ It rides `ChatLiveRefresh`'s existing channel via the `onChange` param added to
+       `useRealtimeRefresh` — NOT a second subscription (same rule as the inbox). `onChange`
+       fires for every event, before and independently of `shouldRefresh`: "should this
+       repaint" and "should this ring" are different questions.
+     * Prefs are **per device** (`kagu:chat-sound`, `kagu:chat-alerts-asked` in localStorage) —
+       a Notification grant belongs to a browser, and syncing the chime to the profile would
+       mute the desk machine because you muted the laptop. The account panel says so on screen.
+     * The permission dialog is behind our own button (`components/messages/alerts-prompt.tsx`
+       on Messages, `components/account/alerts-form.tsx` in Account). Never call
+       `requestPermission()` on mount: Chrome mutes an unprompted ask into an icon nobody sees,
+       Safari refuses it without a gesture, and an ambushed user clicks Block — which is
+       permanent and undoable only in browser settings.
    - Unread badge: `getUnreadMessageCount` rides the layout's existing second wave (no new
      round-trip), shows on the Messages nav item + the mobile menu tile (which deliberately does
      NOT reuse `pulse.stats.work` despite sharing the section gate). `markThreadRead` does

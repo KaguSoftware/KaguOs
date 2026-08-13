@@ -5,6 +5,7 @@ import { PageHeader } from "@/components/shell/page-header";
 import { Panel, PanelHeader } from "@/components/ui/panel";
 import { NameForm, PasswordForm } from "@/components/account/account-forms";
 import { MyColorForm } from "@/components/account/color-form";
+import { ChatAlertsForm } from "@/components/account/alerts-form";
 import { Badge } from "@/components/ui/badge";
 import { defaultColorKey, memberColorCss } from "@/lib/colors";
 import { SECTION_LABELS, type Section } from "@/lib/types";
@@ -43,6 +44,10 @@ export default async function AccountPage() {
             current={ctx.profile.color ?? defaultColorKey(ctx.profile.id)}
             teamColors={teamColors}
           />
+        </Panel>
+        <Panel>
+          <PanelHeader title="Message alerts" />
+          <ChatAlertsForm />
         </Panel>
         <Panel>
           <PanelHeader title="Password" />

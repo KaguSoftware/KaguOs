@@ -16,11 +16,14 @@ import {
 export function LiveRefresh({
   tables,
   shouldRefresh,
+  onChange,
 }: {
   tables: string | string[];
   /** Optional per-event filter — see useRealtimeRefresh. Must be stable. */
   shouldRefresh?: (payload: ChangePayload) => boolean;
+  /** Optional per-event side effect — see useRealtimeRefresh. */
+  onChange?: (payload: ChangePayload) => void;
 }) {
-  useRealtimeRefresh(tables, shouldRefresh);
+  useRealtimeRefresh(tables, shouldRefresh, onChange);
   return null;
 }

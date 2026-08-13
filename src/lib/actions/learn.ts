@@ -834,3 +834,41 @@ export async function toggleGoalProgress(
   revalidatePath(`/learn/${sprintId}`);
   return { ok: true, message: done ? "Nice — ticked." : "Unticked." };
 }
+
+/**
+ * The playbook's twin of toggleGoalProgress: same participant gate, same
+ * per-person store, different noun. Kept separate from the goal toggle because
+ * watching a video is not clearing a goal — a stage stays uncleared however
+ * much of its reading you've done, and the two counts must not merge.
+ */
+export async function toggleResourceWatched(
+  resourceId: string,
+  sprintId: string,
+  watched: boolean
+): Promise<ActionResult> {
+  const stop = await blockIfReadOnly("learn");
+  if (stop) return stop;
+  const ctx = await requireSection("learn");
+
+  const { error } = watched
+    ? await ctx.supabase
+        .from("sprint_resource_progress")
+        .upsert({ resource_id: resourceId, user_id: ctx.userId })
+    : await ctx.supabase
+        .from("sprint_resource_progress")
+        .delete()
+        .eq("resource_id", resourceId)
+        .eq("user_id", ctx.userId);
+  if (error) {
+    return {
+      ok: false,
+      message:
+        error.code === "42501"
+          ? "You're not a participant of this sprint."
+          : error.message,
+    };
+  }
+
+  revalidatePath(`/learn/${sprintId}`);
+  return { ok: true, message: watched ? "Marked watched." : "Unmarked." };
+}
