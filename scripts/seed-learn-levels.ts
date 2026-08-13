@@ -13,7 +13,7 @@
  *
  * Usage:  npx tsx scripts/seed-learn-levels.ts [--start YYYY-MM-DD]
  */
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
@@ -732,8 +732,17 @@ const PROGRAMS = [LEVEL_1, LEVEL_2];
 
 /* ------------------------------------------------------------------- runner */
 
+/**
+ * Fill process.env from `.env.local` if it's there.
+ *
+ * Absent is not an error: a fresh clone, CI, or a shell that already exports
+ * the two variables are all fine. The script used to crash here with a raw
+ * ENOENT that named a file rather than the thing actually missing, which sent
+ * you looking for the wrong problem. The real check is below, on the variables.
+ */
 function loadEnvLocal() {
   const envPath = resolve(process.cwd(), ".env.local");
+  if (!existsSync(envPath)) return;
   for (const line of readFileSync(envPath, "utf8").split(/\r?\n/)) {
     const match = line.match(/^([A-Za-z0-9_]+)=(.*)$/);
     if (match && !process.env[match[1]]) process.env[match[1]] = match[2];
@@ -1048,8 +1057,15 @@ async function main() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !serviceKey) {
+    const missing = [
+      !url && "NEXT_PUBLIC_SUPABASE_URL",
+      !serviceKey && "SUPABASE_SERVICE_ROLE_KEY",
+    ].filter(Boolean);
     throw new Error(
-      "Missing NEXT_PUBLIC_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY in .env.local"
+      `Missing ${missing.join(" and ")}.\n` +
+        "Put them in .env.local (vercel link && vercel env pull .env.local), " +
+        "or export them for one run:\n" +
+        "  SUPABASE_SERVICE_ROLE_KEY=… npm run seed:learn"
     );
   }
 

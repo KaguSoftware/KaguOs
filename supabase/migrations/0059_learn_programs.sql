@@ -1,4 +1,4 @@
--- 0058: A sprint can carry a whole program, not just a goal list.
+-- 0059: A sprint can carry a whole program, not just a goal list.
 --
 -- Kagu Learn shipped its two syllabi as standalone HTML decks in `public/learn`.
 -- A deck is a thing you read once and lose; the ticks in it were browser-local
