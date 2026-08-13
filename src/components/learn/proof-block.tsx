@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/input";
 import { Badge, type BadgeTone } from "@/components/ui/badge";
 import { SignedFileLink } from "@/components/ui/signed-file-link";
+import { ShowMore, type Disclosures } from "@/components/learn/show-more";
 import { formatRelative } from "@/lib/utils";
 import { cn } from "@/lib/utils";
 import type {
@@ -41,6 +42,7 @@ export function ProofBlock({
   submission,
   done,
   readOnly,
+  more,
   onSubmitted,
   onWithdrawn,
 }: {
@@ -55,14 +57,17 @@ export function ProofBlock({
   done: boolean;
   /** Not a participant, or view-only: the brief reads, the box is absent. */
   readOnly: boolean;
+  /** The page's shared open-set — the brief and the conditions live in it. */
+  more: Disclosures;
   onSubmitted: () => void;
   onWithdrawn: () => void;
 }) {
   const { run, toast } = useAction();
   const [body, setBody] = useState(submission?.body ?? "");
   const [file, setFile] = useState<File | null>(null);
-  // A hand-in already sent shows as a record; the box comes back on "Edit".
-  const [editing, setEditing] = useState(!submission);
+  // The box is closed until asked for, whether or not you've handed in: an
+  // open textarea under every stage is what turns a program into a form.
+  const [editing, setEditing] = useState(false);
   const [uploading, setUploading] = useState(false);
 
   // Adopted during render, not in an effect (same rule as the board): an effect
@@ -72,10 +77,12 @@ export function ProofBlock({
     setSeen(submission);
     setBody(submission?.body ?? "");
     setFile(null);
-    setEditing(!submission);
+    setEditing(false);
   }
 
   const title = goal?.title ?? stage?.proof ?? "Proof";
+  // Disclosure keys are per stage, so two stages' briefs never share a state.
+  const key = stage?.id ?? goal?.id ?? "proof";
   const canSend = body.trim().length > 0 || file !== null;
 
   async function send() {
@@ -136,56 +143,72 @@ export function ProofBlock({
         >
           {done && <Check className="size-2.5 -rotate-45" />}
         </span>
-        <span className="min-w-0 flex-1">
-          <span
-            className={cn(
-              "block text-[13px] leading-relaxed",
-              done ? "text-faint line-through decoration-line-strong" : "text-ink"
-            )}
-          >
-            {title}
-          </span>
-          {stage?.proof && goal && (
-            <span className="mt-0.5 block max-w-[70ch] text-xs leading-relaxed text-muted">
-              {stage.proof}
-            </span>
+        {/* The goal's title only. The stage's one-line proof used to sit under
+            it as a hint, and it was the same sentence twice — the goal IS the
+            proof, worded shorter. The long version is behind "The brief". */}
+        <span
+          className={cn(
+            "min-w-0 flex-1 text-[13px] leading-relaxed",
+            done ? "text-faint line-through decoration-line-strong" : "text-ink"
           )}
+        >
+          {title}
         </span>
       </div>
 
-      {stage?.proof_brief && (
-        <div className="mt-2.5 grid gap-2 pl-7">
-          {stage.proof_brief.split("\n\n").map((para, i) => (
-            <p key={i} className="max-w-[70ch] text-[13px] leading-relaxed text-muted">
-              {para}
-            </p>
-          ))}
-        </div>
-      )}
+      {/* Two disclosures, not one: someone re-reading the conditions before
+          they hand in shouldn't have to scroll past the brief they've already
+          read. Both stay closed until asked for, and they stack rather than
+          sitting side by side — a toggle floating beside an opened block of
+          paragraphs reads as debris. */}
+      {(stage?.proof_brief || criteria.length > 0) && (
+        <div className="mt-1.5 grid justify-items-start gap-0.5 pl-7">
+          {stage?.proof_brief && (
+            <ShowMore
+              open={more.isOpen(`brief:${key}`)}
+              onToggle={() => more.toggle(`brief:${key}`)}
+              label="The brief"
+            >
+              <div className="grid gap-2">
+                {stage.proof_brief.split("\n\n").map((para, i) => (
+                  <p
+                    key={i}
+                    className="max-w-[70ch] text-[13px] leading-relaxed text-muted"
+                  >
+                    {para}
+                  </p>
+                ))}
+              </div>
+            </ShowMore>
+          )}
 
-      {criteria.length > 0 && (
-        <div className="mt-3 pl-7">
-          <p className="mb-1.5 font-mono text-[11px] uppercase tracking-wider text-faint">
-            Accepted when · all {criteria.length}
-          </p>
-          {/* An ordered list, not tickboxes. A checklist you tick to unlock a
-              checklist is bureaucracy; the hand-in is the only thing recorded,
-              and these are what it's read against. */}
-          <ol className="grid gap-1.5">
-            {criteria.map((criterion, index) => (
-              <li key={criterion.id} className="flex items-start gap-2.5">
-                <span
-                  aria-hidden
-                  className="mt-px w-4 shrink-0 text-right font-mono text-[11px] tabular-nums text-faint"
-                >
-                  {index + 1}
-                </span>
-                <span className="max-w-[66ch] text-[13px] leading-relaxed text-muted">
-                  {criterion.body}
-                </span>
-              </li>
-            ))}
-          </ol>
+          {criteria.length > 0 && (
+            <ShowMore
+              open={more.isOpen(`criteria:${key}`)}
+              onToggle={() => more.toggle(`criteria:${key}`)}
+              label="Accepted when"
+              hint={`· all ${criteria.length}`}
+            >
+              {/* An ordered list, not tickboxes. A checklist you tick to unlock
+                  a checklist is bureaucracy; the hand-in is the only thing
+                  recorded, and these are what it's read against. */}
+              <ol className="grid gap-1.5">
+                {criteria.map((criterion, index) => (
+                  <li key={criterion.id} className="flex items-start gap-2.5">
+                    <span
+                      aria-hidden
+                      className="mt-px w-4 shrink-0 text-right font-mono text-[11px] tabular-nums text-faint"
+                    >
+                      {index + 1}
+                    </span>
+                    <span className="max-w-[66ch] text-[13px] leading-relaxed text-muted">
+                      {criterion.body}
+                    </span>
+                  </li>
+                ))}
+              </ol>
+            </ShowMore>
+          )}
         </div>
       )}
 
@@ -195,7 +218,9 @@ export function ProofBlock({
         </p>
       ) : (
         <div className="mt-3 pl-7">
-          {stage?.proof_submit && (
+          {/* What to send only appears once the box is open — read on its own
+              it's an instruction for a thing that isn't there yet. */}
+          {editing && stage?.proof_submit && (
             <p className="mb-2 max-w-[70ch] text-[13px] leading-relaxed text-ink">
               {stage.proof_submit}
             </p>
@@ -237,19 +262,17 @@ export function ProofBlock({
                   {uploading && <Loader2 className="size-3.5 animate-spin" aria-hidden />}
                   {submission ? "Hand in again" : "Hand in proof"}
                 </Button>
-                {submission && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => {
-                      setBody(submission.body ?? "");
-                      setFile(null);
-                      setEditing(false);
-                    }}
-                  >
-                    Cancel
-                  </Button>
-                )}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    setBody(submission?.body ?? "");
+                    setFile(null);
+                    setEditing(false);
+                  }}
+                >
+                  Cancel
+                </Button>
                 <span className="text-xs text-faint">
                   {submission
                     ? "Handing in again puts it back in review."
@@ -257,20 +280,26 @@ export function ProofBlock({
                 </span>
               </div>
             </div>
+          ) : submission ? (
+            <Handed
+              submission={submission}
+              more={more}
+              disclosureKey={key}
+              onEdit={() => setEditing(true)}
+              onWithdraw={() =>
+                run(() => withdrawProof(sprintId, stage?.id ?? ""), {
+                  success: "Withdrawn.",
+                  optimistic: onWithdrawn,
+                  rollback: onSubmitted,
+                })
+              }
+            />
           ) : (
-            submission && (
-              <Handed
-                submission={submission}
-                onEdit={() => setEditing(true)}
-                onWithdraw={() =>
-                  run(() => withdrawProof(sprintId, stage?.id ?? ""), {
-                    success: "Withdrawn.",
-                    optimistic: onWithdrawn,
-                    rollback: onSubmitted,
-                  })
-                }
-              />
-            )
+            // Closed until you mean it. An empty textarea sitting open under
+            // every stage is most of what makes a program page feel like a form.
+            <Button variant="outline" size="sm" onClick={() => setEditing(true)}>
+              Hand in proof
+            </Button>
           )}
         </div>
       )}
@@ -278,36 +307,69 @@ export function ProofBlock({
   );
 }
 
-/** What you handed in, and what came back. */
+/**
+ * What you handed in, and what came back.
+ *
+ * The hand-in itself folds away — a pasted prompt runs to thousands of
+ * characters, and your own work is the one thing on this page you don't need
+ * shown back to you every visit. A reviewer's note doesn't fold: it's short,
+ * and it's the only part here that asks something of you.
+ */
 function Handed({
   submission,
+  more,
+  disclosureKey,
   onEdit,
   onWithdraw,
 }: {
   submission: SprintProofSubmission;
+  more: Disclosures;
+  disclosureKey: string;
   onEdit: () => void;
   onWithdraw: () => void;
 }) {
   return (
     <div className="grid gap-2 rounded-lg border border-line bg-raised/30 p-3">
-      {submission.body && (
-        <p className="max-w-[70ch] whitespace-pre-wrap text-[13px] leading-relaxed text-ink">
-          {submission.body}
-        </p>
-      )}
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+        <span className="min-w-0 flex-1 font-mono text-xs text-faint">
+          handed in {formatRelative(submission.created_at)}
+          {submission.reviewed_at && ` · reviewed ${formatRelative(submission.reviewed_at)}`}
+        </span>
+        <span className="flex items-center gap-1">
+          <Button variant="ghost" size="sm" onClick={onEdit}>
+            Edit
+          </Button>
+          <Button variant="ghost" size="sm" onClick={onWithdraw}>
+            Withdraw
+          </Button>
+        </span>
+      </div>
 
-      {submission.file_path && (
-        <SignedFileLink
-          bucket="learn"
-          path={submission.file_path}
-          className="flex w-fit items-center gap-1.5 rounded-md border border-line px-2 py-1 text-xs text-muted transition-colors duration-150 hover:border-line-strong hover:text-ink"
-        >
-          <FileText className="size-3.5 shrink-0 text-faint" aria-hidden />
-          <span className="max-w-[16rem] truncate">
-            {submission.file_name ?? "Attached file"}
-          </span>
-        </SignedFileLink>
-      )}
+      <ShowMore
+        open={more.isOpen(`sent:${disclosureKey}`)}
+        onToggle={() => more.toggle(`sent:${disclosureKey}`)}
+        label="What I sent"
+        bodyClassName="grid gap-2"
+      >
+        {submission.body && (
+          <p className="max-w-[70ch] whitespace-pre-wrap text-[13px] leading-relaxed text-ink">
+            {submission.body}
+          </p>
+        )}
+
+        {submission.file_path && (
+          <SignedFileLink
+            bucket="learn"
+            path={submission.file_path}
+            className="flex w-fit items-center gap-1.5 rounded-md border border-line px-2 py-1 text-xs text-muted transition-colors duration-150 hover:border-line-strong hover:text-ink"
+          >
+            <FileText className="size-3.5 shrink-0 text-faint" aria-hidden />
+            <span className="max-w-[16rem] truncate">
+              {submission.file_name ?? "Attached file"}
+            </span>
+          </SignedFileLink>
+        )}
+      </ShowMore>
 
       {submission.review_note && (
         <p
@@ -321,21 +383,6 @@ function Handed({
           {submission.review_note}
         </p>
       )}
-
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-        <span className="font-mono text-xs text-faint">
-          handed in {formatRelative(submission.created_at)}
-          {submission.reviewed_at && ` · reviewed ${formatRelative(submission.reviewed_at)}`}
-        </span>
-        <span className="flex items-center gap-1">
-          <Button variant="ghost" size="sm" onClick={onEdit}>
-            Edit
-          </Button>
-          <Button variant="ghost" size="sm" onClick={onWithdraw}>
-            Withdraw
-          </Button>
-        </span>
-      </div>
     </div>
   );
 }

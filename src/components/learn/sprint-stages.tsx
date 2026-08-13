@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { Check, ChevronDown, Flag, Lock } from "lucide-react";
 import { ResourceRow } from "@/components/learn/resource-row";
 import { ProofBlock } from "@/components/learn/proof-block";
+import { MoreMark, ShowMore, useDisclosures } from "@/components/learn/show-more";
 import {
   stageDays,
   stageHours,
@@ -80,6 +81,10 @@ export function SprintStages({
   const [open, setOpen] = useState<Set<string>>(
     () => new Set(views.filter((v) => v.current).map(stageViewId))
   );
+  // Every bit of depth on this page — stage briefs, what a goal means, the
+  // proof brief and its conditions — opens from here. Held above the cards so
+  // an expanded brief survives the stage being closed around it.
+  const more = useDisclosures();
   const justCleared = useJustCleared(views);
 
   function toggleOpen(id: string) {
@@ -253,11 +258,18 @@ export function SprintStages({
                       </p>
                     )}
 
-                    {/* The long form, split on blank lines. Paragraphs are the
-                        only structure a stage brief needs; anything richer
-                        would be a markdown renderer for four sentences. */}
+                    {/* The long form, folded away. Split on blank lines:
+                        paragraphs are the only structure a stage brief needs,
+                        and anything richer would be a markdown renderer for
+                        four sentences. */}
                     {view.stage?.detail && (
-                      <div className="mb-3 grid gap-2 border-l border-line pl-3">
+                      <ShowMore
+                        open={more.isOpen(`stage:${id}`)}
+                        onToggle={() => more.toggle(`stage:${id}`)}
+                        label="More on this stage"
+                        className="mb-3"
+                        bodyClassName="grid gap-2 border-l border-line pl-3"
+                      >
                         {view.stage.detail.split("\n\n").map((para, i) => (
                           <p
                             key={i}
@@ -266,7 +278,7 @@ export function SprintStages({
                             {para}
                           </p>
                         ))}
-                      </div>
+                      </ShowMore>
                     )}
 
                     {view.total === 0 ? (
@@ -283,6 +295,8 @@ export function SprintStages({
                             teaches={techniques.get(goal.id)}
                             isWatched={isWatched}
                             onToggleWatched={onToggleWatched}
+                            detailOpen={more.isOpen(`goal:${goal.id}`)}
+                            onToggleDetail={() => more.toggle(`goal:${goal.id}`)}
                           />
                         ))}
                       </ul>
@@ -298,6 +312,7 @@ export function SprintStages({
                         submission={myProof.get(id) ?? null}
                         done={view.proof ? isDone(view.proof.id) : view.cleared}
                         readOnly={readOnly}
+                        more={more}
                         onSubmitted={() => onProofSent(view.proof?.id ?? null)}
                         onWithdrawn={() => onProofWithdrawn(view.proof?.id ?? null)}
                       />
@@ -457,6 +472,8 @@ function GoalRow({
   teaches,
   isWatched,
   onToggleWatched,
+  detailOpen,
+  onToggleDetail,
 }: {
   goal: SprintGoal;
   done: boolean;
@@ -466,6 +483,9 @@ function GoalRow({
   teaches?: Technique[];
   isWatched: (resourceId: string) => boolean;
   onToggleWatched: (resourceId: string, next: boolean) => void;
+  /** Whether the sentence under the title is showing. */
+  detailOpen: boolean;
+  onToggleDetail: () => void;
 }) {
   const watched = teaches?.filter((t) => isWatched(t.resource.id)).length ?? 0;
   const seenAll = teaches !== undefined && watched === teaches.length;
@@ -482,21 +502,17 @@ function GoalRow({
     </span>
   );
 
+  // The title only. What the goal MEANS opens from the chevron beside it —
+  // twenty goals each carrying a second line is the wall of text this page
+  // exists to avoid.
   const label = (
-    <span className="min-w-0 flex-1">
-      <span
-        className={cn(
-          "block text-[13px] leading-relaxed transition-colors duration-150",
-          done ? "text-faint line-through decoration-line-strong" : "text-ink"
-        )}
-      >
-        {goal.title}
-      </span>
-      {goal.detail && (
-        <span className="mt-0.5 block max-w-[70ch] text-xs leading-relaxed text-muted">
-          {goal.detail}
-        </span>
+    <span
+      className={cn(
+        "min-w-0 flex-1 text-[13px] leading-relaxed transition-colors duration-150",
+        done ? "text-faint line-through decoration-line-strong" : "text-ink"
       )}
+    >
+      {goal.title}
     </span>
   );
 
@@ -514,6 +530,10 @@ function GoalRow({
   // The run sits outside the goal's button — it's full of links, and a link
   // inside a button is neither. The rule down its left is what says "these
   // belong to the line above" without a second heading to read.
+  //
+  // It opens from the same chevron as the goal's meaning, and starts closed:
+  // eighteen video rows under four goals is most of what made this page a wall,
+  // and the watched-of-total count on the row already says they're there.
   const run = teaches && (
     <ul className="mb-1.5 ml-2.75 grid border-l border-line pl-2.5">
       {teaches.map(({ resource, index }) => (
@@ -529,28 +549,58 @@ function GoalRow({
     </ul>
   );
 
+  const hasMore = Boolean(goal.detail) || Boolean(teaches?.length);
+
   return (
     <li>
-      {readOnly ? (
-        <div className="flex items-start gap-2.5 px-0.5 py-1.5">
-          {mark}
-          {label}
-          {tally}
-        </div>
-      ) : (
-        <button
-          type="button"
-          aria-pressed={done}
-          aria-label={`${goal.title}: ${done ? "done — click to untick" : "mark done"}`}
-          onClick={() => onToggle(goal.id, !done)}
-          className="flex w-full cursor-pointer items-start gap-2.5 rounded-md px-0.5 py-1.5 text-left transition-colors duration-150 hover:bg-raised/50"
-        >
-          {mark}
-          {label}
-          {tally}
-        </button>
+      {/* The chevron is a sibling of the tick, never a child: one button inside
+          another is neither, and ticking a goal by reaching for its
+          explanation would be the worse of the two mistakes. */}
+      <div className="flex items-start gap-1">
+        {readOnly ? (
+          <div className="flex min-w-0 flex-1 items-start gap-2.5 px-0.5 py-1.5">
+            {mark}
+            {label}
+            {tally}
+          </div>
+        ) : (
+          <button
+            type="button"
+            aria-pressed={done}
+            aria-label={`${goal.title}: ${done ? "done — click to untick" : "mark done"}`}
+            onClick={() => onToggle(goal.id, !done)}
+            className="flex min-w-0 flex-1 cursor-pointer items-start gap-2.5 rounded-md px-0.5 py-1.5 text-left transition-colors duration-150 hover:bg-raised/50"
+          >
+            {mark}
+            {label}
+            {tally}
+          </button>
+        )}
+        {hasMore && (
+          <span className="py-1">
+            <MoreMark
+              open={detailOpen}
+              onToggle={onToggleDetail}
+              label={
+                teaches?.length
+                  ? `What "${goal.title}" means, and what teaches it`
+                  : `What "${goal.title}" means`
+              }
+            />
+          </span>
+        )}
+      </div>
+
+      {detailOpen && (
+        <>
+          {goal.detail && (
+            <p className="mb-1.5 ml-2.75 max-w-[70ch] border-l border-line pl-2.5 text-xs leading-relaxed text-muted">
+              {goal.detail}
+            </p>
+          )}
+          {run}
+        </>
       )}
-      {run}
     </li>
   );
 }
