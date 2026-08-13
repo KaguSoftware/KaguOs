@@ -252,6 +252,28 @@ export function SprintStages({
                     id={`stage-body-${id}`}
                     className="border-t border-line px-3.5 pb-3.5 pt-3 sm:px-4"
                   >
+                    {/* Where to learn it leads the stage: you watch before you
+                        tick, so the material comes before the checklist rather
+                        than after everything else on the page. */}
+                    {resources.length > 0 && (
+                      <div className="mb-3 border-b border-line pb-3">
+                        <p className="mb-1.5 font-mono text-[11px] uppercase tracking-wider text-faint">
+                          Where to learn it
+                        </p>
+                        <ul className="grid gap-0.5">
+                          {resources.map((resource) => (
+                            <ResourceRow
+                              key={resource.id}
+                              resource={resource}
+                              watched={isWatched(resource.id)}
+                              readOnly={readOnly}
+                              onToggle={onToggleWatched}
+                            />
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+
                     {view.stage?.summary && (
                       <p className="mb-3 max-w-[70ch] text-[13px] leading-relaxed text-muted">
                         {view.stage.summary}
@@ -333,25 +355,6 @@ export function SprintStages({
                                 {step.body ?? step.title}
                               </span>
                             </li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
-
-                    {resources.length > 0 && (
-                      <div className="mt-3 border-t border-line pt-3">
-                        <p className="mb-1.5 font-mono text-[11px] uppercase tracking-wider text-faint">
-                          Where to learn it
-                        </p>
-                        <ul className="grid gap-0.5">
-                          {resources.map((resource) => (
-                            <ResourceRow
-                              key={resource.id}
-                              resource={resource}
-                              watched={isWatched(resource.id)}
-                              readOnly={readOnly}
-                              onToggle={onToggleWatched}
-                            />
                           ))}
                         </ul>
                       </div>
