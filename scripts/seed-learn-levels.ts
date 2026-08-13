@@ -165,6 +165,12 @@ const LEVEL_1: ProgramSeed = {
           kind: "read",
           source: "usecarly",
         },
+        {
+          title: "How to Use Claude Effort Levels (Full Guide)",
+          url: "https://www.youtube.com/watch?v=rA_UZS-EJpU",
+          kind: "video",
+          source: "YouTube",
+        },
       ],
     },
     {
