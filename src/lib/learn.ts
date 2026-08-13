@@ -175,6 +175,10 @@ export type Milestone = {
   /** The stage you're on: the first one not cleared. */
   current: boolean;
   capstone: boolean;
+  /** Goals ticked / goals in the stage. Carried here rather than derived
+      alongside, so the phone's stage sheet can't drift from the rail. */
+  doneCount: number;
+  total: number;
 };
 
 /**
@@ -198,6 +202,8 @@ export function buildMilestones(
     done: view.proof ? isDone(view.proof.id) : view.cleared,
     current: view.current,
     capstone: view.stage?.kind === "capstone",
+    doneCount: view.doneCount,
+    total: view.total,
   }));
 }
 

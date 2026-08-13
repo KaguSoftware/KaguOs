@@ -37,7 +37,11 @@ function sprintFields(formData: FormData) {
     description: String(formData.get("description") ?? ""),
     starts_on: String(formData.get("starts_on") ?? ""),
     ends_on: String(formData.get("ends_on") ?? ""),
-    join_mode: String(formData.get("join_mode") ?? ""),
+    // The checkbox rides alongside a hidden 'assigned' input (an unchecked box
+    // submits nothing), so the field arrives twice when it's ticked. `get`
+    // would only ever see the hidden one — the tick has to win on presence,
+    // not on order.
+    join_mode: formData.getAll("join_mode").includes("open") ? "open" : "assigned",
   });
 }
 

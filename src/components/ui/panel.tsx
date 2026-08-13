@@ -8,7 +8,14 @@ export function Panel({
   children: React.ReactNode;
 }) {
   return (
-    <section className={cn("rounded-lg border border-line bg-surface", className)}>
+    // min-w-0: panels are laid out as grid/flex items, whose automatic minimum
+    // is their content. Without it a single long unbreakable line inside — a
+    // truncating status, a URL, a wide table — widens the panel past its column
+    // and takes the page's whole layout with it, which reads as a phone bug
+    // rather than as the one long word that caused it.
+    <section
+      className={cn("min-w-0 rounded-lg border border-line bg-surface", className)}
+    >
       {children}
     </section>
   );

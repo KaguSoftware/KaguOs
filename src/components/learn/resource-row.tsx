@@ -69,16 +69,21 @@ export function ResourceRow({
     </>
   );
 
+  // py-3 on a phone, dense from sm up — same reasoning as the goal row: watching
+  // a resource is a tap you make over and over, on a row of 13px text.
   const linkClass =
-    "flex min-w-0 flex-1 items-center gap-2.5 rounded-md px-1.5 py-1.5 transition-colors duration-150 hover:bg-raised/60";
+    "flex min-w-0 flex-1 items-center gap-2.5 rounded-md px-1.5 py-3 transition-colors duration-150 hover:bg-raised/60 sm:py-1.5";
 
   return (
-    <li className="flex items-center gap-1">
+    // min-w-0: these rows are grid items (ul.grid), and a grid item's automatic
+    // minimum is its content — without this the truncating title can't shrink
+    // and the row pushes the whole page wider than the phone.
+    <li className="flex min-w-0 items-center gap-1">
       {readOnly ? (
         <span
           aria-hidden
           className={cn(
-            "flex size-9 shrink-0 items-center justify-center",
+            "flex size-11 shrink-0 items-center justify-center sm:size-9",
             !watched && "opacity-0"
           )}
         >
@@ -92,7 +97,7 @@ export function ResourceRow({
             watched ? "done — click to unmark" : "mark as done"
           }`}
           onClick={() => onToggle(resource.id, !watched)}
-          className="flex size-9 shrink-0 cursor-pointer items-center justify-center rounded-md transition-colors duration-150 hover:bg-raised/60"
+          className="flex size-11 shrink-0 cursor-pointer items-center justify-center rounded-md transition-colors duration-150 hover:bg-raised/60 sm:size-9"
         >
           <Mark watched={watched} />
         </button>

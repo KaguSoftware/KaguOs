@@ -103,12 +103,19 @@ export function RaceStandings({
                   return next;
                 })
               }
-              className="flex w-full items-center gap-3 rounded-md px-2 py-2.5 text-left transition-colors duration-150 hover:bg-raised/60"
+              // Two rows on a phone, one on a laptop. Side by side at 390px the
+              // name column is 80px carrying BOTH the name and "on · <goal>",
+              // so every status truncated to "on · Chat vs …" while the lane
+              // beside it had 250px doing nothing. Stacking gives the sentence
+              // the full width and the lane its own line.
+              className="flex w-full flex-wrap items-center gap-x-3 gap-y-2 rounded-md px-2 py-2.5 text-left transition-colors duration-150 hover:bg-raised/60 sm:flex-nowrap"
             >
               <span className="w-4 shrink-0 text-right font-mono text-xs text-faint">
                 {rank.get(person.id)}
               </span>
-              <span className="w-20 shrink-0 sm:w-28">
+              {/* flex-1 on the phone so the name+status take the row; fixed
+                  width from sm up, where the lane sits beside them. */}
+              <span className="min-w-0 flex-1 sm:w-28 sm:flex-none">
                 <span
                   style={{ color: person.color }}
                   className="block truncate text-[13px] font-medium"
@@ -122,13 +129,24 @@ export function RaceStandings({
                   </span>
                 )}
               </span>
+              <span className="shrink-0 font-mono text-xs text-muted sm:order-last sm:w-9 sm:text-right">
+                {count}/{goalCount}
+              </span>
+              <ChevronDown
+                aria-hidden
+                className={cn(
+                  "size-3.5 shrink-0 text-faint transition-transform duration-150 ease-mac motion-reduce:transition-none sm:order-last",
+                  isOpen && "rotate-180"
+                )}
+              />
               <span
                 role="progressbar"
                 aria-valuemin={0}
                 aria-valuemax={goalCount}
                 aria-valuenow={count}
                 aria-label={`${person.name}: ${count} of ${goalCount} goals done`}
-                className="relative h-1.5 min-w-0 flex-1 rounded-full bg-raised"
+                // Full width on its own row below the name; back in line from sm.
+                className="relative order-last h-1.5 w-full min-w-0 rounded-full bg-raised sm:order-0 sm:w-auto sm:flex-1"
               >
                 {/* The finish line — same spot for everyone. */}
                 <span
@@ -140,16 +158,6 @@ export function RaceStandings({
                   className="block h-full rounded-full transition-[width] duration-200 ease-mac motion-reduce:transition-none"
                 />
               </span>
-              <span className="w-9 shrink-0 text-right font-mono text-xs text-muted">
-                {count}/{goalCount}
-              </span>
-              <ChevronDown
-                aria-hidden
-                className={cn(
-                  "size-3.5 shrink-0 text-faint transition-transform duration-150 ease-mac motion-reduce:transition-none",
-                  isOpen && "rotate-180"
-                )}
-              />
             </button>
 
             {isOpen && goalCount > 0 && (

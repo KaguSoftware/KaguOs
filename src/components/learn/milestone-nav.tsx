@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Flag } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { Milestone } from "@/lib/learn";
@@ -24,6 +24,36 @@ import type { Milestone } from "@/lib/learn";
  */
 export function MilestoneNav({ milestones }: { milestones: Milestone[] }) {
   const [pointed, setPointed] = useState<string | null>(null);
+  const rail = useRef<HTMLOListElement>(null);
+
+  // On a phone the rail is wider than the screen, so it opens showing the first
+  // three stops — and on a program you're halfway through, the stop that
+  // matters is off the right edge with nothing to say so. Bring the one you're
+  // on into view on arrival. This is the swipe-to-discover bug the mobile menu
+  // was rebuilt to kill, in a smaller frame.
+  //
+  // Scoped to the rail's own scrollport, never the page: `scrollIntoView` here
+  // would drag the whole document down to the bar on every load.
+  useEffect(() => {
+    const ol = rail.current;
+    if (!ol) return;
+    const index = milestones.findIndex((m) => m.current);
+    if (index < 1) return; // stop one is already in view
+    const stop = ol.children[index] as HTMLElement | undefined;
+    if (!stop) return;
+    // Centre it, clamped to the ends so the rail never rubber-bands past its
+    // own content.
+    const target = stop.offsetLeft - (ol.clientWidth - stop.offsetWidth) / 2;
+    ol.scrollTo({
+      left: Math.max(0, Math.min(target, ol.scrollWidth - ol.clientWidth)),
+      behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches
+        ? "auto"
+        : "smooth",
+    });
+    // Deliberately mount-only: re-centring every time a tick moves `current`
+    // would yank the rail sideways while you're reading it.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // One stop is a label, not a rail — the stage block says the same thing
   // better a screen down.
@@ -41,7 +71,12 @@ export function MilestoneNav({ milestones }: { milestones: Milestone[] }) {
       aria-label="Milestones"
       // Sticky from md up only: below that the shell's own header owns the top
       // of the viewport, and two bars stacked there would eat the screen.
-      className="-mx-4 border-b border-line bg-bg px-4 md:sticky md:top-0 md:z-20 md:-mx-8 md:px-8"
+      //
+      // min-w-0 is load-bearing: this <nav> is a grid item, whose automatic
+      // minimum size is its content. Without it the rail below doesn't scroll,
+      // it widens — six stops at their minimum are 648px, and the whole page
+      // inherits that width on a 390px phone.
+      className="-mx-4 min-w-0 border-b border-line bg-bg px-4 md:sticky md:top-0 md:z-20 md:-mx-8 md:px-8"
     >
       <div className="flex items-baseline justify-between gap-4 pt-3">
         {/* Hidden from assistive tech: every word of it is already in the stop's
@@ -64,6 +99,7 @@ export function MilestoneNav({ milestones }: { milestones: Milestone[] }) {
 
       <div className="relative">
         <ol
+          ref={rail}
           className="scrollbar-none flex overflow-x-auto pb-3 pt-2"
           onMouseLeave={() => setPointed(null)}
         >
@@ -80,7 +116,14 @@ export function MilestoneNav({ milestones }: { milestones: Milestone[] }) {
                   onMouseEnter={() => setPointed(milestone.id)}
                   onFocus={() => setPointed(milestone.id)}
                   onBlur={() => setPointed(null)}
-                  className="block cursor-pointer rounded-md py-1 transition-colors duration-150 ease-mac hover:bg-raised/40 motion-reduce:transition-none"
+                  // `relative` is load-bearing, not decoration: the sr-only
+                  // span below is absolutely positioned, and without a
+                  // containing block here it resolves against the wrapping
+                  // `div.relative` OUTSIDE the scroller — escaping the rail's
+                  // clipping and dragging the page's scroll width out to the
+                  // last stop's offset. Anchoring it inside the stop keeps the
+                  // overflow where it belongs.
+                  className="relative block cursor-pointer rounded-md py-1 transition-colors duration-150 ease-mac hover:bg-raised/40 motion-reduce:transition-none"
                 >
                   <span aria-hidden className="flex items-center">
                     <span

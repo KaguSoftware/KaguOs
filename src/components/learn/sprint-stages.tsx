@@ -127,7 +127,7 @@ export function SprintStages({
             id={`stage-${id}`}
             // The extra offset from md up clears the sticky milestone bar, so a
             // jump from it doesn't land the stage underneath it.
-            className="grid scroll-mt-20 grid-cols-[1.75rem_1fr] gap-x-3 sm:grid-cols-[2rem_1fr] sm:gap-x-4 md:scroll-mt-32"
+            className="grid min-w-0 scroll-mt-20 grid-cols-[1.75rem_1fr] gap-x-3 sm:grid-cols-[2rem_1fr] sm:gap-x-4 md:scroll-mt-32"
           >
             {/* ---- The spine. Decoration would be banned; this is the progress
                 indicator itself, which is why it's drawn and not a border. */}
@@ -347,7 +347,7 @@ export function SprintStages({
                         </p>
                         <ul className="grid gap-1.5">
                           {build.map((step) => (
-                            <li key={step.id} className="flex items-baseline gap-3">
+                            <li key={step.id} className="flex min-w-0 items-baseline gap-3">
                               <span className="w-8 shrink-0 font-mono text-[11px] tabular-nums text-primary-dim">
                                 {step.label}
                               </span>
@@ -580,13 +580,13 @@ function GoalRow({
   const hasMore = Boolean(goal.detail) || Boolean(teaches?.length);
 
   return (
-    <li>
+    <li className="min-w-0">
       {/* The chevron is a sibling of the tick, never a child: one button inside
           another is neither, and ticking a goal by reaching for its
           explanation would be the worse of the two mistakes. */}
       <div className="flex items-start gap-1">
         {readOnly ? (
-          <div className="flex min-w-0 flex-1 items-start gap-2.5 px-0.5 py-1.5">
+          <div className="flex min-w-0 flex-1 items-start gap-2.5 px-0.5 py-3 sm:py-1.5">
             {mark}
             {label}
             {tally}
@@ -604,7 +604,10 @@ function GoalRow({
             onClick={() => {
               if (!detailOpen) onToggleDetail();
             }}
-            className="flex min-w-0 flex-1 cursor-pointer items-start gap-2.5 rounded-md px-0.5 py-1.5 text-left transition-colors duration-150 hover:bg-raised/50"
+            // Taller on a phone: this is the sprint's primary action, tapped
+            // dozens of times over two weeks, and 33px is a thumb's-width guess.
+            // Back to the dense row from sm up, where it's a mouse target.
+            className="flex min-w-0 flex-1 cursor-pointer items-start gap-2.5 rounded-md px-0.5 py-3 text-left transition-colors duration-150 hover:bg-raised/50 sm:py-1.5"
           >
             {mark}
             {label}
@@ -616,7 +619,10 @@ function GoalRow({
             aria-pressed={done}
             aria-label={`${goal.title}: ${done ? "done — click to untick" : "mark done"}`}
             onClick={() => onToggle(goal.id, !done)}
-            className="flex min-w-0 flex-1 cursor-pointer items-start gap-2.5 rounded-md px-0.5 py-1.5 text-left transition-colors duration-150 hover:bg-raised/50"
+            // Taller on a phone: this is the sprint's primary action, tapped
+            // dozens of times over two weeks, and 33px is a thumb's-width guess.
+            // Back to the dense row from sm up, where it's a mouse target.
+            className="flex min-w-0 flex-1 cursor-pointer items-start gap-2.5 rounded-md px-0.5 py-3 text-left transition-colors duration-150 hover:bg-raised/50 sm:py-1.5"
           >
             {mark}
             {label}

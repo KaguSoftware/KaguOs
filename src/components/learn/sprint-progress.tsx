@@ -8,6 +8,7 @@ import { Panel, PanelHeader } from "@/components/ui/panel";
 import { RaceStandings, type RacePerson } from "@/components/learn/race-standings";
 import { SprintStages } from "@/components/learn/sprint-stages";
 import { MilestoneNav } from "@/components/learn/milestone-nav";
+import { StageJump } from "@/components/learn/stage-jump";
 import { ResourceRow } from "@/components/learn/resource-row";
 import { buildMilestones, buildStageViews, buildTechniques } from "@/lib/learn";
 import type {
@@ -202,6 +203,9 @@ export function SprintProgress({
   return (
     <>
       <MilestoneNav milestones={milestones} />
+      {/* The rail's job, continued past the point the rail scrolls away. Phone
+          only; it reads the same live `milestones` the rail does. */}
+      <StageJump milestones={milestones} />
       {header}
 
       {views.length > 0 && (
@@ -304,6 +308,11 @@ export function SprintProgress({
           </p>
         )}
       </Panel>
+
+      {/* Runway for the floating stage pill, which is fixed over the page and
+          would otherwise cover the last rows above. Same condition the pill
+          itself runs on, so a one-stage program pays nothing for it. */}
+      {milestones.length > 1 && <div aria-hidden className="h-16 md:hidden" />}
     </>
   );
 }
