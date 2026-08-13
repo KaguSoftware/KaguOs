@@ -61,6 +61,16 @@ export function EditSprintForm({ sprint }: { sprint: Sprint }) {
           defaultValue={sprint.description ?? ""}
         />
       </Field>
+      {/* An unchecked box submits nothing, so the hidden input carries the
+          'assigned' default — otherwise saving would silently close an open
+          sprint's enrollment. */}
+      <input type="hidden" name="join_mode" value="assigned" />
+      <Checkbox
+        name="join_mode"
+        value="open"
+        label="Let anyone in Learn join this sprint themselves"
+        defaultChecked={sprint.join_mode === "open"}
+      />
       <SubmitButton size="sm" disabled={pending}>
         {pending ? "Saving…" : "Save sprint"}
       </SubmitButton>

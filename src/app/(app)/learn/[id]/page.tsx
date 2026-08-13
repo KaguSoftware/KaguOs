@@ -11,6 +11,7 @@ import { LinkButton } from "@/components/ui/link-button";
 import { SignedFileLink } from "@/components/ui/signed-file-link";
 import { SprintProgress } from "@/components/learn/sprint-progress";
 import { SprintQuestions } from "@/components/learn/sprint-questions";
+import { JoinSprintButton } from "@/components/learn/join-sprint-button";
 import { memberColorCss } from "@/lib/colors";
 import { demoName } from "@/lib/data/members";
 import { formatDate, todayInIstanbul } from "@/lib/utils";
@@ -20,6 +21,7 @@ import type {
   SprintQuestion,
   SprintQuestionReply,
   SprintResource,
+  SprintStage,
 } from "@/lib/types";
 
 export const metadata: Metadata = { title: "Sprint" };
@@ -48,6 +50,7 @@ export default async function SprintPage({
     goals,
     learnMembers,
     questions,
+    stages,
   ] = await Promise.all([
     // Gate the sprint on the demo/real split — a real sprint id is notFound in
     // showcase, so its real resources/goals/questions/files never render in a
@@ -103,6 +106,16 @@ export default async function SprintPage({
         .eq("is_demo", ctx.showcase)
         .order("created_at", { ascending: false }),
       "sprint_questions"
+    ),
+    rowsOrThrow(
+      ctx.supabase
+        .from("sprint_stages")
+        .select("*")
+        .eq("sprint_id", id)
+        .eq("is_demo", ctx.showcase)
+        .order("sort_order")
+        .order("created_at"),
+      "sprint_stages"
     ),
   ]);
   if (!sprint) notFound();
@@ -165,6 +178,9 @@ export default async function SprintPage({
   // looked like a dead button. `SignedFileLink` signs at click instead, which
   // also takes the signing round-trip off this page's critical path entirely.
   const resourceList = resources as SprintResource[];
+  // Stage-scoped resources render inside their stage; only the sprint-wide ones
+  // reach the shelf at the bottom.
+  const shelfResources = resourceList.filter((r) => !r.stage_id);
 
   const phase = phaseOf(sprint as Sprint);
 
@@ -192,6 +208,10 @@ export default async function SprintPage({
   const doneCells = progress.filter((p) => participantSet.has(p.user_id)).length;
   const teamPct = totalCells > 0 ? Math.round((doneCells / totalCells) * 100) : null;
 
+  const iParticipate = participantSet.has(ctx.userId);
+  const canJoin =
+    !iParticipate && sprint.join_mode === "open" && phase.label !== "past";
+
   return (
     <>
       <Link
@@ -207,6 +227,13 @@ export default async function SprintPage({
         action={
           <span className="flex items-center gap-2">
             <Badge tone={phase.tone}>{phase.label}</Badge>
+            {(canJoin || (iParticipate && sprint.join_mode === "open")) && (
+              <JoinSprintButton
+                sprintId={sprint.id}
+                joined={iParticipate}
+                canLeave={phase.label === "upcoming"}
+              />
+            )}
             {ctx.isAdmin && (
               <LinkButton href={`/learn/${id}/edit`} variant="outline">
                 <Pencil className="size-3.5" aria-hidden />
@@ -251,11 +278,22 @@ export default async function SprintPage({
       )}
 
       <div className="grid gap-6">
-        {resourceList.length > 0 && (
+        <SprintProgress
+          sprintId={sprint.id}
+          stages={stages as SprintStage[]}
+          goals={goals as SprintGoal[]}
+          resources={resourceList}
+          participants={gridPeople}
+          progress={progress}
+          meId={ctx.userId}
+          isAdmin={ctx.isAdmin}
+        />
+
+        {shelfResources.length > 0 && (
           <Panel>
             <PanelHeader title="Resources" />
             <ul className="divide-y divide-line">
-              {resourceList.map((resource) => {
+              {shelfResources.map((resource) => {
                 const filePath = resource.file_path;
                 const Icon = resource.url ? Link2 : FileText;
                 return (
@@ -308,15 +346,6 @@ export default async function SprintPage({
             </ul>
           </Panel>
         )}
-
-        <SprintProgress
-          sprintId={sprint.id}
-          goals={goals as SprintGoal[]}
-          participants={gridPeople}
-          progress={progress}
-          meId={ctx.userId}
-          isAdmin={ctx.isAdmin}
-        />
 
         <Panel>
           <PanelHeader

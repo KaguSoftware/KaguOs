@@ -51,6 +51,7 @@ export function SprintComposer({ members }: { members: Member[] }) {
   const [starts, setStarts] = useState("");
   const [ends, setEnds] = useState("");
   const [selected, setSelected] = useState<Set<string>>(() => new Set());
+  const [openJoin, setOpenJoin] = useState(false);
   const [goals, setGoals] = useState<GoalItem[]>([]);
   const [goalText, setGoalText] = useState("");
   const [resources, setResources] = useState<StagedResource[]>([]);
@@ -109,7 +110,8 @@ export function SprintComposer({ members }: { members: Member[] }) {
       const empties = [
         !title && "Title",
         !description && "Description",
-        selected.size === 0 && "Participants",
+        // An open sprint is meant to start empty — people add themselves.
+        selected.size === 0 && !openJoin && "Participants",
         goals.length === 0 && "Goals",
       ].filter((v): v is string => Boolean(v));
       if (empties.length > 0) {
@@ -125,6 +127,7 @@ export function SprintComposer({ members }: { members: Member[] }) {
         description,
         starts_on: String(data.get("starts_on") ?? ""),
         ends_on: String(data.get("ends_on") ?? ""),
+        join_mode: openJoin ? "open" : "assigned",
         participantIds: [...selected],
         goalTitles: goals.map((g) => g.title),
         linkResources: resources
@@ -249,6 +252,11 @@ export function SprintComposer({ members }: { members: Member[] }) {
         >
           {everyone ? "Clear all" : "Everyone"}
         </Button>
+        <Checkbox
+          label="Let anyone in Learn join this sprint themselves"
+          checked={openJoin}
+          onChange={() => setOpenJoin((prev) => !prev)}
+        />
       </div>
 
       {/* Goals */}

@@ -14,7 +14,8 @@ import {
   ParticipantsEditor,
   ResourcesEditor,
 } from "@/components/learn/sprint-forms";
-import type { Sprint, SprintGoal, SprintResource } from "@/lib/types";
+import { StagesEditor } from "@/components/learn/stages-editor";
+import type { Sprint, SprintGoal, SprintResource, SprintStage } from "@/lib/types";
 
 export const metadata: Metadata = { title: "Edit sprint" };
 
@@ -26,7 +27,7 @@ export default async function EditSprintPage({
   const { id } = await params;
   const ctx = await requireAdmin();
 
-  const [{ data: sprint }, resources, participants, goals, learnMembers] =
+  const [{ data: sprint }, resources, participants, goals, learnMembers, stages] =
     await Promise.all([
       selectOrThrow(
         ctx.supabase.from("sprints").select("*").eq("id", id).maybeSingle(),
@@ -59,6 +60,15 @@ export default async function EditSprintPage({
           .select("user_id, profiles(id, full_name, email)")
           .eq("section", "learn"),
         "section_memberships"
+      ),
+      rowsOrThrow(
+        ctx.supabase
+          .from("sprint_stages")
+          .select("*")
+          .eq("sprint_id", id)
+          .order("sort_order")
+          .order("created_at"),
+        "sprint_stages"
       ),
     ]);
   if (!sprint) notFound();
@@ -109,6 +119,14 @@ export default async function EditSprintPage({
           <Panel>
             <PanelHeader title="Goals" />
             <GoalsEditor sprintId={id} goals={goals as SprintGoal[]} />
+          </Panel>
+          <Panel>
+            <PanelHeader title="Stages" />
+            <StagesEditor
+              sprintId={id}
+              stages={stages as SprintStage[]}
+              goals={goals as SprintGoal[]}
+            />
           </Panel>
           <Panel>
             <PanelHeader title="Resources" />

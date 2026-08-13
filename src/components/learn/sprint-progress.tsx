@@ -1,29 +1,35 @@
 "use client";
 
-import { useState } from "react";
-import { Check } from "lucide-react";
+import { useMemo, useState } from "react";
 import { toggleGoalProgress } from "@/lib/actions/learn";
 import { useAction } from "@/lib/use-action";
 import { Panel, PanelHeader } from "@/components/ui/panel";
 import { RaceStandings, type RacePerson } from "@/components/learn/race-standings";
-import { cn } from "@/lib/utils";
-import type { SprintGoal } from "@/lib/types";
+import { SprintStages } from "@/components/learn/sprint-stages";
+import { StageRail } from "@/components/learn/stage-rail";
+import { buildStageViews, toRailStops } from "@/lib/learn";
+import type { SprintGoal, SprintResource, SprintStage } from "@/lib/types";
 
 /**
- * One owner for the sprint's tick state: your checklist and the standings race
- * read the same optimistic done-set, so a tick moves your lane the moment you
- * click — no waiting on the server round-trip.
+ * One owner for the sprint's tick state: the stage stack, the rail, and the
+ * standings race all read the same optimistic done-set, so a tick clears a
+ * stage, advances the rail, and moves your lane in the same frame — no waiting
+ * on the server round-trip.
  */
 export function SprintProgress({
   sprintId,
+  stages,
   goals,
+  resources,
   participants,
   progress,
   meId,
   isAdmin,
 }: {
   sprintId: string;
+  stages: SprintStage[];
   goals: SprintGoal[];
+  resources: SprintResource[];
   participants: RacePerson[];
   progress: { goal_id: string; user_id: string }[];
   meId: string;
@@ -43,8 +49,24 @@ export function SprintProgress({
   }
 
   const iParticipate = participants.some((p) => p.id === meId);
-  const myDone = goals.filter((g) => done.has(`${g.id}:${meId}`)).length;
-  const upNext = goals.find((g) => !done.has(`${g.id}:${meId}`));
+
+  const views = useMemo(
+    () => buildStageViews(stages, goals, (goalId) => done.has(`${goalId}:${meId}`)),
+    [stages, goals, done, meId]
+  );
+
+  // Only stage-scoped resources land here; the sprint-wide ones stay on the
+  // page's own shelf.
+  const resourcesByStage = useMemo(() => {
+    const map = new Map<string, SprintResource[]>();
+    for (const resource of resources) {
+      if (!resource.stage_id) continue;
+      const list = map.get(resource.stage_id);
+      if (list) list.push(resource);
+      else map.set(resource.stage_id, [resource]);
+    }
+    return map;
+  }, [resources]);
 
   function toggle(goalId: string, next: boolean) {
     const key = `${goalId}:${meId}`;
@@ -61,95 +83,58 @@ export function SprintProgress({
     });
   }
 
+  const myDone = goals.filter((g) => done.has(`${g.id}:${meId}`)).length;
+  const clearedStages = views.filter((v) => v.cleared).length;
+  const currentView = views.find((v) => v.current);
   const hasSetup = goals.length > 0 && participants.length > 0;
+  const hasStages = views.length > 0;
 
   return (
     <>
-      {iParticipate && goals.length > 0 && (
-        <Panel>
-          <PanelHeader
-            title="Your goals"
-            action={
-              <span className="font-mono text-xs text-muted">
-                {myDone}/{goals.length} done
+      {hasStages && (
+        <section aria-label="Your progress" className="grid gap-3">
+          <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+            <h2 className="text-sm font-semibold text-ink">
+              {iParticipate ? "Your run" : "The run"}
+            </h2>
+            <p className="font-mono text-xs text-faint">
+              {views.length > 1 && (
+                <>
+                  {clearedStages}/{views.length} stages
+                  <span aria-hidden> · </span>
+                </>
+              )}
+              {myDone}/{goals.length} goals
+            </p>
+          </div>
+
+          {views.length > 1 && (
+            <div className="flex items-center gap-3">
+              <StageRail stops={toRailStops(views)} className="min-w-0 flex-1" />
+            </div>
+          )}
+
+          {currentView && iParticipate && (
+            <p className="text-[13px] text-muted">
+              Next:{" "}
+              <span className="text-ink">
+                {currentView.goals.find((g) => !done.has(`${g.id}:${meId}`))?.title ??
+                  (currentView.proof && !done.has(`${currentView.proof.id}:${meId}`)
+                    ? currentView.proof.title
+                    : currentView.stage?.title) ??
+                  "—"}
               </span>
-            }
+            </p>
+          )}
+
+          <SprintStages
+            views={views}
+            resourcesByStage={resourcesByStage}
+            isDone={(goalId) => done.has(`${goalId}:${meId}`)}
+            onToggle={toggle}
+            readOnly={!iParticipate}
           />
-          {/* Your track: the sprint as a journey line. Done stops fill and
-              light the rail behind you; the ringed stop is where you are. */}
-          <ol className="px-4 py-2">
-            {goals.map((goal, index) => {
-              const isDone = done.has(`${goal.id}:${meId}`);
-              const isCurrent = upNext?.id === goal.id;
-              const prevDone =
-                index > 0 && done.has(`${goals[index - 1].id}:${meId}`);
-              return (
-                <li key={goal.id} className="relative">
-                  {index > 0 && (
-                    <span
-                      aria-hidden
-                      className={cn(
-                        "absolute left-[11px] top-0 h-[calc(50%-12px)] w-px transition-colors duration-200",
-                        prevDone ? "bg-primary/70" : "bg-line"
-                      )}
-                    />
-                  )}
-                  {index < goals.length - 1 && (
-                    <span
-                      aria-hidden
-                      className={cn(
-                        "absolute bottom-0 left-[11px] h-[calc(50%-12px)] w-px transition-colors duration-200",
-                        isDone ? "bg-primary/70" : "bg-line"
-                      )}
-                    />
-                  )}
-                  <button
-                    type="button"
-                    aria-pressed={isDone}
-                    aria-label={`${goal.title}: ${isDone ? "done — click to untick" : "mark done"}`}
-                    onClick={() => toggle(goal.id, !isDone)}
-                    className="flex w-full items-center gap-3 rounded-md px-0.5 py-2 text-left transition-colors duration-150 hover:bg-raised/40"
-                  >
-                    <span
-                      aria-hidden
-                      className={cn(
-                        "relative z-10 flex size-5 shrink-0 items-center justify-center rounded-full transition-colors duration-150",
-                        isDone
-                          ? "bg-primary text-primary-ink"
-                          : isCurrent
-                            ? "border-2 border-primary/70 bg-surface"
-                            : "border border-line-strong bg-surface"
-                      )}
-                    >
-                      {isDone ? (
-                        <Check className="size-3" />
-                      ) : isCurrent ? (
-                        <span className="size-1.5 rounded-full bg-primary/70" />
-                      ) : null}
-                    </span>
-                    <span
-                      className={cn(
-                        "min-w-0 flex-1 truncate text-sm transition-colors duration-150",
-                        isDone
-                          ? "text-faint"
-                          : isCurrent
-                            ? "font-medium text-ink"
-                            : "text-muted"
-                      )}
-                    >
-                      {goal.title}
-                    </span>
-                    {isCurrent && (
-                      <span className="shrink-0 font-mono text-[11px] text-primary-dim">
-                        now
-                      </span>
-                    )}
-                  </button>
-                </li>
-              );
-            })}
-          </ol>
-        </Panel>
+        </section>
       )}
 
       <Panel>

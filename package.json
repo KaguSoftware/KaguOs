@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "check:demo": "tsx scripts/check-demo-filters.ts"
+    "check:demo": "tsx scripts/check-demo-filters.ts",
+    "seed:learn": "tsx scripts/seed-learn-levels.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.3",

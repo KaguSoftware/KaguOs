@@ -13,6 +13,7 @@ function normalizeSprintFields(raw: {
   description?: string | null;
   starts_on?: string | null;
   ends_on?: string | null;
+  join_mode?: string | null;
 }) {
   // No required fields (create-flow rule): sensible defaults keep dates valid.
   const today = todayInIstanbul();
@@ -24,6 +25,9 @@ function normalizeSprintFields(raw: {
     description: (raw.description ?? "").trim() || null,
     starts_on: starts,
     ends_on: ends,
+    // Assigned stays the default: a sprint only becomes browsable-and-joinable
+    // when someone says so.
+    join_mode: raw.join_mode === "open" ? "open" : "assigned",
   };
 }
 
@@ -33,6 +37,7 @@ function sprintFields(formData: FormData) {
     description: String(formData.get("description") ?? ""),
     starts_on: String(formData.get("starts_on") ?? ""),
     ends_on: String(formData.get("ends_on") ?? ""),
+    join_mode: String(formData.get("join_mode") ?? ""),
   });
 }
 
@@ -41,6 +46,7 @@ export type SprintDraft = {
   description: string;
   starts_on: string;
   ends_on: string;
+  join_mode: "assigned" | "open";
   participantIds: string[];
   goalTitles: string[];
   linkResources: { title: string; url: string }[];
@@ -170,12 +176,12 @@ export async function duplicateSprint(sprintId: string): Promise<SprintResult> {
   if (showcaseStop) return showcaseStop;
   const ctx = await requireAdmin();
 
-  const [{ data: sprint }, { data: goals }, { data: participants }] =
+  const [{ data: sprint }, { data: goals }, { data: participants }, { data: stages }] =
     await Promise.all([
       ctx.supabase.from("sprints").select("*").eq("id", sprintId).maybeSingle(),
       ctx.supabase
         .from("sprint_goals")
-        .select("title, sort_order")
+        .select("title, sort_order, stage_id, is_proof")
         .eq("sprint_id", sprintId)
         .order("sort_order")
         .order("created_at"),
@@ -183,6 +189,11 @@ export async function duplicateSprint(sprintId: string): Promise<SprintResult> {
         .from("sprint_participants")
         .select("user_id")
         .eq("sprint_id", sprintId),
+      ctx.supabase
+        .from("sprint_stages")
+        .select("*")
+        .eq("sprint_id", sprintId)
+        .order("sort_order"),
     ]);
   if (!sprint) return { ok: false, message: "Sprint not found." };
 
@@ -203,11 +214,48 @@ export async function duplicateSprint(sprintId: string): Promise<SprintResult> {
       description: sprint.description,
       starts_on: today,
       ends_on: ends,
+      join_mode: sprint.join_mode,
       created_by: ctx.userId,
     })
     .select("id")
     .single();
   if (error || !copy) return { ok: false, message: error?.message ?? "Failed." };
+
+  // Stages first: the goals carry stage_id, so the copy needs old id → new id
+  // before it can be written. This is the one place a second wave is required.
+  const stageIdMap = new Map<string, string>();
+  if (stages && stages.length > 0) {
+    const { data: newStages, error: stageError } = await ctx.supabase
+      .from("sprint_stages")
+      .insert(
+        stages.map((s, i) => ({
+          sprint_id: copy.id,
+          title: s.title,
+          summary: s.summary,
+          proof: s.proof,
+          kind: s.kind,
+          day_from: s.day_from,
+          day_to: s.day_to,
+          hours_low: s.hours_low,
+          hours_high: s.hours_high,
+          sort_order: i,
+        }))
+      )
+      .select("id, sort_order");
+    if (stageError) {
+      return {
+        ok: false,
+        id: copy.id,
+        message: `Duplicated, but the stages failed: ${stageError.message}`,
+      };
+    }
+    // Insert returns rows in input order, but pair on sort_order rather than
+    // trust that — the index is what we just wrote and controlled.
+    for (const created of newStages ?? []) {
+      const source = stages[created.sort_order];
+      if (source) stageIdMap.set(source.id, created.id);
+    }
+  }
 
   const results = await Promise.all([
     goals && goals.length > 0
@@ -216,6 +264,8 @@ export async function duplicateSprint(sprintId: string): Promise<SprintResult> {
             sprint_id: copy.id,
             title: g.title,
             sort_order: i,
+            stage_id: g.stage_id ? (stageIdMap.get(g.stage_id) ?? null) : null,
+            is_proof: g.is_proof,
           }))
         )
       : Promise.resolve({ error: null }),
@@ -274,6 +324,57 @@ export async function setParticipants(
 
   revalidatePath(`/learn/${sprintId}`);
   return { ok: true, message: "Participants updated." };
+}
+
+/**
+ * Self-enrollment on an `open` sprint. RLS is the real gate (open + not ended +
+ * your own row); this only translates its refusal into a sentence.
+ */
+export async function joinSprint(sprintId: string): Promise<ActionResult> {
+  const showcaseStop = await blockIfShowcase();
+  if (showcaseStop) return showcaseStop;
+  const ctx = await requireSection("learn");
+  if (!sprintId) return { ok: false, message: "Missing sprint id." };
+
+  const { error } = await ctx.supabase
+    .from("sprint_participants")
+    .upsert({ sprint_id: sprintId, user_id: ctx.userId });
+  if (error) {
+    return {
+      ok: false,
+      message:
+        error.code === "42501"
+          ? "This sprint isn't open to join."
+          : error.message,
+    };
+  }
+
+  revalidatePath("/learn");
+  revalidatePath(`/learn/${sprintId}`);
+  return { ok: true, message: "You're in." };
+}
+
+/** Leaving is only possible before the sprint starts — RLS enforces the window. */
+export async function leaveSprint(sprintId: string): Promise<ActionResult> {
+  const showcaseStop = await blockIfShowcase();
+  if (showcaseStop) return showcaseStop;
+  const ctx = await requireSection("learn");
+
+  const { error, count } = await ctx.supabase
+    .from("sprint_participants")
+    .delete({ count: "exact" })
+    .eq("sprint_id", sprintId)
+    .eq("user_id", ctx.userId);
+  if (error) return { ok: false, message: error.message };
+  // RLS filters the row out rather than erroring, so a no-op delete is the
+  // "sprint already started" case.
+  if (count === 0) {
+    return { ok: false, message: "The sprint has started — you can't leave now." };
+  }
+
+  revalidatePath("/learn");
+  revalidatePath(`/learn/${sprintId}`);
+  return { ok: true, message: "You left the sprint." };
 }
 
 /** Add one or many goals at once (one per line). Batch is the default flow. */
@@ -363,6 +464,167 @@ export async function removeGoal(goalId: string, sprintId: string): Promise<Acti
 
   revalidatePath(`/learn/${sprintId}`);
   return { ok: true, message: "Goal removed." };
+}
+
+/* ---------------------------------------------------------------- stages -- */
+
+export type StageDraft = {
+  title: string;
+  summary: string;
+  proof: string;
+  kind: "stage" | "capstone";
+  day_from: number | null;
+  day_to: number | null;
+  hours_low: number | null;
+  hours_high: number | null;
+};
+
+function stageFields(draft: Partial<StageDraft>) {
+  const clampDay = (n: number | null | undefined) =>
+    n == null || !Number.isFinite(n) || n < 1 ? null : Math.min(365, Math.round(n));
+  const clampHours = (n: number | null | undefined) =>
+    n == null || !Number.isFinite(n) || n < 0 ? null : Math.min(999, Math.round(n));
+
+  const dayFrom = clampDay(draft.day_from);
+  let dayTo = clampDay(draft.day_to);
+  if (dayFrom !== null && dayTo !== null && dayTo < dayFrom) dayTo = dayFrom;
+  const hoursLow = clampHours(draft.hours_low);
+  let hoursHigh = clampHours(draft.hours_high);
+  if (hoursLow !== null && hoursHigh !== null && hoursHigh < hoursLow) {
+    hoursHigh = hoursLow;
+  }
+
+  return {
+    // No required fields, same as sprints: a blank stage is still a stage.
+    title: (draft.title ?? "").trim().slice(0, 120) || "Untitled stage",
+    summary: (draft.summary ?? "").trim().slice(0, 600) || null,
+    proof: (draft.proof ?? "").trim().slice(0, 400) || null,
+    kind: draft.kind === "capstone" ? "capstone" : "stage",
+    day_from: dayFrom,
+    day_to: dayTo,
+    hours_low: hoursLow,
+    hours_high: hoursHigh,
+  };
+}
+
+export async function addStage(
+  sprintId: string,
+  draft: Partial<StageDraft>,
+  sortOrder: number
+): Promise<SprintResult> {
+  const showcaseStop = await blockIfShowcase();
+  if (showcaseStop) return showcaseStop;
+  const ctx = await requireAdmin();
+  if (!sprintId) return { ok: false, message: "Missing sprint id." };
+
+  const { data, error } = await ctx.supabase
+    .from("sprint_stages")
+    .insert({ sprint_id: sprintId, ...stageFields(draft), sort_order: sortOrder })
+    .select("id")
+    .single();
+  if (error || !data) return { ok: false, message: error?.message ?? "Failed." };
+
+  revalidatePath(`/learn/${sprintId}`);
+  return { ok: true, id: data.id, message: "Stage added." };
+}
+
+export async function updateStage(
+  stageId: string,
+  sprintId: string,
+  draft: Partial<StageDraft>
+): Promise<ActionResult> {
+  const showcaseStop = await blockIfShowcase();
+  if (showcaseStop) return showcaseStop;
+  const ctx = await requireAdmin();
+
+  const { error } = await ctx.supabase
+    .from("sprint_stages")
+    .update(stageFields(draft))
+    .eq("id", stageId)
+    .eq("sprint_id", sprintId);
+  if (error) return { ok: false, message: error.message };
+
+  revalidatePath(`/learn/${sprintId}`);
+  return { ok: true, message: "Stage saved." };
+}
+
+/** Goals cascade with the stage — the delete confirm says so. */
+export async function removeStage(
+  stageId: string,
+  sprintId: string
+): Promise<ActionResult> {
+  const showcaseStop = await blockIfShowcase();
+  if (showcaseStop) return showcaseStop;
+  const ctx = await requireAdmin();
+
+  const { error } = await ctx.supabase
+    .from("sprint_stages")
+    .delete()
+    .eq("id", stageId)
+    .eq("sprint_id", sprintId);
+  if (error) return { ok: false, message: error.message };
+
+  revalidatePath(`/learn/${sprintId}`);
+  return { ok: true, message: "Stage removed." };
+}
+
+export async function reorderStages(
+  sprintId: string,
+  orderedIds: string[]
+): Promise<ActionResult> {
+  const showcaseStop = await blockIfShowcase();
+  if (showcaseStop) return showcaseStop;
+  const ctx = await requireAdmin();
+  if (orderedIds.length === 0) return { ok: true, message: "Nothing to order." };
+
+  const results = await Promise.all(
+    orderedIds.map((id, i) =>
+      ctx.supabase
+        .from("sprint_stages")
+        .update({ sort_order: i })
+        .eq("id", id)
+        .eq("sprint_id", sprintId)
+    )
+  );
+  const failed = results.find((r) => r.error);
+  if (failed?.error) return { ok: false, message: failed.error.message };
+
+  revalidatePath(`/learn/${sprintId}`);
+  return { ok: true, message: "Order saved." };
+}
+
+/** Move a goal between stages (null = unstaged) and/or flag it as the proof. */
+export async function setGoalStage(
+  goalId: string,
+  sprintId: string,
+  stageId: string | null,
+  isProof = false
+): Promise<ActionResult> {
+  const showcaseStop = await blockIfShowcase();
+  if (showcaseStop) return showcaseStop;
+  const ctx = await requireAdmin();
+
+  // One proof per stage is a unique index — clear the incumbent first so
+  // promoting a different goal reads as a move, not an error.
+  if (isProof && stageId) {
+    const { error: clearError } = await ctx.supabase
+      .from("sprint_goals")
+      .update({ is_proof: false })
+      .eq("stage_id", stageId)
+      .eq("is_proof", true)
+      .neq("id", goalId);
+    if (clearError) return { ok: false, message: clearError.message };
+  }
+
+  const { error } = await ctx.supabase
+    .from("sprint_goals")
+    .update({ stage_id: stageId, is_proof: isProof && stageId !== null })
+    .eq("id", goalId)
+    .eq("sprint_id", sprintId);
+  if (error) return { ok: false, message: error.message };
+
+  revalidatePath(`/learn/${sprintId}`);
+  return { ok: true, message: "Goal moved." };
 }
 
 /** Link and/or uploaded file (file is uploaded client-side to the `learn` bucket first). */

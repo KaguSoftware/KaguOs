@@ -251,19 +251,41 @@ export type IdeaComment = {
   created_at: string;
 };
 
+export type SprintJoinMode = "assigned" | "open";
+
 export type Sprint = {
   id: string;
   title: string;
   description: string | null;
   starts_on: string;
   ends_on: string;
+  join_mode: SprintJoinMode;
   created_by: string | null;
+  created_at: string;
+};
+
+export type SprintStageKind = "stage" | "capstone";
+
+/** An ordered leg of a sprint: its own goals, ending in a proof. */
+export type SprintStage = {
+  id: string;
+  sprint_id: string;
+  title: string;
+  summary: string | null;
+  proof: string | null;
+  kind: SprintStageKind;
+  day_from: number | null;
+  day_to: number | null;
+  hours_low: number | null;
+  hours_high: number | null;
+  sort_order: number;
   created_at: string;
 };
 
 export type SprintResource = {
   id: string;
   sprint_id: string;
+  stage_id: string | null;
   title: string;
   url: string | null;
   file_path: string | null;
@@ -273,7 +295,9 @@ export type SprintResource = {
 export type SprintGoal = {
   id: string;
   sprint_id: string;
+  stage_id: string | null;
   title: string;
+  is_proof: boolean;
   sort_order: number;
   created_at: string;
 };
