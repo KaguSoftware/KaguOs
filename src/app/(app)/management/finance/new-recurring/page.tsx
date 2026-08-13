@@ -1,12 +1,12 @@
 import type { Metadata } from "next";
-import { requireSection } from "@/lib/data/session";
+import { requireSectionWrite } from "@/lib/data/session";
 import { CreatePage } from "@/components/ui/create";
 import { NewRecurringForm } from "@/components/management/finance-forms";
 
 export const metadata: Metadata = { title: "New recurring item" };
 
 export default async function NewRecurringPage() {
-  await requireSection("management");
+  await requireSectionWrite("management");
 
   return (
     <CreatePage

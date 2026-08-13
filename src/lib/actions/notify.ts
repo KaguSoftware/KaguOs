@@ -13,7 +13,8 @@ type NotifyKind =
   | "learn_question"
   | "learn_answer"
   | "status_change"
-  | "message";
+  | "message"
+  | "debug_note";
 
 type NotifyInput = {
   kind: NotifyKind;
@@ -90,23 +91,25 @@ export function notifyAdmins(ctx: SessionContext, input: NotifyInput) {
 }
 
 /**
- * Notify the "work team" (minus the actor): admins ∪ explicit work-section
- * members. This is the same denominator the dashboard presence widget uses
- * (see app/(app)/page.tsx) — everyone who can see presence, so status-change
- * pings reach exactly that audience and no wider.
+ * Notify the chat audience (minus the actor): admins ∪ explicit chat-section
+ * members. This is the same denominator getPresence uses — everyone who can see
+ * presence — so status-change pings reach exactly that audience and no wider.
+ *
+ * Chat, not Work, since 0052 split them: a status change is a "who's around"
+ * signal, and it belongs to whoever can see the presence panel.
  */
-export function notifyWorkTeam(ctx: SessionContext, input: NotifyInput) {
+export function notifyChatTeam(ctx: SessionContext, input: NotifyInput) {
   after(async () => {
-    const [{ data: admins }, { data: work }] = await Promise.all([
+    const [{ data: admins }, { data: chat }] = await Promise.all([
       ctx.supabase.from("profiles").select("id").eq("is_admin", true),
       ctx.supabase
         .from("section_memberships")
         .select("user_id")
-        .eq("section", "work"),
+        .eq("section", "chat"),
     ]);
     const ids = [
       ...(admins ?? []).map((p) => p.id),
-      ...(work ?? []).map((m) => m.user_id),
+      ...(chat ?? []).map((m) => m.user_id),
     ];
     await insertFor(ctx, ids, input);
   });

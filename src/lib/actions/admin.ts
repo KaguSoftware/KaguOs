@@ -2,8 +2,21 @@
 
 import { revalidatePath } from "next/cache";
 import { createServiceClient } from "@/lib/supabase/service";
-import { getSessionContext } from "@/lib/data/session";
+import { getSessionContext, type SectionAccess } from "@/lib/data/session";
 import { SECTIONS, type Section } from "@/lib/types";
+
+/** What an admin picked per section: absent = no access at all. */
+export type AccessMap = Partial<Record<Section, SectionAccess>>;
+
+/** Keep only real sections and real tiers — this arrives from a client call. */
+function sanitizeAccess(input: AccessMap): AccessMap {
+  const clean: AccessMap = {};
+  for (const [section, tier] of Object.entries(input) as [Section, SectionAccess][]) {
+    if (!(SECTIONS as readonly string[]).includes(section)) continue;
+    clean[section] = tier === "read" ? "read" : "write";
+  }
+  return clean;
+}
 import { isValidColorKey } from "@/lib/colors";
 import type { ActionResult } from "@/lib/actions/account";
 
@@ -14,12 +27,21 @@ async function assertAdmin() {
   return ctx;
 }
 
-function parseSections(formData: FormData): Section[] {
+/**
+ * Read the section checkboxes off the create-user form. Each checked section
+ * posts "sections" = <name>, and an optional "access:<name>" = "read" when the
+ * admin picked View instead of Edit.
+ *
+ * Sections are independent — access is exactly what was checked. Work used to
+ * imply Learn (and, via 0026, Debug); 0051 dropped that rule and its triggers.
+ */
+function parseAccess(formData: FormData): AccessMap {
   const picked = formData.getAll("sections").map(String) as Section[];
-  const valid = picked.filter((s) => (SECTIONS as readonly string[]).includes(s));
-  // Company rule (also enforced by a DB trigger): Work implies Learn.
-  if (valid.includes("work") && !valid.includes("learn")) valid.push("learn");
-  return valid;
+  const map: AccessMap = {};
+  for (const section of picked) {
+    map[section] = formData.get(`access:${section}`) === "read" ? "read" : "write";
+  }
+  return sanitizeAccess(map);
 }
 
 export async function createUser(
@@ -36,7 +58,7 @@ export async function createUser(
   const fullName = String(formData.get("full_name") ?? "").trim();
   const password = String(formData.get("password") ?? "");
   const isAdmin = formData.get("is_admin") === "on";
-  const sections = parseSections(formData);
+  const access = parseAccess(formData);
 
   if (!/^\S+@\S+\.\S+$/.test(email)) return { ok: false, message: "Enter a valid email." };
   if (fullName.length < 1) return { ok: false, message: "Name is required." };
@@ -61,10 +83,15 @@ export async function createUser(
     .eq("id", userId);
   if (profileError) return { ok: false, message: profileError.message };
 
-  if (sections.length > 0) {
+  const rows = Object.entries(access).map(([section, tier]) => ({
+    user_id: userId,
+    section,
+    access: tier,
+  }));
+  if (rows.length > 0) {
     const { error: memberError } = await service
       .from("section_memberships")
-      .upsert(sections.map((section) => ({ user_id: userId, section })));
+      .upsert(rows);
     if (memberError) return { ok: false, message: memberError.message };
   }
 
@@ -72,9 +99,14 @@ export async function createUser(
   return { ok: true, message: `${email} created — share the temp password with them.` };
 }
 
+/**
+ * Set a user's whole access picture in one call: which sections, at which tier,
+ * plus the admin flag. The client always sends the complete desired state, so
+ * this diffs rather than patches.
+ */
 export async function updateAccess(
   userId: string,
-  sections: Section[],
+  access: AccessMap,
   isAdmin: boolean
 ): Promise<ActionResult> {
   let ctx;
@@ -88,11 +120,7 @@ export async function updateAccess(
     return { ok: false, message: "You can't remove your own admin access." };
   }
 
-  const wanted = new Set<Section>(
-    sections.filter((s) => (SECTIONS as readonly string[]).includes(s))
-  );
-  // Company rule (also a DB trigger): Work implies Learn.
-  if (wanted.has("work")) wanted.add("learn");
+  const wanted = sanitizeAccess(access);
 
   const service = createServiceClient();
 
@@ -104,13 +132,21 @@ export async function updateAccess(
 
   const { data: current, error: readError } = await service
     .from("section_memberships")
-    .select("section")
+    .select("section, access")
     .eq("user_id", userId);
   if (readError) return { ok: false, message: readError.message };
 
-  const have = new Set((current ?? []).map((m) => m.section as Section));
-  const toAdd = [...wanted].filter((s) => !have.has(s));
-  const toRemove = [...have].filter((s) => !wanted.has(s));
+  const have = new Map<Section, SectionAccess>(
+    (current ?? []).map((m) => [m.section as Section, (m.access as SectionAccess) ?? "write"])
+  );
+
+  const toRemove = [...have.keys()].filter((s) => !(s in wanted));
+  // Grants AND tier changes both go through upsert on (user_id, section): a
+  // delete-then-insert would work too, but it would reset created_at every time
+  // an admin flipped View to Edit.
+  const toUpsert = (Object.entries(wanted) as [Section, SectionAccess][]).filter(
+    ([section, tier]) => have.get(section) !== tier
+  );
 
   if (toRemove.length > 0) {
     const { error } = await service
@@ -120,10 +156,12 @@ export async function updateAccess(
       .in("section", toRemove);
     if (error) return { ok: false, message: error.message };
   }
-  if (toAdd.length > 0) {
+  if (toUpsert.length > 0) {
     const { error } = await service
       .from("section_memberships")
-      .upsert(toAdd.map((section) => ({ user_id: userId, section })));
+      .upsert(
+        toUpsert.map(([section, tier]) => ({ user_id: userId, section, access: tier }))
+      );
     if (error) return { ok: false, message: error.message };
   }
 

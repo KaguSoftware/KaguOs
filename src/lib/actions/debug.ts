@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import {
-  blockIfShowcase,
+  blockIfReadOnly,
   canAccess,
   requireAdmin,
   requireSection,
@@ -22,8 +22,8 @@ export async function createTask(
   _prev: ActionResult,
   formData: FormData
 ): Promise<ActionResult> {
-  const showcaseStop = await blockIfShowcase();
-  if (showcaseStop) return showcaseStop;
+  const stop = await blockIfReadOnly("debug");
+  if (stop) return stop;
   const ctx = await requireSection("debug");
 
   // No required fields (create-flow rule) — fall back so NOT NULL columns stay valid.
@@ -99,8 +99,8 @@ export async function quickAddTasks(
   dropped?: number;
   tasks?: DebugTask[];
 }> {
-  const showcaseStop = await blockIfShowcase();
-  if (showcaseStop) return showcaseStop;
+  const stop = await blockIfReadOnly("debug");
+  if (stop) return stop;
   const ctx = await requireSection("debug");
 
   // Sanity cap per call — a paste, not an import pipeline. What gets dropped is
@@ -152,8 +152,8 @@ export async function logAuditFindings(
   dropped?: number;
   tasks?: DebugTask[];
 }> {
-  const showcaseStop = await blockIfShowcase();
-  if (showcaseStop) return showcaseStop;
+  const stop = await blockIfReadOnly("debug");
+  if (stop) return stop;
   const ctx = await requireSection("debug");
 
   // Same sanity cap as quickAddTasks — a sweep, not an import. Reported, not
@@ -213,8 +213,8 @@ export async function notifyDebugBatch(
   count: number,
   projectName?: string | null
 ): Promise<ActionResult> {
-  const showcaseStop = await blockIfShowcase();
-  if (showcaseStop) return showcaseStop;
+  const stop = await blockIfReadOnly("debug");
+  if (stop) return stop;
   const ctx = await requireSection("debug");
 
   const n = Math.floor(count);
@@ -234,8 +234,8 @@ export async function setTaskState(
   taskId: string,
   state: DebugState
 ): Promise<ActionResult> {
-  const showcaseStop = await blockIfShowcase();
-  if (showcaseStop) return showcaseStop;
+  const stop = await blockIfReadOnly("debug");
+  if (stop) return stop;
   const ctx = await requireSection("debug");
   if (!STATES.includes(state)) return { ok: false, message: "Invalid state." };
 
@@ -276,8 +276,8 @@ export async function updateTask(
     suggested_for?: string | null;
   }
 ): Promise<ActionResult> {
-  const showcaseStop = await blockIfShowcase();
-  if (showcaseStop) return showcaseStop;
+  const stop = await blockIfReadOnly("debug");
+  if (stop) return stop;
   const ctx = await requireSection("debug");
   const title = fields.title.trim().slice(0, 200);
   if (!title) return { ok: false, message: "A task needs a title." };
@@ -310,10 +310,94 @@ export async function updateTask(
   return { ok: true, message: "Task updated." };
 }
 
+const MAX_NOTE_LEN = 2000;
+
+/**
+ * Add a note to a task — the append-only half of a task's story.
+ *
+ * `description` answers "what's wrong", is written by the reporter, and is
+ * overwritten on every edit. This answers "what happened next", and each entry
+ * keeps its author. Before this existed, a second person's findings replaced the
+ * first person's, with nothing on the task saying who had written either.
+ */
+export async function addTaskNote(
+  taskId: string,
+  body: string
+): Promise<ActionResult> {
+  const stop = await blockIfReadOnly("debug");
+  if (stop) return stop;
+  const ctx = await requireSection("debug");
+
+  const clean = body.trim().slice(0, MAX_NOTE_LEN);
+  if (!clean) return { ok: false, message: "Write something first." };
+
+  const { error } = await ctx.supabase
+    .from("debug_task_notes")
+    .insert({ task_id: taskId, body: clean, created_by: ctx.userId });
+  if (error) return { ok: false, message: error.message };
+
+  // Ping whoever is carrying the task — a note about work you're doing is the
+  // one case worth a bell. notifyUser drops the actor, so writing on your own
+  // task stays quiet.
+  const { data: task } = await ctx.supabase
+    .from("debug_tasks")
+    .select("assignee_id, title")
+    .eq("id", taskId)
+    .maybeSingle();
+  if (task?.assignee_id) {
+    notifyUser(ctx, task.assignee_id, {
+      kind: "debug_note",
+      title: `${ctx.profile.full_name || "Someone"} noted on “${task.title}”`,
+      href: "/debug",
+    });
+  }
+
+  revalidatePath("/debug");
+  return { ok: true, message: "Note added." };
+}
+
+/** Edit your OWN note. RLS refuses anyone else's, admins included. */
+export async function editTaskNote(
+  noteId: string,
+  body: string
+): Promise<ActionResult> {
+  const stop = await blockIfReadOnly("debug");
+  if (stop) return stop;
+  const ctx = await requireSection("debug");
+
+  const clean = body.trim().slice(0, MAX_NOTE_LEN);
+  if (!clean) return { ok: false, message: "A note can't be empty." };
+
+  const { error } = await ctx.supabase
+    .from("debug_task_notes")
+    .update({ body: clean })
+    .eq("id", noteId);
+  if (error) return { ok: false, message: error.message };
+
+  revalidatePath("/debug");
+  return { ok: true, message: "Note updated." };
+}
+
+/** Delete a note — yours, or anyone's if you're an admin (RLS decides). */
+export async function deleteTaskNote(noteId: string): Promise<ActionResult> {
+  const stop = await blockIfReadOnly("debug");
+  if (stop) return stop;
+  const ctx = await requireSection("debug");
+
+  const { error } = await ctx.supabase
+    .from("debug_task_notes")
+    .delete()
+    .eq("id", noteId);
+  if (error) return { ok: false, message: error.message };
+
+  revalidatePath("/debug");
+  return { ok: true, message: "Note deleted." };
+}
+
 /** Claim for YOURSELF only — and only if still unclaimed (first click wins). */
 export async function claimTask(taskId: string): Promise<ActionResult> {
-  const showcaseStop = await blockIfShowcase();
-  if (showcaseStop) return showcaseStop;
+  const stop = await blockIfReadOnly("debug");
+  if (stop) return stop;
   const ctx = await requireSection("debug");
 
   const { data, error } = await ctx.supabase
@@ -341,8 +425,8 @@ export async function claimTask(taskId: string): Promise<ActionResult> {
  * than silently succeeding.
  */
 export async function unclaimTask(taskId: string): Promise<ActionResult> {
-  const showcaseStop = await blockIfShowcase();
-  if (showcaseStop) return showcaseStop;
+  const stop = await blockIfReadOnly("debug");
+  if (stop) return stop;
   const ctx = await requireSection("debug");
 
   const query = ctx.supabase
@@ -400,8 +484,8 @@ export async function updateTasks(
   ids: string[],
   patch: BulkPatch
 ): Promise<BulkResult> {
-  const showcaseStop = await blockIfShowcase();
-  if (showcaseStop) return showcaseStop;
+  const stop = await blockIfReadOnly("debug");
+  if (stop) return stop;
   const ctx = await requireSection("debug");
 
   const unique = [...new Set(ids)].filter(Boolean);
@@ -524,8 +608,8 @@ async function purgeTaskImages(
 }
 
 export async function deleteTask(taskId: string): Promise<ActionResult> {
-  const showcaseStop = await blockIfShowcase();
-  if (showcaseStop) return showcaseStop;
+  const stop = await blockIfReadOnly("debug");
+  if (stop) return stop;
   const ctx = await requireSection("debug");
 
   await purgeTaskImages(ctx.supabase, [taskId]);
@@ -543,8 +627,8 @@ export async function deleteTask(taskId: string): Promise<ActionResult> {
  * is the app-level gate.
  */
 export async function deleteTasks(taskIds: string[]): Promise<ActionResult> {
-  const showcaseStop = await blockIfShowcase();
-  if (showcaseStop) return showcaseStop;
+  const stop = await blockIfReadOnly("debug");
+  if (stop) return stop;
   const ctx = await requireAdmin();
 
   const ids = taskIds.filter(Boolean);
@@ -586,8 +670,8 @@ export async function addTaskImage(input: {
    */
   skipRevalidate?: boolean;
 }): Promise<ActionResult> {
-  const showcaseStop = await blockIfShowcase();
-  if (showcaseStop) return showcaseStop;
+  const stop = await blockIfReadOnly("debug");
+  if (stop) return stop;
   const ctx = await requireSection("debug");
 
   const { count } = await ctx.supabase
@@ -623,8 +707,8 @@ export async function addTaskImage(input: {
 
 /** Delete one screenshot — the row AND the stored object, never just one. */
 export async function deleteTaskImage(imageId: string): Promise<ActionResult> {
-  const showcaseStop = await blockIfShowcase();
-  if (showcaseStop) return showcaseStop;
+  const stop = await blockIfReadOnly("debug");
+  if (stop) return stop;
   const ctx = await requireSection("debug");
 
   // Read the path first: after the row is gone there's no way back to the object.

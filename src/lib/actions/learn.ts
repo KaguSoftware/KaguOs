@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { blockIfShowcase, requireAdmin, requireSection } from "@/lib/data/session";
+import { blockIfReadOnly, requireAdmin, requireSection } from "@/lib/data/session";
 import { notifyAdmins, notifySection, notifyUser } from "@/lib/actions/notify";
 import { createServiceClient } from "@/lib/supabase/service";
 import { addDays, todayInIstanbul } from "@/lib/utils";
@@ -61,8 +61,8 @@ export type SprintResult = ActionResult & { id?: string };
  * two-step createSprint → configure-on-the-detail-page flow.
  */
 export async function createSprintFull(draft: SprintDraft): Promise<SprintResult> {
-  const showcaseStop = await blockIfShowcase();
-  if (showcaseStop) return showcaseStop;
+  const stop = await blockIfReadOnly("learn");
+  if (stop) return stop;
   const ctx = await requireAdmin();
   const fields = normalizeSprintFields(draft);
 
@@ -124,8 +124,8 @@ export async function updateSprint(
   _prev: ActionResult,
   formData: FormData
 ): Promise<ActionResult> {
-  const showcaseStop = await blockIfShowcase();
-  if (showcaseStop) return showcaseStop;
+  const stop = await blockIfReadOnly("learn");
+  if (stop) return stop;
   const ctx = await requireAdmin();
   const id = String(formData.get("id") ?? "");
   const fields = sprintFields(formData);
@@ -141,8 +141,8 @@ export async function updateSprint(
 }
 
 export async function deleteSprint(sprintId: string): Promise<ActionResult> {
-  const showcaseStop = await blockIfShowcase();
-  if (showcaseStop) return showcaseStop;
+  const stop = await blockIfReadOnly("learn");
+  if (stop) return stop;
   const ctx = await requireAdmin();
 
   const { error } = await ctx.supabase.from("sprints").delete().eq("id", sprintId);
@@ -172,8 +172,8 @@ export async function deleteSprint(sprintId: string): Promise<ActionResult> {
 
 /** Starts today, keeps the duration, copies goals + participants (not files). */
 export async function duplicateSprint(sprintId: string): Promise<SprintResult> {
-  const showcaseStop = await blockIfShowcase();
-  if (showcaseStop) return showcaseStop;
+  const stop = await blockIfReadOnly("learn");
+  if (stop) return stop;
   const ctx = await requireAdmin();
 
   const [{ data: sprint }, { data: goals }, { data: participants }, { data: stages }] =
@@ -292,8 +292,8 @@ export async function setParticipants(
   sprintId: string,
   userIds: string[]
 ): Promise<ActionResult> {
-  const showcaseStop = await blockIfShowcase();
-  if (showcaseStop) return showcaseStop;
+  const stop = await blockIfReadOnly("learn");
+  if (stop) return stop;
   const ctx = await requireAdmin();
 
   const { data: current, error: readError } = await ctx.supabase
@@ -383,8 +383,8 @@ export async function addGoals(
   titles: string[],
   startOrder: number
 ): Promise<ActionResult> {
-  const showcaseStop = await blockIfShowcase();
-  if (showcaseStop) return showcaseStop;
+  const stop = await blockIfReadOnly("learn");
+  if (stop) return stop;
   const ctx = await requireAdmin();
   if (!sprintId) return { ok: false, message: "Missing sprint id." };
 
@@ -411,8 +411,8 @@ export async function updateGoal(
   sprintId: string,
   title: string
 ): Promise<ActionResult> {
-  const showcaseStop = await blockIfShowcase();
-  if (showcaseStop) return showcaseStop;
+  const stop = await blockIfReadOnly("learn");
+  if (stop) return stop;
   const ctx = await requireAdmin();
 
   const next = title.trim().slice(0, 200);
@@ -433,8 +433,8 @@ export async function reorderGoals(
   sprintId: string,
   orderedIds: string[]
 ): Promise<ActionResult> {
-  const showcaseStop = await blockIfShowcase();
-  if (showcaseStop) return showcaseStop;
+  const stop = await blockIfReadOnly("learn");
+  if (stop) return stop;
   const ctx = await requireAdmin();
   if (orderedIds.length === 0) return { ok: true, message: "Nothing to order." };
 
@@ -455,8 +455,8 @@ export async function reorderGoals(
 }
 
 export async function removeGoal(goalId: string, sprintId: string): Promise<ActionResult> {
-  const showcaseStop = await blockIfShowcase();
-  if (showcaseStop) return showcaseStop;
+  const stop = await blockIfReadOnly("learn");
+  if (stop) return stop;
   const ctx = await requireAdmin();
 
   const { error } = await ctx.supabase.from("sprint_goals").delete().eq("id", goalId);
@@ -632,8 +632,8 @@ export async function addResource(
   _prev: ActionResult,
   formData: FormData
 ): Promise<ActionResult> {
-  const showcaseStop = await blockIfShowcase();
-  if (showcaseStop) return showcaseStop;
+  const stop = await blockIfReadOnly("learn");
+  if (stop) return stop;
   const ctx = await requireAdmin();
   const sprintId = String(formData.get("sprint_id") ?? "");
   const title =
@@ -657,8 +657,8 @@ export async function removeResource(
   resourceId: string,
   sprintId: string
 ): Promise<ActionResult> {
-  const showcaseStop = await blockIfShowcase();
-  if (showcaseStop) return showcaseStop;
+  const stop = await blockIfReadOnly("learn");
+  if (stop) return stop;
   const ctx = await requireAdmin();
 
   const { data: resource } = await ctx.supabase
@@ -690,8 +690,8 @@ export async function askQuestion(
   body: string,
   audience: "everyone" | "admins"
 ): Promise<ActionResult> {
-  const showcaseStop = await blockIfShowcase();
-  if (showcaseStop) return showcaseStop;
+  const stop = await blockIfReadOnly("learn");
+  if (stop) return stop;
   const ctx = await requireSection("learn");
 
   const text = body.trim().slice(0, 2000);
@@ -730,8 +730,8 @@ export async function replyToQuestion(
   sprintId: string,
   body: string
 ): Promise<ActionResult> {
-  const showcaseStop = await blockIfShowcase();
-  if (showcaseStop) return showcaseStop;
+  const stop = await blockIfReadOnly("learn");
+  if (stop) return stop;
   const ctx = await requireSection("learn");
 
   const text = body.trim().slice(0, 2000);
@@ -772,8 +772,8 @@ export async function deleteQuestion(
   questionId: string,
   sprintId: string
 ): Promise<ActionResult> {
-  const showcaseStop = await blockIfShowcase();
-  if (showcaseStop) return showcaseStop;
+  const stop = await blockIfReadOnly("learn");
+  if (stop) return stop;
   const ctx = await requireSection("learn");
 
   // RLS: only the asker or an admin may delete (replies cascade).
@@ -791,8 +791,8 @@ export async function deleteReply(
   replyId: string,
   sprintId: string
 ): Promise<ActionResult> {
-  const showcaseStop = await blockIfShowcase();
-  if (showcaseStop) return showcaseStop;
+  const stop = await blockIfReadOnly("learn");
+  if (stop) return stop;
   const ctx = await requireSection("learn");
 
   const { error } = await ctx.supabase
@@ -811,8 +811,8 @@ export async function toggleGoalProgress(
   sprintId: string,
   done: boolean
 ): Promise<ActionResult> {
-  const showcaseStop = await blockIfShowcase();
-  if (showcaseStop) return showcaseStop;
+  const stop = await blockIfReadOnly("learn");
+  if (stop) return stop;
   const ctx = await requireSection("learn");
 
   const { error } = done

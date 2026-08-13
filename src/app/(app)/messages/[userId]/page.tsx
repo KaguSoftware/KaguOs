@@ -31,7 +31,7 @@ export async function generateMetadata({
   const { userId } = await params;
   if (userId === GROUP_THREAD) return { title: GROUP_LABEL };
   const ctx = await getSessionContext();
-  if (!canAccess(ctx, "work") || ctx.showcase) return { title: "Messages" };
+  if (!canAccess(ctx, "chat") || ctx.showcase) return { title: "Messages" };
   const members = await getMembersMap(ctx.supabase);
   return { title: members[userId]?.name ?? "Messages" };
 }
@@ -51,7 +51,7 @@ export default async function MessageThreadPage({
   params: Promise<{ userId: string }>;
 }) {
   const { userId } = await params;
-  const ctx = await requireSection("work");
+  const ctx = await requireSection("chat");
   // Chat carries real conversations — showcase never reaches a thread.
   if (ctx.showcase) notFound();
 

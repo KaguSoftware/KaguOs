@@ -1,6 +1,8 @@
+import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { getSessionContext, getUserId } from "@/lib/data/session";
+import { SIDEBAR_COOKIE } from "@/lib/sidebar-pref";
+import { canAccess, canWrite, getSessionContext, getUserId } from "@/lib/data/session";
 import { getMembersMap } from "@/lib/data/members";
 import { getPresence } from "@/lib/data/presence";
 import { getPulse } from "@/lib/data/pulse";
@@ -28,6 +30,11 @@ export default async function AppLayout({
   const supabase = await createClient();
   const userId = await getUserId(supabase);
   if (!userId) redirect("/login");
+
+  // Rail width, read server-side so the first paint is already correct — see
+  // lib/sidebar-pref.ts. cookies() is already resolved for this request by the
+  // Supabase client above, so this costs nothing.
+  const sidebarCollapsed = (await cookies()).get(SIDEBAR_COOKIE)?.value === "1";
 
   // One wave: the profile lookup, the notifications, and the members map all
   // fly together. getMembersMap is cache()-deduped against the page's own call.
@@ -89,6 +96,7 @@ export default async function AppLayout({
       </a>
       <CommandPalette
         sections={[...ctx.sections]}
+        writeSections={[...ctx.sections].filter((s) => canWrite(ctx, s))}
         isAdmin={ctx.isAdmin}
         showcase={ctx.showcase}
       />
@@ -127,6 +135,8 @@ export default async function AppLayout({
           pulse={pulse}
           meId={ctx.userId}
           unreadMessages={unreadMessages}
+          defaultCollapsed={sidebarCollapsed}
+          canStatus={canAccess(ctx, "status")}
         />
         <main id="main" tabIndex={-1} className="min-w-0 flex-1 focus:outline-none">
           {ctx.showcase && <ShowcaseBanner />}

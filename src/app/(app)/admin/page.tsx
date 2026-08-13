@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { FileUp } from "lucide-react";
-import { requireAdmin } from "@/lib/data/session";
+import { requireAdmin, type SectionAccess } from "@/lib/data/session";
 import { rowsOrThrow } from "@/lib/data/query";
 import { PageHeader } from "@/components/shell/page-header";
 import { Panel, PanelHeader } from "@/components/ui/panel";
@@ -21,16 +21,18 @@ export default async function AdminPage() {
       "profiles"
     ),
     rowsOrThrow(
-      ctx.supabase.from("section_memberships").select("user_id, section"),
+      ctx.supabase.from("section_memberships").select("user_id, section, access"),
       "section_memberships"
     ),
   ]);
 
-  const sectionsByUser = new Map<string, Section[]>();
+  // One entry per user: section -> tier. Absent key means no access at all, so
+  // the row needs no separate "sections" list.
+  const accessByUser = new Map<string, Partial<Record<Section, SectionAccess>>>();
   for (const m of memberships) {
-    const list = sectionsByUser.get(m.user_id) ?? [];
-    list.push(m.section as Section);
-    sectionsByUser.set(m.user_id, list);
+    const map = accessByUser.get(m.user_id) ?? {};
+    map[m.section as Section] = (m.access as SectionAccess) ?? "write";
+    accessByUser.set(m.user_id, map);
   }
 
   const users: AdminUser[] = profiles.map((p) => ({
@@ -39,7 +41,7 @@ export default async function AdminPage() {
     full_name: p.full_name,
     is_admin: p.is_admin,
     color: p.color,
-    sections: sectionsByUser.get(p.id) ?? [],
+    access: accessByUser.get(p.id) ?? {},
     last_seen_at: p.last_seen_at ?? null,
   }));
 

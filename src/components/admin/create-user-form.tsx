@@ -47,19 +47,31 @@ export function CreateUserForm() {
         <legend className="mb-1.5 block text-[13px] font-medium text-muted">
           Sections
         </legend>
-        <div className="flex flex-wrap gap-x-4 gap-y-2">
+        {/* Checked = they get the section; the View box next to it downgrades
+            that grant to read-only. Both post plainly, so this stays a normal
+            uncontrolled form — parseAccess in actions/admin.ts reads the pair. */}
+        <div className="grid gap-1.5 sm:grid-cols-2">
           {SECTIONS.map((section) => (
-            <Checkbox
-              key={section}
-              label={SECTION_LABELS[section]}
-              name="sections"
-              value={section}
-              defaultChecked={section === "debug" || section === "learn"}
-            />
+            <div key={section} className="flex items-center justify-between gap-3">
+              <Checkbox
+                label={SECTION_LABELS[section]}
+                name="sections"
+                value={section}
+                defaultChecked={section === "debug" || section === "learn"}
+              />
+              <Checkbox
+                size="sm"
+                className="shrink-0 text-[12px] text-faint"
+                label="View only"
+                name={`access:${section}`}
+                value="read"
+              />
+            </div>
           ))}
         </div>
         <p className="mt-1.5 text-[13px] text-faint">
-          Everyone in Work is automatically also in Learn.
+          Sections are independent — tick exactly what they should see. &ldquo;View
+          only&rdquo; lets them read the section without changing anything in it.
         </p>
       </fieldset>
       <Checkbox name="is_admin" label="Admin (manages users and sprints)" />

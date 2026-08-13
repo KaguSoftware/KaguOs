@@ -88,7 +88,7 @@ export const getGroupAudience = cache(async function getGroupAudience(
 export async function getGroupReadMarkers(
   ctx: SessionContext
 ): Promise<Record<string, string>> {
-  if (!canAccess(ctx, "work") || ctx.showcase) return {};
+  if (!canAccess(ctx, "chat") || ctx.showcase) return {};
   const rows = await rowsOrThrow<{ user_id: string; read_at: string }>(
     ctx.supabase.from("message_reads").select("user_id, read_at"),
     "message_reads: all"
@@ -202,7 +202,7 @@ export type InboxSummary = {
 export const getInboxSummary = cache(async function getInboxSummary(
   ctx: SessionContext
 ): Promise<InboxSummary | null> {
-  if (!canAccess(ctx, "work") || ctx.showcase) return null;
+  if (!canAccess(ctx, "chat") || ctx.showcase) return null;
 
   const me = ctx.userId;
   const [directRows, unreadRows, groupRows, marker] = await Promise.all([

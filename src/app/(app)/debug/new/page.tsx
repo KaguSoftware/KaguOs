@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { canAccess, requireSection } from "@/lib/data/session";
+import { canAccess, requireSectionWrite } from "@/lib/data/session";
 import { getMembersMap } from "@/lib/data/members";
 import { rowsOrThrow } from "@/lib/data/query";
 import { CreatePage } from "@/components/ui/create";
@@ -8,7 +8,7 @@ import { NewTaskForm } from "@/components/debug/new-task-form";
 export const metadata: Metadata = { title: "New task" };
 
 export default async function NewTaskPage() {
-  const ctx = await requireSection("debug");
+  const ctx = await requireSectionWrite("debug");
   // The whole WORK team gets the "suggest for" field (Parsa, 2026-07-23 — was
   // admin-only); suggestions target WORK members only (the people who take on
   // this kind of work), so we fetch that roster too.

@@ -145,7 +145,7 @@ export function DatePicker({
           role="dialog"
           aria-label="Calendar"
           className={cn(
-            "absolute z-10 w-64 animate-pop-in rounded-md border border-line bg-raised/90 p-3 shadow-lg shadow-black/40 backdrop-blur-md",
+            "absolute z-10 w-[min(16rem,calc(100vw-2rem))] animate-pop-in rounded-md border border-line bg-raised/90 p-3 shadow-lg shadow-black/40 backdrop-blur-md",
             side === "top"
               ? "bottom-full mb-1 origin-bottom"
               : "top-full mt-1 origin-top"

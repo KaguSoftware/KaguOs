@@ -825,9 +825,22 @@ function TeammateRow({
 export function SidebarPresence({
   people,
   meId,
+  collapsed,
+  onExpand,
+  canStatus,
 }: {
   people: PresencePerson[];
   meId: string;
+  /** Icon-only rail: the panel becomes a stack of dots that expands on click. */
+  collapsed?: boolean;
+  onExpand?: () => void;
+  /**
+   * Status-section access (0052). Without it this degrades to a plain roster:
+   * no live dots, no statuses, no editor — just who's on the team. The data is
+   * already blanked server-side in getPresence; this hides the affordances that
+   * would otherwise read as "everyone is offline".
+   */
+  canStatus?: boolean;
 }) {
   const { pending, run } = useAction();
   const live = useLivePresence(meId);
@@ -877,6 +890,105 @@ export function SidebarPresence({
         Number(b.available_to_call) - Number(a.available_to_call) ||
         a.name.localeCompare(b.name)
     );
+
+  // No Status access: a roster, and nothing that pretends to be presence. The
+  // alternative — reusing the full panel against blanked data — would render
+  // "0/7 online" and a column of grey dots, which reads as an outage rather
+  // than as a permission you don't have.
+  if (canStatus === false) {
+    const roster = [...(me ? [me] : []), ...others];
+    if (collapsed) {
+      return (
+        <div className="border-t border-line px-2 py-2">
+          <button
+            type="button"
+            onClick={onExpand}
+            title={`Team — ${people.length} ${people.length === 1 ? "person" : "people"}`}
+            aria-label={`Team: ${people.length} people. Expand the sidebar.`}
+            className="flex w-full flex-col items-center gap-1.5 rounded-md py-1 transition-colors duration-150 hover:bg-raised/60"
+          >
+            {roster.slice(0, 5).map((p) => (
+              <span
+                key={p.id}
+                style={{ backgroundColor: p.color }}
+                className="grid size-6 place-items-center rounded-full text-[10px] font-semibold text-bg"
+                aria-hidden
+              >
+                {p.name.slice(0, 1).toUpperCase()}
+              </span>
+            ))}
+          </button>
+        </div>
+      );
+    }
+    return (
+      <div className="space-y-0.5 border-t border-line px-2 py-2">
+        <p className="px-2 pb-1 pt-1 text-[11px] font-medium uppercase tracking-wide text-faint">
+          Team
+        </p>
+        {roster.map((p) => (
+          <div
+            key={p.id}
+            className="flex w-full items-center gap-2.5 rounded-md px-2 py-1.5"
+          >
+            <span
+              style={{ backgroundColor: p.color }}
+              className="grid size-6 shrink-0 place-items-center rounded-full text-[10px] font-semibold text-bg"
+              aria-hidden
+            >
+              {p.name.slice(0, 1).toUpperCase()}
+            </span>
+            <span className="min-w-0 flex-1 truncate text-[13px] text-muted">
+              {p.id === meId ? "You" : p.name}
+            </span>
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  // Collapsed rail: there is no room for names, status text or a hover card, so
+  // the panel degrades to the one signal that still reads at 3.5rem — who is
+  // here. Clicking anywhere on it widens the rail rather than opening a second
+  // kind of popover, so there's exactly one way to get to the full panel.
+  if (collapsed) {
+    const stack = [
+      ...(me ? [me] : []),
+      ...others.filter((p) => stateOf(p.id) === "online"),
+      ...others.filter((p) => stateOf(p.id) !== "online"),
+    ].slice(0, 5);
+    const hidden = people.length - stack.length;
+    return (
+      <div className="border-t border-line px-2 py-2">
+        <button
+          type="button"
+          onClick={onExpand}
+          title={`${onlineCount} of ${people.length} online — expand for status`}
+          aria-label={`Team: ${onlineCount} of ${people.length} online. Expand the sidebar for status.`}
+          className="flex w-full flex-col items-center gap-1.5 rounded-md py-1 transition-colors duration-150 hover:bg-raised/60"
+        >
+          {stack.map((p) => (
+            <span key={p.id} className="relative" aria-hidden>
+              <span
+                style={{ backgroundColor: p.color }}
+                className="grid size-6 place-items-center rounded-full text-[10px] font-semibold text-bg"
+              >
+                {p.name.slice(0, 1).toUpperCase()}
+              </span>
+              {stateOf(p.id) === "online" && (
+                <span className="absolute -bottom-0.5 -right-0.5 size-2 rounded-full bg-primary ring-2 ring-surface" />
+              )}
+            </span>
+          ))}
+          {hidden > 0 && (
+            <span className="font-mono text-[10px] text-faint" aria-hidden>
+              +{hidden}
+            </span>
+          )}
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-0.5 border-t border-line px-2 py-2">

@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { requireSection } from "@/lib/data/session";
+import { requireSectionWrite } from "@/lib/data/session";
 import { rowsOrThrow } from "@/lib/data/query";
 import { CreatePage } from "@/components/ui/create";
 import { NewPostForm } from "@/components/marketing/bits";
@@ -7,7 +7,7 @@ import { NewPostForm } from "@/components/marketing/bits";
 export const metadata: Metadata = { title: "New post" };
 
 export default async function NewPostPage() {
-  const ctx = await requireSection("marketing");
+  const ctx = await requireSectionWrite("marketing");
 
   const [campaigns, marketingMembers] = await Promise.all([
     rowsOrThrow(

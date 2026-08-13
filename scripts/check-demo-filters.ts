@@ -29,6 +29,7 @@ const DEMOABLE = [
   "marketing_items", "sprints", "sprint_resources", "sprint_participants",
   "sprint_goals", "sprint_goal_progress", "sprint_questions",
   "sprint_question_replies", "contact_interactions",
+  "debug_task_notes", "debug_task_images", "comms_meetings", "comms_notes",
 ];
 
 /**
