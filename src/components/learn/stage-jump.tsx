@@ -219,8 +219,10 @@ function StageSheet({
   const CLOSE_FRACTION = 1 / 3;
 
   function onPointerDown(e: React.PointerEvent) {
-    // Ignore secondary buttons and any press that began on a control.
+    // Secondary buttons never drag. Neither does a press that started on the
+    // close button — capturing the pointer there would swallow its click.
     if (e.button !== 0) return;
+    if ((e.target as HTMLElement).closest("button")) return;
     dragFrom.current = e.clientY;
     setDrag(0);
     e.currentTarget.setPointerCapture(e.pointerId);
@@ -253,20 +255,24 @@ function StageSheet({
         className="absolute inset-0 cursor-default bg-bg/70 backdrop-blur-sm motion-safe:animate-[overlay-in_150ms_var(--ease-mac)_both]"
       />
 
-      <div
-        ref={panel}
-        tabIndex={-1}
-        style={drag ? { transform: `translateY(${drag}px)` } : undefined}
-        className={cn(
-          "relative max-h-[80dvh] overflow-y-auto rounded-t-xl border-t border-line-strong bg-raised/95 pb-[max(0.75rem,env(safe-area-inset-bottom))] shadow-2xl backdrop-blur-md focus:outline-none",
-          // The entrance plays only on a fresh open; once a drag has started,
-          // the finger owns the position. On release the spring-back is a
-          // transition, not the keyframes, so it starts from where you let go.
-          drag === null
-            ? "transition-transform duration-200 ease-mac motion-safe:animate-[sheet-up_220ms_var(--ease-mac)_both] motion-reduce:transition-none"
-            : ""
-        )}
-      >
+      {/* Two elements, one transform each, composed. The entrance keyframes own
+          the outer one and never change — toggling that class to make room for
+          the drag would replay the whole entrance, opacity and all, every time
+          a short pull sprang back. The drag owns the inner one and is pure
+          transform, so the two never write to the same property. */}
+      <div className="relative motion-safe:animate-[sheet-up_220ms_var(--ease-mac)_both]">
+        <div
+          ref={panel}
+          tabIndex={-1}
+          style={drag ? { transform: `translateY(${drag}px)` } : undefined}
+          className={cn(
+            "max-h-[80dvh] overflow-y-auto rounded-t-xl border-t border-line-strong bg-raised/95 pb-[max(0.75rem,env(safe-area-inset-bottom))] shadow-2xl backdrop-blur-md focus:outline-none",
+            // No transition while the finger is down — the finger IS the
+            // animation. On release it eases back from wherever you let go.
+            drag === null &&
+              "transition-transform duration-200 ease-mac motion-reduce:transition-none"
+          )}
+        >
         {/* The grab handle and the title row are one drag surface: the list
             below them scrolls, so a drag starting there would fight it.
             touch-none stops the browser claiming the gesture for a scroll
@@ -283,20 +289,21 @@ function StageSheet({
           </span>
 
           <div className="flex items-center gap-3 px-4 pb-2 pt-1">
-          <h2 className="text-[15px] font-semibold tracking-tight text-ink">
-            Stages
-          </h2>
-          <span className="ml-auto font-mono text-xs tabular-nums text-faint">
-            {cleared}/{milestones.length} cleared
-          </span>
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Close"
-            className="-mr-1 rounded-md p-1 text-muted transition-colors duration-150 hover:bg-raised hover:text-ink"
-          >
-            <X className="size-4" aria-hidden />
-          </button>
+            <h2 className="text-[15px] font-semibold tracking-tight text-ink">
+              Stages
+            </h2>
+            <span className="ml-auto font-mono text-xs tabular-nums text-faint">
+              {cleared}/{milestones.length} cleared
+            </span>
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label="Close"
+              className="-mr-1 rounded-md p-1 text-muted transition-colors duration-150 hover:bg-raised hover:text-ink"
+            >
+              <X className="size-4" aria-hidden />
+            </button>
+          </div>
         </div>
 
         <ol className="grid px-2 pb-2">
@@ -373,7 +380,8 @@ function StageSheet({
               </li>
             );
           })}
-        </ol>
+          </ol>
+        </div>
       </div>
     </div>,
     document.body
