@@ -12,6 +12,8 @@ type NotifyKind =
   | "reminder_shared"
   | "learn_question"
   | "learn_answer"
+  | "learn_proof"
+  | "learn_review"
   | "status_change"
   | "message"
   | "debug_note";

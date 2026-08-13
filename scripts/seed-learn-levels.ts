@@ -34,6 +34,8 @@ type ResourceSeed = {
  */
 type GoalSeed = {
   title: string;
+  /** The sentence under the title: what the line actually means. */
+  detail?: string;
   /** Videos for this goal specifically. Default kind is 'video'. */
   teach?: ResourceSeed[];
 };
@@ -47,7 +49,15 @@ const asGoal = (entry: GoalEntry): GoalSeed =>
 type StageSeed = {
   title: string;
   summary?: string;
+  /** The paragraphs behind the summary. Blank line = new paragraph. */
+  detail?: string;
   proof?: string;
+  /** The proof at length: what to actually do, before you do it. */
+  proofBrief?: string;
+  /** What to hand in, in the imperative. */
+  proofSubmit?: string;
+  /** The conditions the hand-in is read against — one per row (0061). */
+  criteria?: string[];
   kind?: "stage" | "capstone";
   day_from?: number;
   day_to?: number;
@@ -98,17 +108,48 @@ const LEVEL_1: ProgramSeed = {
       title: "Landscape",
       summary:
         "Chat vs Cowork vs Claude Code, the three model tiers, the effort dial, and skills — knowing what to reach for.",
+      detail:
+        "Three surfaces, three model tiers, one effort dial. Chat is a conversation you drive turn by turn. Cowork is Claude working across your files and connected tools while you watch. Claude Code lives in a terminal inside a project and edits it. Reaching for the wrong one is the most common reason a perfectly good prompt gives a useless answer — you asked a conversation to do a filing job.\n\n" +
+        "The model tier is a weight class, not a quality ranking: Haiku for volume and speed, Sonnet for everyday work, Opus for the task you'd be annoyed to get wrong. The effort dial then buys thinking time on top of whichever you picked, which is why it matters more than the tier on anything with reasoning in it.\n\n" +
+        "Skills sit above all of it: instructions you write once and reuse, so a routing decision you work out this week is still working for you next month instead of being retyped from memory.",
       proof:
         "Route 3 real tasks to the right surface + model + effort, and justify each in one line.",
+      proofBrief:
+        "Take three tasks off your own week — real ones you actually have to do, not examples. For each, decide the surface, the model tier and the effort level, and write the one line that justifies the choice.\n\n" +
+        "At least one of the three should land somewhere you wouldn't have gone by default. If all three read \"Chat, Sonnet, high\", you've written down a habit rather than made a decision, and the stage hasn't happened yet.",
+      proofSubmit:
+        "Paste the three tasks with their routing and reasons. If you ran any of them, paste what came back too — a routing call is easier to judge next to its result.",
+      criteria: [
+        "Three tasks, all real ones from your own week",
+        "Each names a surface, a model tier and an effort level",
+        "Each carries a one-line reason tied to the task, not to the model",
+        "At least one routes somewhere other than your usual default",
+      ],
       day_from: 1,
       day_to: 2,
       hours_low: 4,
       hours_high: 5,
       goals: [
-        "Chat vs Cowork vs Claude Code — at recognition level",
-        "Three model tiers, and picking by task weight",
-        "The effort dial — and why high is usually right",
-        "Skills as reusable instructions",
+        {
+          title: "Chat vs Cowork vs Claude Code — at recognition level",
+          detail:
+            "Given a task, you can say which of the three it belongs on in one sentence, without hedging.",
+        },
+        {
+          title: "Three model tiers, and picking by task weight",
+          detail:
+            "Haiku, Sonnet, Opus. You can name the trade you're making when you pick one, in speed and in cost.",
+        },
+        {
+          title: "The effort dial — and why high is usually right",
+          detail:
+            "Effort buys reasoning depth on any tier. You know what it costs you and the kind of task where it's wasted.",
+        },
+        {
+          title: "Skills as reusable instructions",
+          detail:
+            "What a skill is, where it lives, and which instructions belong in one rather than being retyped into every prompt.",
+        },
       ],
       proofGoal: "Route 3 real tasks to the right surface, model and effort",
       resources: [
@@ -130,15 +171,41 @@ const LEVEL_1: ProgramSeed = {
       title: "Access",
       summary:
         "Connecting Claude to your files, mail, and tools; what it can and can't reach; why a connected Claude beats a described one.",
+      detail:
+        "A described file is a rumour. When you paste \"our pricing sheet has three tiers and some regional discounts\", you've already done the summarising, and every mistake in your summary is now in the answer. Connect the sheet instead and the reading is Claude's job, done against the real numbers.\n\n" +
+        "This stage is mostly setup you do once: files, mail, and whichever connectors your work actually runs on. The part worth slowing down for is the boundary — what a connector can see, what it can change, and what it silently can't reach. Knowing the boundary is what stops you trusting an answer that was assembled out of half the evidence.",
       proof: "Pull an answer from your own file that a pasted description couldn't give.",
+      proofBrief:
+        "Connect one real source of yours — a spreadsheet, a folder, a mailbox — and ask it a question whose answer you can check. Then ask the same question again with the source disconnected and the file described in words instead.\n\n" +
+        "The point is the gap between the two answers. A question that a description answers just as well isn't proof of anything; pick one that needs a number, a date, or an exact line from the file.",
+      proofSubmit:
+        "Paste both answers, the connected one and the described one, and one line on what the description got wrong or couldn't reach. Attach the file if it's not sensitive.",
+      criteria: [
+        "A real source of yours is connected, not a sample file",
+        "The question needs something exact — a number, a date, a specific line",
+        "Both answers are shown: connected, and from a description",
+        "You say what the description missed, and how you verified the connected answer",
+      ],
       day_from: 3,
       day_to: 4,
       hours_low: 4,
       hours_high: 5,
       goals: [
-        "Connect Claude to your files, mail, and tools",
-        "What it can and can't reach",
-        "Why a connected Claude beats a described one",
+        {
+          title: "Connect Claude to your files, mail, and tools",
+          detail:
+            "One source of each kind, connected and working — not read about, actually attached to your account.",
+        },
+        {
+          title: "What it can and can't reach",
+          detail:
+            "The boundary of a connector: what it sees, what it may change, and what stays invisible to it.",
+        },
+        {
+          title: "Why a connected Claude beats a described one",
+          detail:
+            "Describing a file makes you the summariser, and every mistake in your summary lands in the answer.",
+        },
       ],
       proofGoal: "Pull an answer from your own file a description couldn't give",
       resources: [
@@ -160,8 +227,22 @@ const LEVEL_1: ProgramSeed = {
       title: "Prompting",
       summary:
         "The full 18 techniques across framing, specification, structure, and the iteration loop.",
+      detail:
+        "Eighteen techniques, in four groups, and the groups are the order you apply them in. Framing sets the scene: who's answering, for whom, aiming at what, inside which limits. Specification pins the output down — examples, format, tone, and the material to ground it in. Structure organises the request itself: delimiters, decomposition, thinking out loud. The iteration loop is what you do to the answer you got.\n\n" +
+        "This is the longest stage of the program and the one that pays for the rest. Take one technique at a time onto a real task, notice what changed, then add the next. Reading all eighteen in an evening teaches you the names and none of the instincts.",
       proof:
         "Rebuild a vague prompt using 6+ of the 18 techniques — show the before → after.",
+      proofBrief:
+        "Find a prompt of yours that gave a mediocre answer — a real one from your history, not one written to be bad. Rebuild it using at least six of the eighteen techniques, run both versions, and keep all four artefacts: the old prompt, its answer, the new prompt, its answer.\n\n" +
+        "Name the techniques you used as you go. \"I added a role, two examples and an output format\" is the part that transfers to the next prompt; \"it got better\" isn't.",
+      proofSubmit:
+        "Paste the before prompt, the after prompt, and both answers. List the techniques you applied by name, and add one line on which of them made the biggest difference.",
+      criteria: [
+        "The starting prompt is a real one of yours that underperformed",
+        "Six or more of the eighteen techniques are applied and named",
+        "Both answers are shown, from the same model and effort level",
+        "You say which technique moved the answer most, and why you think so",
+      ],
       day_from: 5,
       day_to: 7,
       hours_low: 6,
@@ -176,6 +257,8 @@ const LEVEL_1: ProgramSeed = {
       goals: [
         {
           title: "Framing — role, goal, audience, constraints",
+          detail:
+            "Who is answering, for whom, aiming at what, inside which limits. Four sentences of scene-setting that decide the shape of everything after them.",
           teach: [
             {
               title: "Role / persona assignment",
@@ -201,6 +284,8 @@ const LEVEL_1: ProgramSeed = {
         },
         {
           title: "Specification — examples, format, tone, grounding",
+          detail:
+            "Pinning the output down. One example is worth a paragraph of description, and a named format is worth an argument about it afterwards.",
           teach: [
             {
               title: "Clear, direct, specific instructions",
@@ -236,6 +321,8 @@ const LEVEL_1: ProgramSeed = {
         },
         {
           title: "Structure — delimiters, decomposition, chain-of-thought",
+          detail:
+            "Organising the request itself, so a long prompt reads as sections rather than one paragraph the model has to untangle before it can start.",
           teach: [
             {
               title: "Delimiters & sections",
@@ -266,6 +353,8 @@ const LEVEL_1: ProgramSeed = {
         },
         {
           title: "The iteration loop — refine, self-critique, steer",
+          detail:
+            "What you do to the answer you got. Most good results are the third version, and steering beats rewriting the prompt from scratch.",
           teach: [
             {
               title: "Progressive refinement (broad → narrow)",
@@ -291,16 +380,42 @@ const LEVEL_1: ProgramSeed = {
       title: "Context",
       summary:
         "The thread has a memory limit — what to put in, what to leave out, and when to start fresh.",
+      detail:
+        "A thread is a window, not a memory. Everything in it — your files, its answers, the three tangents you abandoned — competes for the same space, and once the window fills the earliest material stops carrying weight. This is why a long conversation slowly gets worse at the thing it was good at an hour ago.\n\n" +
+        "The two habits that fix it are unglamorous: put in what the task needs and nothing else, and start fresh when the thread has drifted rather than nursing it along. A clean restart with a short hand-off costs two minutes and usually buys back the sharpness you'd been trying to prompt your way to.",
       proof:
         "Run a thread to its limit, then restart clean with a summary hand-off that loses nothing.",
+      proofBrief:
+        "Take a working thread far enough to feel it degrade — repetition, forgotten constraints, answers drifting off the thing you asked. Then write the hand-off: a short summary carrying the decisions, the constraints and the current state, and nothing else.\n\n" +
+        "Open a fresh thread with that hand-off and continue. The test is that the new thread picks up without you re-explaining anything, and answers at least as well as the old one did at its best.",
+      proofSubmit:
+        "Paste your hand-off summary, plus one line on where the old thread started slipping and one on how the fresh one behaved.",
+      criteria: [
+        "You name the point where the long thread started degrading, and how you noticed",
+        "The hand-off carries decisions, constraints and current state — not a transcript",
+        "The fresh thread continues without re-explaining what was already settled",
+        "You say what you deliberately left out of the hand-off",
+      ],
       day_from: 8,
       day_to: 9,
       hours_low: 4,
       hours_high: 5,
       goals: [
-        "A thread has a memory limit",
-        "Don't dump everything in",
-        "When to start fresh",
+        {
+          title: "A thread has a memory limit",
+          detail:
+            "Everything in the conversation shares one window; when it fills, the earliest material stops pulling its weight.",
+        },
+        {
+          title: "Don't dump everything in",
+          detail:
+            "Pasting the whole folder makes the important part harder to find, for it as much as for you.",
+        },
+        {
+          title: "When to start fresh",
+          detail:
+            "The signs a thread is spent — repetition, forgotten constraints, drift — and the two-minute restart that fixes it.",
+        },
       ],
       proofGoal: "A clean restart with a summary hand-off that loses nothing",
       resources: [
@@ -316,16 +431,42 @@ const LEVEL_1: ProgramSeed = {
       title: "Trust",
       summary:
         "It can be confidently wrong; leading questions get leading answers; checking what actually matters.",
+      detail:
+        "Confidence is a writing style, not evidence. The same fluent, well-organised paragraph comes back whether the underlying claim is solid or invented, which is exactly why a wrong answer slips past — nothing in its tone marks it.\n\n" +
+        "Two habits carry this stage. Ask without loading the question: \"is this a good idea?\" invites agreement, \"what's wrong with this?\" invites work. And verify by consequence, not by paranoia — check the claims a wrong answer would actually cost you something for, and let the rest go. Verification that's too expensive doesn't get done, which is the same as not verifying at all.",
       proof:
         "Catch one confidently-wrong answer, verify it, and correct it with a non-leading follow-up.",
+      proofBrief:
+        "Go looking in territory where it's weakest — specific numbers, recent events, niche APIs, anything with an exact citation — until you get an answer that's confidently wrong. Verify it against a real source, then correct it with a follow-up that doesn't tell it the answer.\n\n" +
+        "The follow-up is the part that matters. \"That's wrong, it's actually X\" teaches you nothing about catching the next one; \"what's your source for that figure?\" shows you how the mistake behaves under pressure.",
+      proofSubmit:
+        "Paste the wrong answer, the source you checked it against, your non-leading follow-up, and what it said next. Add one line on what tipped you off.",
+      criteria: [
+        "The wrong answer is quoted as it came, not paraphrased",
+        "You checked it against a real source, and name that source",
+        "The follow-up doesn't hand over the right answer",
+        "You say what made you suspicious in the first place",
+      ],
       day_from: 10,
       day_to: 11,
       hours_low: 4,
       hours_high: 5,
       goals: [
-        "It can be confidently wrong",
-        "Leading questions get leading answers",
-        "Check what actually matters",
+        {
+          title: "It can be confidently wrong",
+          detail:
+            "Fluency and correctness are unrelated. The tone of an answer tells you nothing about whether it holds.",
+        },
+        {
+          title: "Leading questions get leading answers",
+          detail:
+            "\"Is this a good idea?\" invites agreement. \"What's wrong with this?\" invites work.",
+        },
+        {
+          title: "Check what actually matters",
+          detail:
+            "Verify by consequence: the claims that would cost you if they were wrong, not every sentence.",
+        },
       ],
       proofGoal: "One confidently-wrong answer caught, verified, corrected",
       resources: [
@@ -348,18 +489,57 @@ const LEVEL_1: ProgramSeed = {
       kind: "capstone",
       summary:
         "Right surface and model, connected to your data, well-prompted, and verified — a result you'd actually rely on.",
+      detail:
+        "Everything above, on one task, in order. Route it, connect it, prompt it properly, keep the thread clean, verify the result — then actually use the thing. The five stages were separated so they could be learned; this is what they look like when they run together.\n\n" +
+        "Pick a task with a real consequence. Something you'd have had to do anyway this fortnight, where a bad result costs you an afternoon. A demo task rehearses the motions and teaches you nothing about whether you trust the output, and trust is the whole point of the program.",
       proof: "A real task completed end-to-end, and trusted.",
+      proofBrief:
+        "Run one real task from start to finish: the routing call and its reason, the data connected rather than described, a prompt built out of the techniques, context managed as you go, and a verification pass before you rely on it. Then put the result to use.\n\n" +
+        "Write it up as a walkthrough, not a summary. Where it went wrong and what you did about it is the most useful part — nobody's first pass is clean, and a write-up with no correction in it usually means the task was too easy to prove anything.",
+      proofSubmit:
+        "Hand in the walkthrough: the task, the routing and why, what you connected, the final prompt, where you restarted or changed course, how you verified the result, and where the finished thing ended up. Attach the output if it's a file.",
+      criteria: [
+        "The task is real, with a consequence if the result is wrong",
+        "Surface, model and effort are named, with the reason for each",
+        "Claude worked against connected data, not a pasted description",
+        "The final prompt is included and uses six or more techniques",
+        "You show one verification you ran, and what it found",
+        "The result was actually used — you say where it went",
+      ],
       day_from: 12,
       day_to: 14,
       hours_low: 5,
       hours_high: 6,
       goals: [
-        "Pick a real task that actually matters to you",
-        "Choose the right surface + model + effort (and say why)",
-        "Connect Claude to the actual data — not pasted descriptions",
-        "Prompt it with 6+ of the 18 techniques",
-        "Manage context — start fresh if the thread bloats",
-        "Verify the result before you rely on it",
+        {
+          title: "Pick a real task that actually matters to you",
+          detail:
+            "Something you'd have to do this fortnight anyway, where a bad result costs you an afternoon.",
+        },
+        {
+          title: "Choose the right surface + model + effort (and say why)",
+          detail: "The Landscape decision, made once and written down before you start.",
+        },
+        {
+          title: "Connect Claude to the actual data — not pasted descriptions",
+          detail:
+            "Whatever the task reads from, it reads directly. No summarising on the way in.",
+        },
+        {
+          title: "Prompt it with 6+ of the 18 techniques",
+          detail:
+            "Framing and specification at minimum; add structure if the task has parts.",
+        },
+        {
+          title: "Manage context — start fresh if the thread bloats",
+          detail:
+            "Watch for the drift, and hand off to a clean thread rather than pushing through it.",
+        },
+        {
+          title: "Verify the result before you rely on it",
+          detail:
+            "One check on the claim that would hurt most if it were wrong. Cheap enough that you actually run it.",
+        },
       ],
       proofGoal: "Put the finished result to real use",
     },
@@ -432,17 +612,47 @@ const LEVEL_2: ProgramSeed = {
       title: "Landscape",
       summary:
         "Surface by task shape, model × effort as a cost/intelligence matrix, token metering, authoring your own skills, and plugins.",
+      detail:
+        "Level 1 picked a surface per task. This picks by task shape: conversational, file-shaped, or repo-shaped, which is a rule you can apply without thinking about it a second time. Model × effort becomes a matrix rather than a preference — cost on one axis, reasoning depth on the other, and most work sits in the cheap corner once you've noticed which corner it's in.\n\n" +
+        "Token metering is the unglamorous half. Knowing what actually drains a plan — long threads, re-pasted files, high effort on trivia — is what lets you spend on the tasks that deserve it. Then you write it all down as a skill: your routing rule, encoded once, applied by default.",
       proof:
         "Author one working Skill and a model × effort routing rule you'll actually reuse.",
+      proofBrief:
+        "Write one skill that does a job you actually repeat, and one routing rule that decides model and effort by task shape. Both have to survive contact with real work, so use them on at least two different tasks before handing in.\n\n" +
+        "A skill that only fires on the example you wrote it for is a prompt with extra steps. The parameterised part — the bit that changes between runs — is what makes it a skill.",
+      proofSubmit:
+        "Paste the skill (or attach the file) and the routing rule as you wrote it down, plus the two tasks you used them on and what came back.",
+      criteria: [
+        "The skill covers a job you genuinely repeat, not a demo",
+        "It's parameterised — the varying part is an input, not hardcoded",
+        "The routing rule decides model AND effort from task shape",
+        "Both were used on two different real tasks, with results shown",
+      ],
       day_from: 1,
       day_to: 2,
       hours_low: 4,
       hours_high: 5,
       goals: [
-        "Choosing surface by task shape",
-        "Model × effort as a cost/intelligence matrix",
-        "Token metering — what actually drains a plan",
-        "Authoring your own skills · plugins",
+        {
+          title: "Choosing surface by task shape",
+          detail:
+            "Conversational, file-shaped, repo-shaped — a rule you apply without re-deciding every time.",
+        },
+        {
+          title: "Model × effort as a cost/intelligence matrix",
+          detail:
+            "Two axes, four corners. Most work sits in the cheap one once you can see which corner it's in.",
+        },
+        {
+          title: "Token metering — what actually drains a plan",
+          detail:
+            "Long threads, re-pasted files, high effort on trivia. Knowing the drains is what funds the tasks worth spending on.",
+        },
+        {
+          title: "Authoring your own skills · plugins",
+          detail:
+            "Turning a working prompt into a reusable, parameterised instruction — and knowing when a plugin is the better home for it.",
+        },
       ],
       proofGoal: "One working Skill + a model × effort routing rule",
       resources: [
@@ -464,17 +674,49 @@ const LEVEL_2: ProgramSeed = {
       title: "Tools, MCP & agents",
       summary:
         "Protocol vs connector, skills vs MCP vs plugins, the agent loop, agent engineering, and prompt injection.",
+      detail:
+        "An agent is a loop: read the state, pick a tool, run it, look at what came back, decide again. Everything that makes agents useful and everything that makes them dangerous is in that loop — it keeps going without you, and each turn can touch something real.\n\n" +
+        "So the engineering is mostly about limits. What is this allowed to reach, what must it stop and ask about, and how much damage can one bad turn do before anyone notices. Blast radius is the question to ask first, not last.\n\n" +
+        "Prompt injection is where those limits get tested by someone else's text. Anything your agent reads — a web page, an issue, an email — is untrusted input that may contain instructions, and an agent that can't tell content from commands will follow both.",
       proof:
         "Stand up one connector/agent with a permission gate, and name its prompt-injection risk.",
+      proofBrief:
+        "Stand up one agent or connector that does something real, with an explicit permission gate: one action it may not take without asking you. Then write its injection risk down — the specific untrusted text it reads, and what an attacker could get it to do through that text.\n\n" +
+        "\"It might get prompt injected\" isn't an answer. Name the input, name the action, and say what your gate does about it.",
+      proofSubmit:
+        "Describe what you stood up and paste its configuration or key prompt. Then the gate: which action needs approval and how it's enforced. Then the injection path, in one paragraph: input → what an attacker writes → what it would try to make the agent do → what stops it.",
+      criteria: [
+        "The agent or connector runs and does something real",
+        "One named action is gated on your approval, not on good intentions",
+        "The injection path is specific: a named input and a named action",
+        "You state the blast radius — the worst one bad turn could do",
+      ],
       day_from: 3,
       day_to: 5,
       hours_low: 6,
       hours_high: 7,
       goals: [
-        "Protocol vs connector packaging · skills vs MCP vs plugins",
-        "Anatomy of an agent loop",
-        "Agent engineering — scoping, permissions, verification gates, blast radius",
-        "Prompt injection",
+        {
+          title: "Protocol vs connector packaging · skills vs MCP vs plugins",
+          detail:
+            "Which of these is a protocol, which is packaging, and which one you reach for when you want a tool available everywhere.",
+        },
+        {
+          title: "Anatomy of an agent loop",
+          detail:
+            "Read state, pick a tool, run it, read the result, decide again. Everything useful and everything dangerous lives in that loop.",
+        },
+        {
+          title:
+            "Agent engineering — scoping, permissions, verification gates, blast radius",
+          detail:
+            "What it may reach, what it must ask about, and how much one bad turn can break before anyone notices.",
+        },
+        {
+          title: "Prompt injection",
+          detail:
+            "Anything it reads is untrusted input that may contain instructions. An agent that can't tell content from commands follows both.",
+        },
       ],
       proofGoal: "A connector/agent with a permission gate; injection risk named",
       resources: [
@@ -502,7 +744,21 @@ const LEVEL_2: ProgramSeed = {
       title: "Prompting",
       summary:
         "Prompt as spec, testing repeatably, structured outputs, system vs turn prompt, reusable templates — 13 techniques.",
+      detail:
+        "Level 1's prompting made one answer better. This makes the next hundred answers the same. The shift is from request to spec: a prompt that states inputs, output shape and the conditions for correctness is something you can test, and a prompt you can test is something you can improve without guessing.\n\n" +
+        "That's what the eval set is for. Five cases that define \"correct\" for your job — including the awkward ones — turn \"it seems better\" into a number that moves. Structured output makes the checking mechanical, and versioning means an improvement can't silently break the case you fixed last week.",
       proof: "Write a prompt-as-spec + a 5-case eval; run it 3× and show the output holds.",
+      proofBrief:
+        "Take a job you do repeatedly and write it as a spec: inputs named, output shape declared, correctness stated. Then build a five-case eval set — and make at least two of the cases awkward, because a set of easy cases only proves the prompt handles easy cases.\n\n" +
+        "Run all five, three times over. Note what varied between runs. Something usually does; the interesting part of this stage is what you change in the spec to make it stop.",
+      proofSubmit:
+        "Paste the spec-prompt and the five cases with their expected output. Then the results table — 5 cases × 3 runs — and one line on anything that varied and what you changed about it.",
+      criteria: [
+        "The prompt reads as a spec: named inputs, declared output shape, stated correctness",
+        "Five cases, at least two of them awkward or edge-shaped",
+        "Every case ran three times, and the results are shown",
+        "Variation between runs is either explained or fixed, and you say which",
+      ],
       day_from: 6,
       day_to: 8,
       hours_low: 6,
@@ -513,6 +769,8 @@ const LEVEL_2: ProgramSeed = {
       goals: [
         {
           title: "Prompt as spec, not request · reusable templates",
+          detail:
+            "Inputs named, output shape declared, correctness stated — then parameterised, so the same spec runs on next week's inputs.",
           teach: [
             {
               title: "Prompt-as-spec (not a casual request)",
@@ -538,6 +796,8 @@ const LEVEL_2: ProgramSeed = {
         },
         {
           title: "Testing repeatably, not once · structured outputs",
+          detail:
+            "A schema turns checking into something a machine can do, which is the difference between testing every run and testing the first one.",
           teach: [
             {
               title: "Structured outputs (JSON / schema)",
@@ -553,6 +813,8 @@ const LEVEL_2: ProgramSeed = {
         },
         {
           title: "System vs turn prompt · tool-use prompting",
+          detail:
+            "What belongs in the standing instructions versus this one message — and how a tool description decides whether the tool gets used well.",
           teach: [
             {
               title: "System prompt vs turn prompt",
@@ -573,6 +835,8 @@ const LEVEL_2: ProgramSeed = {
         },
         {
           title: "Evaluation, golden sets, LLM-as-judge, versioning",
+          detail:
+            "Cases that define correct, kept as a set, run again after every change — so \"improved\" stops being an opinion.",
           teach: [
             {
               title: "Prompt evaluation (across many inputs)",
@@ -603,15 +867,41 @@ const LEVEL_2: ProgramSeed = {
       title: "Context orchestration",
       summary:
         "Allocating the budget, retrieval over paste, caching, persistent context, subagents, and restart discipline.",
+      detail:
+        "Context is a budget you allocate, not a box you fill. Retrieval beats pasting everything because it puts the relevant part in front of the model instead of burying it in the irrelevant nine tenths. Caching pays for the parts that repeat. Persistent context — a project, a memory, a CLAUDE.md — holds the things that are true every time, so they stop costing a paragraph per conversation.\n\n" +
+        "Subagents are the structural move: give the messy exploratory work its own fresh window and let it report back a conclusion, so your main thread stays clean. Restart discipline is the same instinct applied by hand.",
       proof: "Re-architect one bloated task with retrieval + caching + a subagent.",
+      proofBrief:
+        "Find a task of yours that's outgrown its thread — the one where you paste a wall of material every time, or where the conversation gets vague halfway through. Re-architect it with all three: retrieval instead of paste-everything, caching on whatever repeats, and a subagent for the part that makes the mess.\n\n" +
+        "Measure something. Tokens, wall-clock time, number of turns to a good answer — any before-and-after number that isn't a feeling.",
+      proofSubmit:
+        "Describe the before and after architecture, and include the number you measured on both sides. Say which of the three changes did most of the work.",
+      criteria: [
+        "The starting task is a real one that was genuinely bloated",
+        "All three appear: retrieval, caching, and a subagent with its own window",
+        "A before/after number is given — tokens, turns, or time",
+        "You say which change carried the improvement, and which barely mattered",
+      ],
       day_from: 9,
       day_to: 10,
       hours_low: 4,
       hours_high: 5,
       goals: [
-        "Allocating the budget · retrieval over paste-everything",
-        "Caching · persistent context (projects, memory, CLAUDE.md)",
-        "Subagents & fresh context · restart discipline",
+        {
+          title: "Allocating the budget · retrieval over paste-everything",
+          detail:
+            "Put the relevant part in front of the model instead of burying it in the irrelevant nine tenths.",
+        },
+        {
+          title: "Caching · persistent context (projects, memory, CLAUDE.md)",
+          detail:
+            "The things that are true every time belong somewhere durable, not re-explained per conversation.",
+        },
+        {
+          title: "Subagents & fresh context · restart discipline",
+          detail:
+            "Hand the messy exploration its own window and take back the conclusion, so the main thread stays clean.",
+        },
       ],
       proofGoal: "A bloated task re-architected: retrieval + caching + a subagent",
       resources: [
@@ -627,16 +917,47 @@ const LEVEL_2: ProgramSeed = {
       title: "Failure modes",
       summary:
         "Where hallucination clusters, calibration, anchoring, automation bias, and verification cheap enough to actually do.",
+      detail:
+        "Failures aren't evenly spread. They cluster: exact figures, recent events, obscure APIs, anything with a citation attached. Knowing the clusters tells you where to spend your checking, which is the only kind of verification that survives a busy week.\n\n" +
+        "Two of the four failures here aren't the model's. Anchoring is it defending its own earlier answer instead of reconsidering; automation bias is you waving through a fluent paragraph because the last twenty were fine. The second one is the expensive failure, and the only fix is a gate that runs whether or not you're feeling careful.\n\n" +
+        "Cheap is the operative word. A check that takes thirty seconds gets run every time; one that takes twenty minutes gets skipped exactly when you're busiest, which is when the mistakes happen.",
       proof: "Add a cheap verification gate to one workflow and show it catching a real error.",
+      proofBrief:
+        "Pick a workflow you already run and add one verification gate to it — cheap enough that you'd never skip it. A schema check, a second pass with a different framing, a lookup against the source of truth, a rule that refuses an answer missing its citation.\n\n" +
+        "Then run it until it catches something real. A gate that has never fired is a gate you're hoping about; the hand-in is the catch, not the design.",
+      proofSubmit:
+        "Describe the workflow, the gate and what it costs to run. Then paste the real error it caught — the bad output, what the gate did, and what would have happened downstream if it hadn't.",
+      criteria: [
+        "The workflow is one you actually run, not a demonstration",
+        "The gate's cost is stated, and it's small enough to run every time",
+        "It caught a real error, quoted as it happened",
+        "You say what the error would have cost if it had gone through",
+      ],
       day_from: 11,
       day_to: 12,
       hours_low: 4,
       hours_high: 5,
       goals: [
-        "Where hallucination clusters · calibration",
-        "Anchoring on its own earlier output",
-        "Automation bias in the human",
-        "Designing verification cheap enough to actually do",
+        {
+          title: "Where hallucination clusters · calibration",
+          detail:
+            "Exact figures, recent events, obscure APIs, anything with a citation. Spend your checking where the failures live.",
+        },
+        {
+          title: "Anchoring on its own earlier output",
+          detail:
+            "Once it has committed to an answer it will defend it. A fresh window asks the question without the baggage.",
+        },
+        {
+          title: "Automation bias in the human",
+          detail:
+            "Twenty good answers in a row is exactly what makes the twenty-first go through unread. This one is your failure, not its.",
+        },
+        {
+          title: "Designing verification cheap enough to actually do",
+          detail:
+            "Thirty seconds gets run every time. Twenty minutes gets skipped in the week you most needed it.",
+        },
       ],
       proofGoal: "A cheap verification gate catching a real error",
       resources: [
@@ -659,18 +980,58 @@ const LEVEL_2: ProgramSeed = {
       kind: "capstone",
       summary:
         "A skill, template, or agent with an eval that proves identical results across runs — not a one-off demo.",
+      detail:
+        "Everything above, assembled into one thing you'll keep using: a skill, a template or an agent, parameterised, evaluated, gated and versioned. The demo version of this is easy and worth nothing. The difference is the eval — five cases, run again after every change, passing on inputs the system hasn't seen.\n\n" +
+        "Pick a job you genuinely repeat: the weekly report, the triage pass, the review checklist. If you can't name when you'll run it next, it isn't a system, it's an exercise — and it will rot before you find out whether it worked.",
       proof: "A reusable system shipped, with an eval proving it works twice.",
+      proofBrief:
+        "Ship one reusable system for a job you actually repeat. It has to be parameterised, carry a five-case eval that defines correct, pass that eval on two separate runs with different inputs, include one cheap verification gate, and be versioned so the next improvement can't silently break it.\n\n" +
+        "\"Works twice\" is literal. One clean run is a demo; the second run, on inputs you didn't design it around, is the claim this whole level is about.",
+      proofSubmit:
+        "Attach or paste the system itself, the five eval cases, and the results of both runs side by side. Then: what the verification gate checks, and how you version it.",
+      criteria: [
+        "The job is one you repeat, and you can say when it runs next",
+        "The system is parameterised — inputs vary, the system doesn't",
+        "Five eval cases define correct, and they're written down",
+        "Two runs on different inputs both pass, with results shown",
+        "One cheap verification gate is in place, and you say what it checks",
+        "Versioning is real: you can point at what would change and what wouldn't",
+      ],
       day_from: 13,
       day_to: 14,
       hours_low: 5,
       hours_high: 6,
       goals: [
-        "Pick a repeatable job you actually do",
-        "Build it as a skill, template, or agent (parameterized)",
-        "Write a 5-case eval set that defines \"correct\"",
-        "Run it 3× — same inputs, same quality",
-        "Add one cheap verification gate",
-        "Version it so you can improve without breaking it",
+        {
+          title: "Pick a repeatable job you actually do",
+          detail:
+            "The weekly report, the triage pass, the review checklist. If you can't say when it runs next, pick another.",
+        },
+        {
+          title: "Build it as a skill, template, or agent (parameterized)",
+          detail:
+            "The varying part is an input. Anything hardcoded is a thing you'll be editing by hand forever.",
+        },
+        {
+          title: 'Write a 5-case eval set that defines "correct"',
+          detail:
+            "Including the awkward cases. Five easy ones only prove it handles easy ones.",
+        },
+        {
+          title: "Run it 3× — same inputs, same quality",
+          detail:
+            "Variation between identical runs is a spec problem. Find it now, not in the week you rely on it.",
+        },
+        {
+          title: "Add one cheap verification gate",
+          detail:
+            "Small enough to run on every invocation, aimed at the failure you'd least like to ship.",
+        },
+        {
+          title: "Version it so you can improve without breaking it",
+          detail:
+            "The eval is what makes versioning meaningful: change, re-run, see what moved.",
+        },
       ],
       proofGoal: "Ship it, and prove the eval passes twice",
     },
@@ -885,7 +1246,10 @@ async function seedProgram(
       sprint_id: sprintId,
       title: stage.title,
       summary: stage.summary ?? null,
+      detail: stage.detail ?? null,
       proof: stage.proof ?? null,
+      proof_brief: stage.proofBrief ?? null,
+      proof_submit: stage.proofSubmit ?? null,
       kind: stage.kind ?? "stage",
       day_from: stage.day_from ?? null,
       day_to: stage.day_to ?? null,
@@ -901,6 +1265,7 @@ async function seedProgram(
     sprint_id: string;
     stage_id: string;
     title: string;
+    detail: string | null;
     is_proof: boolean;
     sort_order: number;
   }[] = [];
@@ -909,10 +1274,12 @@ async function seedProgram(
     const stageId = stageIds.get(stage.title);
     if (!stageId) continue;
     for (const entry of stage.goals) {
+      const goal = asGoal(entry);
       goalRows.push({
         sprint_id: sprintId,
         stage_id: stageId,
-        title: asGoal(entry).title,
+        title: goal.title,
+        detail: goal.detail ?? null,
         is_proof: false,
         sort_order: order++,
       });
@@ -922,6 +1289,10 @@ async function seedProgram(
         sprint_id: sprintId,
         stage_id: stageId,
         title: stage.proofGoal,
+        // The brief lives on the stage (proof_brief / criteria), so the proof
+        // goal itself stays a bare line — two places for the same paragraph is
+        // one place too many.
+        detail: null,
         is_proof: true,
         sort_order: order++,
       });
@@ -1000,6 +1371,33 @@ async function seedProgram(
 
   await reconcile(supabase, "sprint_resources", sprintId, resourceRows);
 
+  // Acceptance criteria: replaced wholesale per stage. Like practices, they
+  // carry no per-person state — nobody ticks them — so there's nothing for
+  // `reconcile` to protect, and matching them by title would break the moment
+  // two stages phrased a condition the same way.
+  const stageIdList = [...stageIds.values()];
+  if (stageIdList.length > 0) {
+    const { error: wipe } = await supabase
+      .from("sprint_proof_criteria")
+      .delete()
+      .in("stage_id", stageIdList);
+    if (wipe) throw new Error(`Clearing criteria for "${program.title}": ${wipe.message}`);
+  }
+
+  const criteriaRows = program.stages.flatMap((stage) => {
+    const stageId = stageIds.get(stage.title);
+    if (!stageId) return [];
+    return (stage.criteria ?? []).map((body, index) => ({
+      stage_id: stageId,
+      body,
+      sort_order: index,
+    }));
+  });
+  if (criteriaRows.length > 0) {
+    const { error } = await supabase.from("sprint_proof_criteria").insert(criteriaRows);
+    if (error) throw new Error(`Criteria for "${program.title}": ${error.message}`);
+  }
+
   // Practices carry no per-person state, so replacing them wholesale costs
   // nothing and keeps the reconcile helper to the three tables that do.
   const { error: practiceWipe } = await supabase
@@ -1051,6 +1449,7 @@ async function seedProgram(
     goals: goalRows.length,
     resources: resourceRows.length,
     practices: practiceRows.length,
+    criteria: criteriaRows.length,
   };
 }
 
@@ -1090,7 +1489,8 @@ async function main() {
     console.log(
       `${result.created ? "Created" : "Refreshed"} "${program.title}" — ` +
         `${result.stages} stages, ${result.goals} goals, ${result.resources} resources, ` +
-        `${result.practices} practice blocks (${result.id})`
+        `${result.practices} practice blocks, ${result.criteria} proof conditions ` +
+        `(${result.id})`
     );
   }
   console.log(`\nBoth programs start ${startsOn} and are open to join.`);

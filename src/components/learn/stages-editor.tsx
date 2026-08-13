@@ -7,6 +7,8 @@ import {
   removeStage,
   reorderStages,
   setGoalStage,
+  setStageCriteria,
+  updateGoal,
   updateStage,
   type StageDraft,
 } from "@/lib/actions/learn";
@@ -16,7 +18,7 @@ import { Input, Textarea } from "@/components/ui/input";
 import { Field } from "@/components/ui/field";
 import { Dropdown } from "@/components/ui/dropdown";
 import { cn } from "@/lib/utils";
-import type { SprintGoal, SprintStage } from "@/lib/types";
+import type { SprintGoal, SprintProofCriterion, SprintStage } from "@/lib/types";
 
 const num = (value: string) => {
   const n = Number(value);
@@ -35,10 +37,13 @@ export function StagesEditor({
   sprintId,
   stages,
   goals,
+  criteria,
 }: {
   sprintId: string;
   stages: SprintStage[];
   goals: SprintGoal[];
+  /** Every stage's acceptance conditions, in order — edited per stage below. */
+  criteria: SprintProofCriterion[];
 }) {
   const { pending, run } = useAction();
   const [openId, setOpenId] = useState<string | null>(null);
@@ -122,9 +127,15 @@ export function StagesEditor({
               {isOpen && (
                 <StageFields
                   stage={stage}
+                  criteria={criteria.filter((c) => c.stage_id === stage.id)}
                   onSave={(draft) =>
                     run(() => updateStage(stage.id, sprintId, draft), {
                       success: "Stage saved.",
+                    })
+                  }
+                  onSaveCriteria={(lines) =>
+                    run(() => setStageCriteria(stage.id, sprintId, lines), {
+                      success: "Acceptance saved.",
                     })
                   }
                   pending={pending}
@@ -153,49 +164,25 @@ export function StagesEditor({
           </p>
           <ul className="grid gap-1.5">
             {goals.map((goal) => (
-              <li key={goal.id} className="flex flex-wrap items-center gap-2">
-                <span
-                  className={cn(
-                    "min-w-0 flex-1 truncate text-[13px]",
-                    goal.stage_id ? "text-ink" : "text-muted"
-                  )}
-                >
-                  {goal.title}
-                </span>
-                <Dropdown
-                  id={`goal-stage-${goal.id}`}
-                  value={goal.stage_id ?? ""}
-                  disabled={pending}
-                  className="w-40 shrink-0"
-                  options={[
-                    { value: "", label: "Unstaged" },
-                    ...stages.map((s) => ({ value: s.id, label: s.title })),
-                  ]}
-                  onChange={(value) =>
-                    run(() =>
-                      setGoalStage(goal.id, sprintId, value || null, goal.is_proof)
-                    )
-                  }
-                />
-                <Button
-                  type="button"
-                  size="sm"
-                  variant={goal.is_proof ? "primary" : "ghost"}
-                  disabled={pending || !goal.stage_id}
-                  title={
-                    goal.stage_id
-                      ? "Mark this goal as the stage's proof"
-                      : "File it into a stage first"
-                  }
-                  onClick={() =>
-                    run(() =>
-                      setGoalStage(goal.id, sprintId, goal.stage_id, !goal.is_proof)
-                    )
-                  }
-                >
-                  Proof
-                </Button>
-              </li>
+              <GoalStageRow
+                key={goal.id}
+                goal={goal}
+                stages={stages}
+                pending={pending}
+                onMove={(stageId) =>
+                  run(() => setGoalStage(goal.id, sprintId, stageId, goal.is_proof))
+                }
+                onProof={() =>
+                  run(() =>
+                    setGoalStage(goal.id, sprintId, goal.stage_id, !goal.is_proof)
+                  )
+                }
+                onDetail={(detail) =>
+                  run(() => updateGoal(goal.id, sprintId, goal.title, detail), {
+                    success: "Goal saved.",
+                  })
+                }
+              />
             ))}
           </ul>
           {unstaged.length > 0 && (
@@ -210,13 +197,117 @@ export function StagesEditor({
   );
 }
 
+/**
+ * One goal's three admin decisions: which stage it sits in, whether it's that
+ * stage's proof, and the sentence under its title. The sentence is folded away
+ * behind a toggle — most goals don't have one, and a column of open textareas
+ * would bury the two decisions people actually come here to make.
+ */
+function GoalStageRow({
+  goal,
+  stages,
+  pending,
+  onMove,
+  onProof,
+  onDetail,
+}: {
+  goal: SprintGoal;
+  stages: SprintStage[];
+  pending: boolean;
+  onMove: (stageId: string | null) => void;
+  onProof: () => void;
+  onDetail: (detail: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [detail, setDetail] = useState(goal.detail ?? "");
+
+  return (
+    <li className="grid gap-1.5">
+      <div className="flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          onClick={() => setOpen(!open)}
+          aria-expanded={open}
+          title={goal.detail ? "Edit the line under this goal" : "Add a line under this goal"}
+          className={cn(
+            "min-w-0 flex-1 truncate rounded text-left text-[13px] hover:text-primary-dim",
+            goal.stage_id ? "text-ink" : "text-muted"
+          )}
+        >
+          {goal.title}
+          {goal.detail && <span className="ml-1.5 text-xs text-faint">· detailed</span>}
+        </button>
+        <Dropdown
+          id={`goal-stage-${goal.id}`}
+          value={goal.stage_id ?? ""}
+          disabled={pending}
+          className="w-40 shrink-0"
+          options={[
+            { value: "", label: "Unstaged" },
+            ...stages.map((s) => ({ value: s.id, label: s.title })),
+          ]}
+          onChange={(value) => onMove(value || null)}
+        />
+        <Button
+          type="button"
+          size="sm"
+          variant={goal.is_proof ? "primary" : "ghost"}
+          disabled={pending || !goal.stage_id}
+          title={
+            goal.stage_id
+              ? "Mark this goal as the stage's proof"
+              : "File it into a stage first"
+          }
+          onClick={onProof}
+        >
+          Proof
+        </Button>
+      </div>
+
+      {open && (
+        <div className="grid gap-1.5 pl-1">
+          <Textarea
+            value={detail}
+            onChange={(event) => setDetail(event.target.value)}
+            rows={2}
+            maxLength={600}
+            aria-label={`Detail for ${goal.title}`}
+            placeholder="One sentence saying what this goal actually means."
+          />
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              disabled={pending || detail === (goal.detail ?? "")}
+              onClick={() => {
+                onDetail(detail);
+                setOpen(false);
+              }}
+            >
+              Save detail
+            </Button>
+            <Button type="button" size="sm" variant="ghost" onClick={() => setOpen(false)}>
+              Cancel
+            </Button>
+          </div>
+        </div>
+      )}
+    </li>
+  );
+}
+
 function StageFields({
   stage,
+  criteria,
   onSave,
+  onSaveCriteria,
   pending,
 }: {
   stage: SprintStage;
+  criteria: SprintProofCriterion[];
   onSave: (draft: Partial<StageDraft>) => void;
+  onSaveCriteria: (lines: string[]) => void;
   pending: boolean;
 }) {
   return (
@@ -227,13 +318,19 @@ function StageFields({
         onSave({
           title: String(data.get("title") ?? ""),
           summary: String(data.get("summary") ?? ""),
+          detail: String(data.get("detail") ?? ""),
           proof: String(data.get("proof") ?? ""),
+          proof_brief: String(data.get("proof_brief") ?? ""),
+          proof_submit: String(data.get("proof_submit") ?? ""),
           kind: data.get("kind") === "capstone" ? "capstone" : "stage",
           day_from: num(String(data.get("day_from") ?? "")),
           day_to: num(String(data.get("day_to") ?? "")),
           hours_low: num(String(data.get("hours_low") ?? "")),
           hours_high: num(String(data.get("hours_high") ?? "")),
         });
+        // The conditions live in their own table, so they save alongside rather
+        // than inside the stage row — one Save button either way.
+        onSaveCriteria(String(data.get("criteria") ?? "").split("\n"));
       }}
       className="grid gap-3 border-t border-line px-3 py-3"
     >
@@ -245,7 +342,11 @@ function StageFields({
           defaultValue={stage.title}
         />
       </Field>
-      <Field label="Summary" htmlFor={`stage-summary-${stage.id}`}>
+      <Field
+        label="Summary"
+        htmlFor={`stage-summary-${stage.id}`}
+        hint="One line, shown on the closed card."
+      >
         <Textarea
           id={`stage-summary-${stage.id}`}
           name="summary"
@@ -255,9 +356,22 @@ function StageFields({
         />
       </Field>
       <Field
+        label="Detail"
+        htmlFor={`stage-detail-${stage.id}`}
+        hint="The long version, once the stage is open. Blank line = new paragraph."
+      >
+        <Textarea
+          id={`stage-detail-${stage.id}`}
+          name="detail"
+          rows={5}
+          maxLength={4000}
+          defaultValue={stage.detail ?? ""}
+        />
+      </Field>
+      <Field
         label="Proof"
         htmlFor={`stage-proof-${stage.id}`}
-        hint="What clearing this stage looks like."
+        hint="The gate in one line — what the milestone list shows."
       >
         <Textarea
           id={`stage-proof-${stage.id}`}
@@ -265,6 +379,47 @@ function StageFields({
           rows={2}
           maxLength={400}
           defaultValue={stage.proof ?? ""}
+        />
+      </Field>
+      <Field
+        label="Proof brief"
+        htmlFor={`stage-brief-${stage.id}`}
+        hint="The same gate at length: what to actually do."
+      >
+        <Textarea
+          id={`stage-brief-${stage.id}`}
+          name="proof_brief"
+          rows={4}
+          maxLength={2000}
+          defaultValue={stage.proof_brief ?? ""}
+        />
+      </Field>
+      <Field
+        label="Accepted when"
+        htmlFor={`stage-criteria-${stage.id}`}
+        hint="One condition per line. These are what a hand-in is read against."
+      >
+        <Textarea
+          id={`stage-criteria-${stage.id}`}
+          name="criteria"
+          rows={4}
+          placeholder={
+            "All three tasks name a surface, a model and an effort level\nEach choice has a one-line reason\nAt least one routes away from the obvious default"
+          }
+          defaultValue={criteria.map((c) => c.body).join("\n")}
+        />
+      </Field>
+      <Field
+        label="Hand in"
+        htmlFor={`stage-submit-${stage.id}`}
+        hint="What to send, in the imperative. Sits above the box."
+      >
+        <Textarea
+          id={`stage-submit-${stage.id}`}
+          name="proof_submit"
+          rows={2}
+          maxLength={600}
+          defaultValue={stage.proof_submit ?? ""}
         />
       </Field>
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">

@@ -50,8 +50,13 @@ export function buildStageViews(
   const push = (stage: SprintStage | null, stageGoals: SprintGoal[]) => {
     // An empty stage still renders (an admin may have just created it), but it
     // is never "cleared" — clearing nothing would light the rail for free.
-    const proof = stageGoals.find((g) => g.is_proof) ?? null;
-    const plain = stageGoals.filter((g) => !g.is_proof);
+    //
+    // A proof only exists inside a stage: it's handed in against that stage
+    // (0061), and a stage-less one would render a hand-in box with nowhere to
+    // file the result. In the unstaged block such a goal stays an ordinary
+    // ticked line, which is what it was before it was flagged.
+    const proof = stage ? (stageGoals.find((g) => g.is_proof) ?? null) : null;
+    const plain = stageGoals.filter((g) => g !== proof);
     const total = stageGoals.length;
     const doneCount = stageGoals.filter((g) => isDone(g.id)).length;
     views.push({
@@ -157,44 +162,43 @@ export function buildTechniques(
 
 /* --------------------------------------------------------------- milestones */
 
-/** One stage's gate, as a dated line you either have or haven't cleared. */
+/** One stage's gate, as a dated stop you either have or haven't cleared. */
 export type Milestone = {
-  /** The stage id, so the row can link back to the stage that owns it. */
+  /** The stage id (or "unstaged"), so the stop links back to its block. */
   id: string;
-  /** The day it's due — the stage's last day. Null when the stage is undated. */
-  day: number | null;
+  /** "day 14" or "days 5–7". Null when the stage is undated. */
+  day: string | null;
   title: string;
-  proof: string;
+  /** What clearing it takes. Null when the stage states no proof. */
+  proof: string | null;
   done: boolean;
+  /** The stage you're on: the first one not cleared. */
+  current: boolean;
   capstone: boolean;
 };
 
 /**
  * The milestone list is derived, never stored: it's each stage's proof, dated
- * by that stage's last day. A stage with a proof goal reports that goal's tick;
+ * by that stage's own days. A stage with a proof goal reports that goal's tick;
  * a stage with only prose proof falls back to "the whole stage is cleared",
  * which is the same claim by a longer route.
+ *
+ * Every stage gets a stop, proof or not. These stops are the page's top nav as
+ * well as its scorecard, and an index that skipped a stage would strand it.
  */
 export function buildMilestones(
   views: StageView[],
   isDone: (goalId: string) => boolean
 ): Milestone[] {
-  const out: Milestone[] = [];
-  for (const view of views) {
-    const { stage, proof } = view;
-    if (!stage) continue;
-    const text = proof?.title ?? stage.proof;
-    if (!text) continue;
-    out.push({
-      id: stage.id,
-      day: stage.day_to ?? stage.day_from,
-      title: stage.title,
-      proof: text,
-      done: proof ? isDone(proof.id) : view.cleared,
-      capstone: stage.kind === "capstone",
-    });
-  }
-  return out;
+  return views.map((view) => ({
+    id: stageViewId(view),
+    day: stageDays(view.stage),
+    title: view.stage?.title ?? "Goals",
+    proof: view.proof?.title ?? view.stage?.proof ?? null,
+    done: view.proof ? isDone(view.proof.id) : view.cleared,
+    current: view.current,
+    capstone: view.stage?.kind === "capstone",
+  }));
 }
 
 /* -------------------------------------------------------------------- stats */

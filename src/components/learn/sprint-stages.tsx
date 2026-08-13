@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Check, ChevronDown, Flag, Lock } from "lucide-react";
 import { ResourceRow } from "@/components/learn/resource-row";
+import { ProofBlock } from "@/components/learn/proof-block";
 import {
   stageDays,
   stageHours,
@@ -11,7 +12,13 @@ import {
   type Technique,
 } from "@/lib/learn";
 import { cn } from "@/lib/utils";
-import type { SprintGoal, SprintResource } from "@/lib/types";
+import type {
+  SprintGoal,
+  SprintPractice,
+  SprintProofCriterion,
+  SprintProofSubmission,
+  SprintResource,
+} from "@/lib/types";
 
 /**
  * The sprint as a track you walk down. One node per stage on a spine that fills
@@ -30,22 +37,40 @@ import type { SprintGoal, SprintResource } from "@/lib/types";
  * the ten-click flow the product principles ban.
  */
 export function SprintStages({
+  sprintId,
+  meId,
   views,
+  build,
   resourcesByStage,
+  criteriaByStage,
+  myProof,
   techniques,
   isDone,
   onToggle,
+  onProofSent,
+  onProofWithdrawn,
   isWatched,
   onToggleWatched,
   readOnly,
 }: {
+  sprintId: string;
+  meId: string;
   views: StageView[];
+  /** The capstone's build timeline, shown inside the stage it belongs to. */
+  build: SprintPractice[];
   /** Stage id (or "unstaged") → its resources. */
   resourcesByStage: Map<string, SprintResource[]>;
+  /** Stage id → the conditions its hand-in is read against. */
+  criteriaByStage: Map<string, SprintProofCriterion[]>;
+  /** Stage id → my hand-in. Other people's never reach the client. */
+  myProof: Map<string, SprintProofSubmission>;
   /** Goal id → the numbered run of resources that teaches it. */
   techniques: Map<string, Technique[]>;
   isDone: (goalId: string) => boolean;
   onToggle: (goalId: string, next: boolean) => void;
+  /** Handing in clears the stage, so the proof goal's tick moves with it. */
+  onProofSent: (goalId: string | null) => void;
+  onProofWithdrawn: (goalId: string | null) => void;
   isWatched: (resourceId: string) => boolean;
   onToggleWatched: (resourceId: string, next: boolean) => void;
   /** Not a participant: you see the shape, you can't tick it. */
@@ -68,6 +93,15 @@ export function SprintStages({
 
   const last = views.length - 1;
 
+  // The build timeline is the capstone's own plan, so it lives in the capstone's
+  // card rather than in a block of its own. Falling back to the final stage
+  // keeps it on the page for a program that never named one.
+  const buildOwner =
+    build.length > 0
+      ? (views.find((v) => v.stage?.kind === "capstone") ?? views[last])
+      : undefined;
+  const buildOwnerId = buildOwner ? stageViewId(buildOwner) : null;
+
   return (
     <ol className="grid">
       {views.map((view, index) => {
@@ -86,7 +120,9 @@ export function SprintStages({
           <li
             key={id}
             id={`stage-${id}`}
-            className="grid scroll-mt-20 grid-cols-[1.75rem_1fr] gap-x-3 sm:grid-cols-[2rem_1fr] sm:gap-x-4"
+            // The extra offset from md up clears the sticky milestone bar, so a
+            // jump from it doesn't land the stage underneath it.
+            className="grid scroll-mt-20 grid-cols-[1.75rem_1fr] gap-x-3 sm:grid-cols-[2rem_1fr] sm:gap-x-4 md:scroll-mt-32"
           >
             {/* ---- The spine. Decoration would be banned; this is the progress
                 indicator itself, which is why it's drawn and not a border. */}
@@ -217,6 +253,22 @@ export function SprintStages({
                       </p>
                     )}
 
+                    {/* The long form, split on blank lines. Paragraphs are the
+                        only structure a stage brief needs; anything richer
+                        would be a markdown renderer for four sentences. */}
+                    {view.stage?.detail && (
+                      <div className="mb-3 grid gap-2 border-l border-line pl-3">
+                        {view.stage.detail.split("\n\n").map((para, i) => (
+                          <p
+                            key={i}
+                            className="max-w-[70ch] text-[13px] leading-relaxed text-muted"
+                          >
+                            {para}
+                          </p>
+                        ))}
+                      </div>
+                    )}
+
                     {view.total === 0 ? (
                       <p className="text-[13px] text-faint">No goals in this stage yet.</p>
                     ) : (
@@ -237,29 +289,37 @@ export function SprintStages({
                     )}
 
                     {(view.proof || view.stage?.proof) && (
-                      <div className="mt-3 border-t border-dashed border-line pt-3">
+                      <ProofBlock
+                        sprintId={sprintId}
+                        meId={meId}
+                        stage={view.stage}
+                        goal={view.proof}
+                        criteria={criteriaByStage.get(id) ?? []}
+                        submission={myProof.get(id) ?? null}
+                        done={view.proof ? isDone(view.proof.id) : view.cleared}
+                        readOnly={readOnly}
+                        onSubmitted={() => onProofSent(view.proof?.id ?? null)}
+                        onWithdrawn={() => onProofWithdrawn(view.proof?.id ?? null)}
+                      />
+                    )}
+
+                    {id === buildOwnerId && (
+                      <div className="mt-3 border-t border-line pt-3">
                         <p className="mb-1.5 font-mono text-[11px] uppercase tracking-wider text-faint">
-                          Proof
+                          Build timeline
                         </p>
-                        {view.proof ? (
-                          <ul>
-                            <GoalRow
-                              goal={view.proof}
-                              done={isDone(view.proof.id)}
-                              readOnly={readOnly}
-                              onToggle={onToggle}
-                              teaches={techniques.get(view.proof.id)}
-                              isWatched={isWatched}
-                              onToggleWatched={onToggleWatched}
-                              hint={view.stage?.proof ?? undefined}
-                              proof
-                            />
-                          </ul>
-                        ) : (
-                          <p className="max-w-[70ch] text-[13px] leading-relaxed text-muted">
-                            {view.stage?.proof}
-                          </p>
-                        )}
+                        <ul className="grid gap-1.5">
+                          {build.map((step) => (
+                            <li key={step.id} className="flex items-baseline gap-3">
+                              <span className="w-8 shrink-0 font-mono text-[11px] tabular-nums text-primary-dim">
+                                {step.label}
+                              </span>
+                              <span className="min-w-0 max-w-[70ch] text-[13px] leading-relaxed text-muted">
+                                {step.body ?? step.title}
+                              </span>
+                            </li>
+                          ))}
+                        </ul>
                       </div>
                     )}
 
@@ -376,7 +436,8 @@ function Pips({ total, done, dim }: { total: number; done: number; dim: boolean 
 }
 
 /**
- * One goal, and — when it has them — the numbered techniques that teach it.
+ * One goal — its line, the sentence under it that says what the line means, and
+ * (when it has them) the numbered techniques that teach it.
  *
  * The two ticks on this row mean different things and stay separate. The goal's
  * tick says you did the thing; a technique's tick says you watched it. Nesting
@@ -384,6 +445,9 @@ function Pips({ total, done, dim }: { total: number; done: number; dim: boolean 
  * is what you do to clear "Framing", and it should not need a second panel to
  * say so. The count on the right is watched-of-total, which is why it can read
  * 4/4 on a goal you haven't ticked.
+ *
+ * The stage's proof is NOT one of these rows — it's handed in, not ticked, and
+ * lives in its own block (see ProofBlock).
  */
 function GoalRow({
   goal,
@@ -393,8 +457,6 @@ function GoalRow({
   teaches,
   isWatched,
   onToggleWatched,
-  hint,
-  proof,
 }: {
   goal: SprintGoal;
   done: boolean;
@@ -404,9 +466,6 @@ function GoalRow({
   teaches?: Technique[];
   isWatched: (resourceId: string) => boolean;
   onToggleWatched: (resourceId: string, next: boolean) => void;
-  hint?: string;
-  /** The stage's gate: marked as a diamond, echoing the capstone node. */
-  proof?: boolean;
 }) {
   const watched = teaches?.filter((t) => isWatched(t.resource.id)).length ?? 0;
   const seenAll = teaches !== undefined && watched === teaches.length;
@@ -415,12 +474,11 @@ function GoalRow({
     <span
       aria-hidden
       className={cn(
-        "mt-px flex size-[18px] shrink-0 items-center justify-center transition-colors duration-150 motion-reduce:transition-none",
-        proof ? "rotate-45 rounded-[4px]" : "rounded-full",
+        "mt-px flex size-[18px] shrink-0 items-center justify-center rounded-full transition-colors duration-150 motion-reduce:transition-none",
         done ? "bg-primary text-primary-ink" : "border border-line-strong bg-surface"
       )}
     >
-      {done && <Check className={cn("size-2.5", proof && "-rotate-45")} />}
+      {done && <Check className="size-2.5" />}
     </span>
   );
 
@@ -434,9 +492,9 @@ function GoalRow({
       >
         {goal.title}
       </span>
-      {hint && (
+      {goal.detail && (
         <span className="mt-0.5 block max-w-[70ch] text-xs leading-relaxed text-muted">
-          {hint}
+          {goal.detail}
         </span>
       )}
     </span>

@@ -1,3 +1,7 @@
+"use client";
+
+import { useState } from "react";
+import { ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { SprintPractice } from "@/lib/types";
 
@@ -7,6 +11,11 @@ import type { SprintPractice } from "@/lib/types";
  * Rules are a definition list, not a card grid — six identical icon cards is
  * the banned shape, and the rules are label-plus-explanation anyway, which is
  * exactly what a definition list is for.
+ *
+ * Collapsed by default: this is the method you read once and then live by, so
+ * it shouldn't sit between you and the goals you came to tick. The closed row
+ * still says what's inside — rule count and hours a day — so opening it is a
+ * choice, not a lucky guess.
  */
 export function ProgramMethod({
   rules,
@@ -15,10 +24,63 @@ export function ProgramMethod({
   rules: SprintPractice[];
   session: SprintPractice[];
 }) {
+  const [open, setOpen] = useState(false);
   const totalMinutes = session.reduce((n, s) => n + (s.minutes ?? 0), 0);
 
+  const summary = [
+    rules.length > 0 && `${rules.length} rule${rules.length === 1 ? "" : "s"}`,
+    totalMinutes > 0 && `${formatMinutes(totalMinutes)} a day`,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+
   return (
-    <div className="grid gap-6 p-3.5 sm:p-4">
+    <>
+      <h2>
+        <button
+          type="button"
+          aria-expanded={open}
+          aria-controls="program-method-body"
+          onClick={() => setOpen((prev) => !prev)}
+          className={cn(
+            "flex w-full cursor-pointer items-center justify-between gap-3 rounded-lg px-4 py-3 text-left transition-colors duration-150 hover:bg-raised/50",
+            open && "rounded-b-none border-b border-line"
+          )}
+        >
+          <span className="flex min-w-0 flex-wrap items-baseline gap-x-2.5 gap-y-0.5">
+            <span className="text-sm font-semibold text-ink">
+              How to actually learn this
+            </span>
+            {summary && (
+              <span className="font-mono text-xs text-faint">{summary}</span>
+            )}
+          </span>
+          <ChevronDown
+            aria-hidden
+            className={cn(
+              "size-3.5 shrink-0 text-faint transition-transform duration-150 ease-mac motion-reduce:transition-none",
+              open && "rotate-180"
+            )}
+          />
+        </button>
+      </h2>
+
+      {open && <MethodBody rules={rules} session={session} totalMinutes={totalMinutes} />}
+    </>
+  );
+}
+
+function MethodBody({
+  rules,
+  session,
+  totalMinutes,
+}: {
+  rules: SprintPractice[];
+  session: SprintPractice[];
+  totalMinutes: number;
+}) {
+  return (
+    <div id="program-method-body" className="grid gap-6 p-3.5 sm:p-4">
       {rules.length > 0 && (
         <dl className="grid divide-y divide-line">
           {rules.map((rule, index) => (

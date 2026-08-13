@@ -7,18 +7,14 @@ import { useAction } from "@/lib/use-action";
 import { Panel, PanelHeader } from "@/components/ui/panel";
 import { RaceStandings, type RacePerson } from "@/components/learn/race-standings";
 import { SprintStages } from "@/components/learn/sprint-stages";
-import { StageRail } from "@/components/learn/stage-rail";
-import { ProgramMilestones } from "@/components/learn/program-milestones";
+import { MilestoneNav } from "@/components/learn/milestone-nav";
 import { ResourceRow } from "@/components/learn/resource-row";
-import {
-  buildMilestones,
-  buildStageViews,
-  buildTechniques,
-  toRailStops,
-} from "@/lib/learn";
+import { buildMilestones, buildStageViews, buildTechniques } from "@/lib/learn";
 import type {
   SprintGoal,
   SprintPractice,
+  SprintProofCriterion,
+  SprintProofSubmission,
   SprintResource,
   SprintStage,
 } from "@/lib/types";
@@ -38,6 +34,8 @@ export function SprintProgress({
   stages,
   goals,
   resources,
+  criteria,
+  myProof,
   build,
   participants,
   progress,
@@ -46,12 +44,17 @@ export function SprintProgress({
   isAdmin,
   mayWrite,
   method,
+  header,
 }: {
   sprintId: string;
   stages: SprintStage[];
   goals: SprintGoal[];
   resources: SprintResource[];
-  /** The capstone build timeline, shown under the milestones. */
+  /** Every stage's acceptance conditions, in order. */
+  criteria: SprintProofCriterion[];
+  /** My hand-ins only — RLS keeps everyone else's out of this page. */
+  myProof: SprintProofSubmission[];
+  /** The capstone build timeline, shown inside the capstone's stage card. */
   build: SprintPractice[];
   participants: RacePerson[];
   progress: { goal_id: string; user_id: string }[];
@@ -60,8 +63,15 @@ export function SprintProgress({
   isAdmin: boolean;
   /** False for a view-only Learn member: the run is readable, not tickable. */
   mayWrite: boolean;
-  /** Server-rendered "how to run this" block, slotted in after the milestones. */
+  /** Server-rendered "how to run this" block, slotted in after the stages. */
   method?: ReactNode;
+  /**
+   * The page's own title block. It's slotted in rather than rendered by the
+   * page so the milestone bar can sit above it: the bar reads live ticks, which
+   * only this component holds, and a sticky element has to come first in the
+   * DOM to stick to the top of what follows it.
+   */
+  header?: ReactNode;
 }) {
   const { run } = useAction();
   const [done, setDone] = useState(
@@ -119,6 +129,21 @@ export function SprintProgress({
     [resources]
   );
 
+  const criteriaByStage = useMemo(() => {
+    const map = new Map<string, SprintProofCriterion[]>();
+    for (const criterion of criteria) {
+      const list = map.get(criterion.stage_id);
+      if (list) list.push(criterion);
+      else map.set(criterion.stage_id, [criterion]);
+    }
+    return map;
+  }, [criteria]);
+
+  const proofByStage = useMemo(
+    () => new Map(myProof.map((submission) => [submission.stage_id, submission])),
+    [myProof]
+  );
+
   function toggle(goalId: string, next: boolean) {
     const key = `${goalId}:${meId}`;
     const flip = (add: boolean) =>
@@ -131,6 +156,21 @@ export function SprintProgress({
     run(() => toggleGoalProgress(goalId, sprintId, next), {
       optimistic: () => flip(next),
       rollback: () => flip(!next),
+    });
+  }
+
+  // Handing a proof in clears the stage, so the rail, the milestone and the
+  // standings all have to move on the same frame the box empties. The server
+  // action writes the same progress row; this is just its optimistic half.
+  // The action owns the rollback, so a rejected hand-in undoes the tick too.
+  function flipProofTick(goalId: string | null, add: boolean) {
+    if (!goalId) return;
+    const key = `${goalId}:${meId}`;
+    setDone((prev) => {
+      const copy = new Set(prev);
+      if (add) copy.add(key);
+      else copy.delete(key);
+      return copy;
     });
   }
 
@@ -161,6 +201,9 @@ export function SprintProgress({
 
   return (
     <>
+      <MilestoneNav milestones={milestones} />
+      {header}
+
       {views.length > 0 && (
         <section aria-label="Your progress" className="grid gap-3">
           <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
@@ -177,8 +220,6 @@ export function SprintProgress({
               {myDone}/{goals.length} goals
             </p>
           </div>
-
-          {views.length > 1 && <StageRail stops={toRailStops(views)} />}
 
           {finished ? (
             <p className="flex items-center gap-2 text-[13px] text-primary-dim">
@@ -198,32 +239,23 @@ export function SprintProgress({
           )}
 
           <SprintStages
+            sprintId={sprintId}
+            meId={meId}
             views={views}
+            build={build}
             resourcesByStage={resourcesByStage}
+            criteriaByStage={criteriaByStage}
+            myProof={proofByStage}
             techniques={techniques}
             isDone={isDone}
             onToggle={toggle}
+            onProofSent={(goalId) => flipProofTick(goalId, true)}
+            onProofWithdrawn={(goalId) => flipProofTick(goalId, false)}
             isWatched={isWatched}
             onToggleWatched={toggleWatched}
             readOnly={readOnly}
           />
         </section>
-      )}
-
-      {(milestones.length > 0 || build.length > 0) && (
-        <Panel>
-          <PanelHeader
-            title="Milestones"
-            action={
-              milestones.length > 0 ? (
-                <span className="font-mono text-xs tabular-nums text-muted">
-                  {milestones.filter((m) => m.done).length}/{milestones.length}
-                </span>
-              ) : undefined
-            }
-          />
-          <ProgramMilestones milestones={milestones} build={build} />
-        </Panel>
       )}
 
       {method}

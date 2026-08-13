@@ -15,7 +15,13 @@ import {
   ResourcesEditor,
 } from "@/components/learn/sprint-forms";
 import { StagesEditor } from "@/components/learn/stages-editor";
-import type { Sprint, SprintGoal, SprintResource, SprintStage } from "@/lib/types";
+import type {
+  Sprint,
+  SprintGoal,
+  SprintProofCriterion,
+  SprintResource,
+  SprintStage,
+} from "@/lib/types";
 
 export const metadata: Metadata = { title: "Edit sprint" };
 
@@ -73,6 +79,20 @@ export default async function EditSprintPage({
     ]);
   if (!sprint) notFound();
 
+  // Second wave: acceptance conditions hang off stage ids from the first.
+  const stageIds = (stages as SprintStage[]).map((s) => s.id);
+  const criteria = stageIds.length
+    ? await rowsOrThrow(
+        ctx.supabase
+          .from("sprint_proof_criteria")
+          .select("*")
+          .in("stage_id", stageIds)
+          .order("sort_order")
+          .order("created_at"),
+        "sprint_proof_criteria"
+      )
+    : [];
+
   const people = learnMembers
     .map((m) => {
       const profile = m.profiles as unknown as {
@@ -126,6 +146,7 @@ export default async function EditSprintPage({
               sprintId={id}
               stages={stages as SprintStage[]}
               goals={goals as SprintGoal[]}
+              criteria={criteria as SprintProofCriterion[]}
             />
           </Panel>
           <Panel>

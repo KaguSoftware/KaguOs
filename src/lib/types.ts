@@ -284,7 +284,14 @@ export type SprintStage = {
   sprint_id: string;
   title: string;
   summary: string | null;
+  /** The paragraphs behind `summary`, shown once the stage is open. */
+  detail: string | null;
+  /** The gate in one line — what the milestone list and the closed card show. */
   proof: string | null;
+  /** The same gate at length: what to actually do, read before you do it. */
+  proof_brief: string | null;
+  /** What to hand in, in the imperative. Sits above the hand-in box. */
+  proof_submit: string | null;
   kind: SprintStageKind;
   day_from: number | null;
   day_to: number | null;
@@ -340,9 +347,50 @@ export type SprintGoal = {
   sprint_id: string;
   stage_id: string | null;
   title: string;
+  /** The sentence under the line that says what the line means. */
+  detail: string | null;
   is_proof: boolean;
   sort_order: number;
   created_at: string;
+};
+
+/** One condition a hand-in has to meet. Read down before you send it. */
+export type SprintProofCriterion = {
+  id: string;
+  stage_id: string;
+  body: string;
+  sort_order: number;
+  created_at: string;
+};
+
+/**
+ * Where a hand-in stands:
+ *
+ *   submitted         — handed in, nobody has looked yet (or you just edited it)
+ *   accepted          — an admin read it and it holds
+ *   changes_requested — an admin read it and said what's missing
+ *
+ * None of these gate the stage: handing in clears it, review annotates it.
+ */
+export type ProofStatus = "submitted" | "accepted" | "changes_requested";
+
+/** One person's proof for one stage: some text, a file, or both. */
+export type SprintProofSubmission = {
+  id: string;
+  stage_id: string;
+  sprint_id: string;
+  user_id: string;
+  body: string | null;
+  /** Path inside the private `learn` bucket. */
+  file_path: string | null;
+  /** What the person called the file, for the link's label. */
+  file_name: string | null;
+  status: ProofStatus;
+  reviewed_by: string | null;
+  reviewed_at: string | null;
+  review_note: string | null;
+  created_at: string;
+  updated_at: string;
 };
 
 export type QuestionAudience = "everyone" | "admins";
@@ -581,6 +629,8 @@ export type Notification = {
     | "reminder_shared"
     | "learn_question"
     | "learn_answer"
+    | "learn_proof"
+    | "learn_review"
     | "status_change"
     | "message"
     | "debug_note";

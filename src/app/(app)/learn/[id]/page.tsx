@@ -10,6 +10,7 @@ import { Badge, type BadgeTone } from "@/components/ui/badge";
 import { LinkButton } from "@/components/ui/link-button";
 import { SprintProgress } from "@/components/learn/sprint-progress";
 import { SprintQuestions } from "@/components/learn/sprint-questions";
+import { ProofReview } from "@/components/learn/proof-review";
 import { JoinSprintButton } from "@/components/learn/join-sprint-button";
 import { ProgramStatsRow } from "@/components/learn/program-stats";
 import { ProgramMethod } from "@/components/learn/program-method";
@@ -21,6 +22,8 @@ import type {
   Sprint,
   SprintGoal,
   SprintPractice,
+  SprintProofCriterion,
+  SprintProofSubmission,
   SprintQuestion,
   SprintQuestionReply,
   SprintResource,
@@ -135,12 +138,13 @@ export default async function SprintPage({
   ]);
   if (!sprint) notFound();
 
-  // Second wave: all three reads depend on ids from the first (goal, resource
-  // and question ids) — still ONE wave, per the perf doctrine.
+  // Second wave: every read here depends on ids from the first (goal, resource,
+  // question and stage ids) — still ONE wave, per the perf doctrine.
   const goalIds = goals.map((g) => g.id);
   const resourceIds = resources.map((r) => r.id);
   const questionIds = questions.map((q) => q.id);
-  const [progress, watched, replies] = await Promise.all([
+  const stageIds = stages.map((s) => s.id);
+  const [progress, watched, replies, criteria, submissions] = await Promise.all([
     goalIds.length
       ? rowsOrThrow(
           ctx.supabase
@@ -172,6 +176,31 @@ export default async function SprintPage({
           "sprint_question_replies"
         )
       : Promise.resolve([]),
+    // The conditions each stage's hand-in is read against.
+    stageIds.length
+      ? rowsOrThrow(
+          ctx.supabase
+            .from("sprint_proof_criteria")
+            .select("*")
+            .in("stage_id", stageIds)
+            .eq("is_demo", ctx.showcase)
+            .order("sort_order")
+            .order("created_at"),
+          "sprint_proof_criteria"
+        )
+      : Promise.resolve([]),
+    // Hand-ins. No user filter: RLS returns mine, or everyone's to an admin
+    // (0061), which is exactly the split the two panels below want — so the
+    // reviewer's queue costs no extra query.
+    rowsOrThrow(
+      ctx.supabase
+        .from("sprint_proof_submissions")
+        .select("*")
+        .eq("sprint_id", id)
+        .eq("is_demo", ctx.showcase)
+        .order("updated_at", { ascending: false }),
+      "sprint_proof_submissions"
+    ),
   ]);
 
   const people = learnMembers
@@ -206,6 +235,12 @@ export default async function SprintPage({
   // looked like a dead button. `SignedFileLink` signs at click instead, which
   // also takes the signing round-trip off this page's critical path entirely.
   const stageList = stages as SprintStage[];
+  // One read, two audiences (0061): RLS hands an admin every hand-in and
+  // everyone else only their own, so the reviewer's queue and "my proof" are
+  // slices of the same rows rather than a second query.
+  const allProof = submissions as SprintProofSubmission[];
+  const myProof = allProof.filter((s) => s.user_id === ctx.userId);
+  const waiting = allProof.filter((s) => s.status === "submitted").length;
   const practiceList = practices as SprintPractice[];
   const rules = practiceList.filter((p) => p.kind === "rule");
   const session = practiceList.filter((p) => p.kind === "session");
@@ -244,8 +279,11 @@ export default async function SprintPage({
     !iParticipate && sprint.join_mode === "open" && phase.label !== "past";
   const stats = programStats(stageList, totalDays);
 
-  return (
-    <>
+  // The title block is handed to SprintProgress rather than rendered here: the
+  // milestone bar sticks to the top of the page and reads live ticks, so it has
+  // to be the first thing that component renders, with this underneath it.
+  const header = (
+    <div className="[&>*:last-child]:mb-0">
       <Link
         href="/learn"
         className="mb-4 inline-flex items-center gap-1.5 text-[13px] text-muted hover:text-ink"
@@ -325,57 +363,90 @@ export default async function SprintPage({
           <ProgramStatsRow stats={stats} />
         </div>
       )}
+    </div>
+  );
 
-      <div className="grid gap-6">
-        <SprintProgress
-          sprintId={sprint.id}
-          stages={stageList}
-          goals={goals as SprintGoal[]}
-          resources={resources as SprintResource[]}
-          build={build}
-          participants={gridPeople}
-          progress={progress}
-          watched={watched as { resource_id: string }[]}
-          meId={ctx.userId}
-          isAdmin={ctx.isAdmin}
-          mayWrite={mayWrite}
-          method={
-            rules.length > 0 || session.length > 0 ? (
-              <Panel>
-                <PanelHeader title="How to actually learn this" />
-                <ProgramMethod rules={rules} session={session} />
-              </Panel>
-            ) : undefined
-          }
-        />
+  return (
+    <div className="grid gap-6">
+      <SprintProgress
+        header={header}
+        sprintId={sprint.id}
+        stages={stageList}
+        goals={goals as SprintGoal[]}
+        resources={resources as SprintResource[]}
+        criteria={criteria as SprintProofCriterion[]}
+        myProof={myProof}
+        build={build}
+        participants={gridPeople}
+        progress={progress}
+        watched={watched as { resource_id: string }[]}
+        meId={ctx.userId}
+        isAdmin={ctx.isAdmin}
+        mayWrite={mayWrite}
+        method={
+          rules.length > 0 || session.length > 0 ? (
+            <Panel>
+              {/* Header lives inside — it's the disclosure toggle. */}
+              <ProgramMethod rules={rules} session={session} />
+            </Panel>
+          ) : undefined
+        }
+      />
 
-        {sprint.outro && (
-          <p className="max-w-[70ch] whitespace-pre-wrap text-sm leading-relaxed text-muted">
-            {sprint.outro}
-          </p>
-        )}
+      {sprint.outro && (
+        <p className="max-w-[70ch] whitespace-pre-wrap text-sm leading-relaxed text-muted">
+          {sprint.outro}
+        </p>
+      )}
 
+      {/* The reviewer's queue. Admins only — RLS already made `allProof`
+          everyone's for them and mine for everyone else, so this panel can't
+          render someone else's proof to a person who shouldn't see it. */}
+      {ctx.isAdmin && (
         <Panel>
           <PanelHeader
-            title="Questions"
+            title="Proof hand-ins"
             action={
-              questions.length > 0 ? (
-                <span className="font-mono text-xs text-muted">
-                  {questions.length}
+              waiting > 0 ? (
+                <span className="font-mono text-xs tabular-nums text-amber">
+                  {waiting} waiting
+                </span>
+              ) : allProof.length > 0 ? (
+                <span className="font-mono text-xs tabular-nums text-muted">
+                  {allProof.length}
                 </span>
               ) : undefined
             }
           />
-          <SprintQuestions
+          <ProofReview
             sprintId={sprint.id}
-            questions={questions as SprintQuestion[]}
-            replies={replies as SprintQuestionReply[]}
+            submissions={allProof}
+            stages={stageList}
             people={people}
-            meId={ctx.userId}
-            isAdmin={ctx.isAdmin}
           />
         </Panel>
-      </div>
-    </>
+      )}
+
+      <Panel>
+        <PanelHeader
+          title="Questions"
+          action={
+            questions.length > 0 ? (
+              <span className="font-mono text-xs text-muted">
+                {questions.length}
+              </span>
+            ) : undefined
+          }
+        />
+        <SprintQuestions
+          sprintId={sprint.id}
+          questions={questions as SprintQuestion[]}
+          replies={replies as SprintQuestionReply[]}
+          people={people}
+          meId={ctx.userId}
+          isAdmin={ctx.isAdmin}
+        />
+    </Panel>
+    </div>
   );
 }

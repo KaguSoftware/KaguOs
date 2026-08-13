@@ -153,8 +153,14 @@ export async function deleteSprint(sprintId: string): Promise<ActionResult> {
   // (question/reply fan-outs); left alone they'd 404 from the bell. The
   // notification sweep needs the service client: other users' rows are outside
   // this admin's RLS. Both run in one wave; failures never block the delete.
-  const [{ data: files }] = await Promise.all([
+  const [{ data: files }, { data: proofOwners }] = await Promise.all([
     ctx.supabase.storage.from("learn").list(sprintId),
+    // Proof files live under "proof/<uid>/<sprintId>/…" (the prefix the storage
+    // policy gates on), so they're outside the sprint's own folder and the list
+    // above never sees them. One extra listing per person who handed anything
+    // in — deleting a sprint is rare, and the alternative is files nobody can
+    // find still sitting in the bucket.
+    ctx.supabase.storage.from("learn").list("proof"),
     createServiceClient()
       .from("notifications")
       .delete()
@@ -164,6 +170,19 @@ export async function deleteSprint(sprintId: string): Promise<ActionResult> {
     await ctx.supabase.storage
       .from("learn")
       .remove(files.map((f) => `${sprintId}/${f.name}`));
+  }
+  if (proofOwners && proofOwners.length > 0) {
+    const listings = await Promise.all(
+      proofOwners.map((owner) =>
+        ctx.supabase.storage.from("learn").list(`proof/${owner.name}/${sprintId}`)
+      )
+    );
+    const paths = listings.flatMap((listing, index) =>
+      (listing.data ?? []).map(
+        (file) => `proof/${proofOwners[index].name}/${sprintId}/${file.name}`
+      )
+    );
+    if (paths.length > 0) await ctx.supabase.storage.from("learn").remove(paths);
   }
 
   revalidatePath("/learn");
@@ -405,27 +424,35 @@ export async function addGoals(
   };
 }
 
-/** Rename in place. A blank title keeps the old one (no required fields). */
+/**
+ * Rename in place, and optionally reword the line under it. A blank title keeps
+ * the old one (no required fields); `detail` left undefined is untouched, while
+ * an empty string clears it — the two are different intents.
+ */
 export async function updateGoal(
   goalId: string,
   sprintId: string,
-  title: string
+  title: string,
+  detail?: string
 ): Promise<ActionResult> {
   const stop = await blockIfReadOnly("learn");
   if (stop) return stop;
   const ctx = await requireAdmin();
 
   const next = title.trim().slice(0, 200);
-  if (!next) return { ok: true, message: "Kept the old title." };
+  const fields: { title?: string; detail?: string | null } = {};
+  if (next) fields.title = next;
+  if (detail !== undefined) fields.detail = detail.trim().slice(0, 600) || null;
+  if (Object.keys(fields).length === 0) return { ok: true, message: "Kept the old title." };
 
   const { error } = await ctx.supabase
     .from("sprint_goals")
-    .update({ title: next })
+    .update(fields)
     .eq("id", goalId);
   if (error) return { ok: false, message: error.message };
 
   revalidatePath(`/learn/${sprintId}`);
-  return { ok: true, message: "Goal renamed." };
+  return { ok: true, message: fields.title ? "Goal renamed." : "Goal saved." };
 }
 
 /** Persist a full ordering — parallel updates, one wave. */
@@ -471,7 +498,13 @@ export async function removeGoal(goalId: string, sprintId: string): Promise<Acti
 export type StageDraft = {
   title: string;
   summary: string;
+  /** The paragraphs behind the summary. */
+  detail: string;
   proof: string;
+  /** The proof at length — what to actually do. */
+  proof_brief: string;
+  /** What to hand in, in the imperative. */
+  proof_submit: string;
   kind: "stage" | "capstone";
   day_from: number | null;
   day_to: number | null;
@@ -498,7 +531,10 @@ function stageFields(draft: Partial<StageDraft>) {
     // No required fields, same as sprints: a blank stage is still a stage.
     title: (draft.title ?? "").trim().slice(0, 120) || "Untitled stage",
     summary: (draft.summary ?? "").trim().slice(0, 600) || null,
+    detail: (draft.detail ?? "").trim().slice(0, 4000) || null,
     proof: (draft.proof ?? "").trim().slice(0, 400) || null,
+    proof_brief: (draft.proof_brief ?? "").trim().slice(0, 2000) || null,
+    proof_submit: (draft.proof_submit ?? "").trim().slice(0, 600) || null,
     kind: draft.kind === "capstone" ? "capstone" : "stage",
     day_from: dayFrom,
     day_to: dayTo,
@@ -871,4 +907,260 @@ export async function toggleResourceWatched(
 
   revalidatePath(`/learn/${sprintId}`);
   return { ok: true, message: watched ? "Marked watched." : "Unmarked." };
+}
+
+/* ------------------------------------------------------------------- proof --
+ *
+ * A stage's gate is handed in, not ticked (0061). Everything below is that one
+ * idea: the learner sends text and/or a file, which clears the stage; an admin
+ * reads it afterwards and says whether it holds.
+ */
+
+/** Replace a stage's acceptance criteria wholesale — they carry no per-person state. */
+export async function setStageCriteria(
+  stageId: string,
+  sprintId: string,
+  lines: string[]
+): Promise<ActionResult> {
+  const stop = await blockIfReadOnly("learn");
+  if (stop) return stop;
+  const ctx = await requireAdmin();
+
+  const rows = lines
+    .map((line) => line.trim().slice(0, 300))
+    .filter(Boolean)
+    .slice(0, 12)
+    .map((body, i) => ({ stage_id: stageId, body, sort_order: i }));
+
+  const { error: wipeError } = await ctx.supabase
+    .from("sprint_proof_criteria")
+    .delete()
+    .eq("stage_id", stageId);
+  if (wipeError) return { ok: false, message: wipeError.message };
+
+  if (rows.length > 0) {
+    const { error } = await ctx.supabase.from("sprint_proof_criteria").insert(rows);
+    if (error) return { ok: false, message: error.message };
+  }
+
+  revalidatePath(`/learn/${sprintId}`);
+  return {
+    ok: true,
+    message: rows.length === 0 ? "Acceptance cleared." : `${rows.length} conditions saved.`,
+  };
+}
+
+export type ProofDraft = {
+  body: string;
+  /** Uploaded client-side to `learn/proof/<uid>/…` before this runs. */
+  filePath: string | null;
+  fileName: string | null;
+};
+
+/**
+ * Hand in the proof for a stage — and clear the stage in the same action.
+ *
+ * The two writes are deliberately one call. If handing in and ticking were
+ * separate the two could disagree, and the disagreement everyone would hit is
+ * the useless one: a proof goal ticked with nothing behind it. Handing in
+ * again (a better answer, a fixed file) edits the same row and puts it back in
+ * review — which is what the RLS with_check enforces, so a caller can't quietly
+ * keep an old "accepted".
+ */
+export async function submitProof(
+  sprintId: string,
+  stageId: string,
+  draft: ProofDraft
+): Promise<ActionResult> {
+  const stop = await blockIfReadOnly("learn");
+  if (stop) return stop;
+  const ctx = await requireSection("learn");
+
+  const body = draft.body.trim().slice(0, 8000);
+  const filePath = draft.filePath?.trim() || null;
+  if (!body && !filePath) {
+    return { ok: false, message: "Write your proof or attach a file first." };
+  }
+  if (!sprintId || !stageId) return { ok: false, message: "Missing stage id." };
+
+  // Both reads in one wave: the file being replaced (to delete after), and the
+  // stage's proof goal (to tick). The goal is looked up here rather than passed
+  // in — the client shouldn't get to name which goal a hand-in clears.
+  const [{ data: existing }, { data: proofGoal }] = await Promise.all([
+    ctx.supabase
+      .from("sprint_proof_submissions")
+      .select("file_path")
+      .eq("stage_id", stageId)
+      .eq("user_id", ctx.userId)
+      .maybeSingle(),
+    ctx.supabase
+      .from("sprint_goals")
+      .select("id")
+      .eq("stage_id", stageId)
+      .eq("is_proof", true)
+      .maybeSingle(),
+  ]);
+
+  const { error } = await ctx.supabase.from("sprint_proof_submissions").upsert(
+    {
+      stage_id: stageId,
+      sprint_id: sprintId,
+      user_id: ctx.userId,
+      body: body || null,
+      file_path: filePath,
+      file_name: draft.fileName?.trim().slice(0, 200) || null,
+      status: "submitted",
+      reviewed_by: null,
+      reviewed_at: null,
+      review_note: null,
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: "stage_id,user_id" }
+  );
+  if (error) {
+    return {
+      ok: false,
+      message:
+        error.code === "42501"
+          ? "You're not a participant of this sprint."
+          : error.message,
+    };
+  }
+
+  // The tick. A failure here is reported, but the hand-in stays: the evidence
+  // landing matters more than the checkbox, and re-submitting retries it.
+  if (proofGoal) {
+    const { error: tickError } = await ctx.supabase
+      .from("sprint_goal_progress")
+      .upsert({ goal_id: proofGoal.id, user_id: ctx.userId });
+    if (tickError) return { ok: false, message: tickError.message };
+  }
+
+  // The replaced file, now that the row no longer points at it.
+  if (existing?.file_path && existing.file_path !== filePath) {
+    await ctx.supabase.storage.from("learn").remove([existing.file_path]);
+  }
+
+  const { data: stage } = await ctx.supabase
+    .from("sprint_stages")
+    .select("title")
+    .eq("id", stageId)
+    .maybeSingle();
+
+  notifyAdmins(ctx, {
+    kind: "learn_proof",
+    title: `Proof handed in for “${stage?.title ?? "a stage"}”`,
+    href: `/learn/${sprintId}`,
+  });
+
+  revalidatePath(`/learn/${sprintId}`);
+  return { ok: true, message: "Handed in — stage cleared." };
+}
+
+/**
+ * Take a hand-in back. It unticks the proof goal too: the tick was the claim
+ * the hand-in made, so it can't outlive it.
+ */
+export async function withdrawProof(
+  sprintId: string,
+  stageId: string
+): Promise<ActionResult> {
+  const stop = await blockIfReadOnly("learn");
+  if (stop) return stop;
+  const ctx = await requireSection("learn");
+
+  const [{ data: existing }, { data: proofGoal }] = await Promise.all([
+    ctx.supabase
+      .from("sprint_proof_submissions")
+      .select("file_path")
+      .eq("stage_id", stageId)
+      .eq("user_id", ctx.userId)
+      .maybeSingle(),
+    ctx.supabase
+      .from("sprint_goals")
+      .select("id")
+      .eq("stage_id", stageId)
+      .eq("is_proof", true)
+      .maybeSingle(),
+  ]);
+
+  const { error } = await ctx.supabase
+    .from("sprint_proof_submissions")
+    .delete()
+    .eq("stage_id", stageId)
+    .eq("user_id", ctx.userId);
+  if (error) return { ok: false, message: error.message };
+
+  if (proofGoal) {
+    await ctx.supabase
+      .from("sprint_goal_progress")
+      .delete()
+      .eq("goal_id", proofGoal.id)
+      .eq("user_id", ctx.userId);
+  }
+  if (existing?.file_path) {
+    await ctx.supabase.storage.from("learn").remove([existing.file_path]);
+  }
+
+  revalidatePath(`/learn/${sprintId}`);
+  return { ok: true, message: "Hand-in withdrawn." };
+}
+
+/**
+ * An admin's verdict on a hand-in. It changes what the row says, never what
+ * the rail shows: the stage was cleared by the hand-in and stays cleared even
+ * when changes are asked for, because "you did this on Tuesday" is still true.
+ * What changes is that the person is told what's missing.
+ */
+export async function reviewProof(
+  submissionId: string,
+  sprintId: string,
+  decision: "accepted" | "changes_requested",
+  note: string
+): Promise<ActionResult> {
+  const stop = await blockIfReadOnly("learn");
+  if (stop) return stop;
+  const ctx = await requireAdmin();
+
+  const text = note.trim().slice(0, 2000);
+  if (decision === "changes_requested" && !text) {
+    return { ok: false, message: "Say what's missing — a bare rejection helps nobody." };
+  }
+
+  const { data: updated, error } = await ctx.supabase
+    .from("sprint_proof_submissions")
+    .update({
+      status: decision,
+      reviewed_by: ctx.userId,
+      reviewed_at: new Date().toISOString(),
+      review_note: text || null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", submissionId)
+    .eq("sprint_id", sprintId)
+    .select("user_id, stage_id")
+    .maybeSingle();
+  if (error) return { ok: false, message: error.message };
+  if (!updated) return { ok: false, message: "That hand-in is gone." };
+
+  const { data: stage } = await ctx.supabase
+    .from("sprint_stages")
+    .select("title")
+    .eq("id", updated.stage_id)
+    .maybeSingle();
+
+  notifyUser(ctx, updated.user_id, {
+    kind: "learn_review",
+    title:
+      decision === "accepted"
+        ? `Proof accepted — ${stage?.title ?? "your stage"}`
+        : `Changes asked for — ${stage?.title ?? "your stage"}`,
+    href: `/learn/${sprintId}`,
+  });
+
+  revalidatePath(`/learn/${sprintId}`);
+  return {
+    ok: true,
+    message: decision === "accepted" ? "Accepted." : "Changes requested.",
+  };
 }
