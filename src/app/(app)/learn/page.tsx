@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { GraduationCap, Plus, Users } from "lucide-react";
-import { requireSection } from "@/lib/data/session";
+import { canWrite, requireSection } from "@/lib/data/session";
 import { rowsOrThrow } from "@/lib/data/query";
 import { PageHeader } from "@/components/shell/page-header";
 import { LiveRefresh } from "@/components/shell/live-refresh";
@@ -105,6 +105,9 @@ export default async function LearnPage() {
 
   const today = todayInIstanbul();
   const rows = sprints as SprintRow[];
+  // A view-only Learn member can read every sprint but can't tick a goal, so
+  // offering them Join would seat them in the standings as a spectator.
+  const mayJoin = canWrite(ctx, "learn");
 
   const mine = rows.filter((s) =>
     s.sprint_participants.some((sp) => sp.user_id === ctx.userId)
@@ -336,11 +339,13 @@ export default async function LearnPage() {
                             </p>
                           )}
                         </div>
-                        <JoinSprintButton
-                          sprintId={sprint.id}
-                          joined={false}
-                          canLeave={daysUntil > 0}
-                        />
+                        {mayJoin && (
+                          <JoinSprintButton
+                            sprintId={sprint.id}
+                            joined={false}
+                            canLeave={daysUntil > 0}
+                          />
+                        )}
                       </div>
 
                       {stops.length > 1 && (

@@ -331,8 +331,8 @@ export async function setParticipants(
  * your own row); this only translates its refusal into a sentence.
  */
 export async function joinSprint(sprintId: string): Promise<ActionResult> {
-  const showcaseStop = await blockIfShowcase();
-  if (showcaseStop) return showcaseStop;
+  const stop = await blockIfReadOnly("learn");
+  if (stop) return stop;
   const ctx = await requireSection("learn");
   if (!sprintId) return { ok: false, message: "Missing sprint id." };
 
@@ -356,8 +356,8 @@ export async function joinSprint(sprintId: string): Promise<ActionResult> {
 
 /** Leaving is only possible before the sprint starts — RLS enforces the window. */
 export async function leaveSprint(sprintId: string): Promise<ActionResult> {
-  const showcaseStop = await blockIfShowcase();
-  if (showcaseStop) return showcaseStop;
+  const stop = await blockIfReadOnly("learn");
+  if (stop) return stop;
   const ctx = await requireSection("learn");
 
   const { error, count } = await ctx.supabase
@@ -512,8 +512,8 @@ export async function addStage(
   draft: Partial<StageDraft>,
   sortOrder: number
 ): Promise<SprintResult> {
-  const showcaseStop = await blockIfShowcase();
-  if (showcaseStop) return showcaseStop;
+  const stop = await blockIfReadOnly("learn");
+  if (stop) return stop;
   const ctx = await requireAdmin();
   if (!sprintId) return { ok: false, message: "Missing sprint id." };
 
@@ -533,8 +533,8 @@ export async function updateStage(
   sprintId: string,
   draft: Partial<StageDraft>
 ): Promise<ActionResult> {
-  const showcaseStop = await blockIfShowcase();
-  if (showcaseStop) return showcaseStop;
+  const stop = await blockIfReadOnly("learn");
+  if (stop) return stop;
   const ctx = await requireAdmin();
 
   const { error } = await ctx.supabase
@@ -553,8 +553,8 @@ export async function removeStage(
   stageId: string,
   sprintId: string
 ): Promise<ActionResult> {
-  const showcaseStop = await blockIfShowcase();
-  if (showcaseStop) return showcaseStop;
+  const stop = await blockIfReadOnly("learn");
+  if (stop) return stop;
   const ctx = await requireAdmin();
 
   const { error } = await ctx.supabase
@@ -572,8 +572,8 @@ export async function reorderStages(
   sprintId: string,
   orderedIds: string[]
 ): Promise<ActionResult> {
-  const showcaseStop = await blockIfShowcase();
-  if (showcaseStop) return showcaseStop;
+  const stop = await blockIfReadOnly("learn");
+  if (stop) return stop;
   const ctx = await requireAdmin();
   if (orderedIds.length === 0) return { ok: true, message: "Nothing to order." };
 
@@ -600,8 +600,8 @@ export async function setGoalStage(
   stageId: string | null,
   isProof = false
 ): Promise<ActionResult> {
-  const showcaseStop = await blockIfShowcase();
-  if (showcaseStop) return showcaseStop;
+  const stop = await blockIfReadOnly("learn");
+  if (stop) return stop;
   const ctx = await requireAdmin();
 
   // One proof per stage is a unique index — clear the incumbent first so

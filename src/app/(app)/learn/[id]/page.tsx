@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft, FileText, Link2, Pencil } from "lucide-react";
-import { requireSection } from "@/lib/data/session";
+import { canWrite, requireSection } from "@/lib/data/session";
 import { rowsOrThrow, selectOrThrow } from "@/lib/data/query";
 import { PageHeader } from "@/components/shell/page-header";
 import { Panel, PanelHeader } from "@/components/ui/panel";
@@ -208,6 +208,8 @@ export default async function SprintPage({
   const doneCells = progress.filter((p) => participantSet.has(p.user_id)).length;
   const teamPct = totalCells > 0 ? Math.round((doneCells / totalCells) * 100) : null;
 
+  // View-only members read the sprint but can't tick or enroll (0053).
+  const mayWrite = canWrite(ctx, "learn");
   const iParticipate = participantSet.has(ctx.userId);
   const canJoin =
     !iParticipate && sprint.join_mode === "open" && phase.label !== "past";
@@ -227,7 +229,7 @@ export default async function SprintPage({
         action={
           <span className="flex items-center gap-2">
             <Badge tone={phase.tone}>{phase.label}</Badge>
-            {(canJoin || (iParticipate && sprint.join_mode === "open")) && (
+            {mayWrite && (canJoin || (iParticipate && sprint.join_mode === "open")) && (
               <JoinSprintButton
                 sprintId={sprint.id}
                 joined={iParticipate}
@@ -287,6 +289,7 @@ export default async function SprintPage({
           progress={progress}
           meId={ctx.userId}
           isAdmin={ctx.isAdmin}
+          mayWrite={mayWrite}
         />
 
         {shelfResources.length > 0 && (

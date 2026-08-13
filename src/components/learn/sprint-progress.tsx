@@ -25,6 +25,7 @@ export function SprintProgress({
   progress,
   meId,
   isAdmin,
+  mayWrite,
 }: {
   sprintId: string;
   stages: SprintStage[];
@@ -34,6 +35,8 @@ export function SprintProgress({
   progress: { goal_id: string; user_id: string }[];
   meId: string;
   isAdmin: boolean;
+  /** False for a view-only Learn member: the run is readable, not tickable. */
+  mayWrite: boolean;
 }) {
   const { run } = useAction();
   const [done, setDone] = useState(
@@ -132,7 +135,7 @@ export function SprintProgress({
             resourcesByStage={resourcesByStage}
             isDone={(goalId) => done.has(`${goalId}:${meId}`)}
             onToggle={toggle}
-            readOnly={!iParticipate}
+            readOnly={!iParticipate || !mayWrite}
           />
         </section>
       )}
