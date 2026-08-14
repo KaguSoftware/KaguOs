@@ -232,20 +232,20 @@ const LEVEL_1: ProgramSeed = {
     {
       title: "Prompting",
       summary:
-        "The full 19 techniques across framing, specification, structure, and the iteration loop.",
+        "The full 18 techniques across framing, specification, structure, and the iteration loop.",
       detail:
-        "Nineteen techniques, in four groups, and the groups are the order you apply them in. Framing sets the scene: who's answering, for whom, aiming at what, inside which limits. Specification pins the output down — examples, format, tone, and the material to ground it in. Structure organises the request itself: delimiters, decomposition, thinking out loud. The iteration loop is what you do to the answer you got.\n\n" +
-        "This is the longest stage of the program and the one that pays for the rest. Take one technique at a time onto a real task, notice what changed, then add the next. Reading all nineteen in an evening teaches you the names and none of the instincts.",
+        "Eighteen techniques, in four groups, and the groups are the order you apply them in. Framing sets the scene: who's answering, for whom, aiming at what, inside which limits. Specification pins the output down — examples, format, tone, and the material to ground it in. Structure organises the request itself: delimiters, decomposition, thinking out loud. The iteration loop is what you do to the answer you got.\n\n" +
+        "This is the longest stage of the program and the one that pays for the rest. Take one technique at a time onto a real task, notice what changed, then add the next. Reading all eighteen in an evening teaches you the names and none of the instincts.",
       proof:
-        "Rebuild a vague prompt using 6+ of the 19 techniques — show the before → after.",
+        "Rebuild a vague prompt using 6+ of the 18 techniques — show the before → after.",
       proofBrief:
-        "Find a prompt of yours that gave a mediocre answer — a real one from your history, not one written to be bad. Rebuild it using at least six of the nineteen techniques, run both versions, and keep all four artefacts: the old prompt, its answer, the new prompt, its answer.\n\n" +
+        "Find a prompt of yours that gave a mediocre answer — a real one from your history, not one written to be bad. Rebuild it using at least six of the eighteen techniques, run both versions, and keep all four artefacts: the old prompt, its answer, the new prompt, its answer.\n\n" +
         "Name the techniques you used as you go. \"I added a role, two examples and an output format\" is the part that transfers to the next prompt; \"it got better\" isn't.",
       proofSubmit:
         "Paste the before prompt, the after prompt, and both answers. List the techniques you applied by name, and add one line on which of them made the biggest difference.",
       criteria: [
         "The starting prompt is a real one of yours that underperformed",
-        "Six or more of the nineteen techniques are applied and named",
+        "Six or more of the eighteen techniques are applied and named",
         "Both answers are shown, from the same model and effort level",
         "You say which technique moved the answer most, and why you think so",
       ],
@@ -253,7 +253,7 @@ const LEVEL_1: ProgramSeed = {
       day_to: 7,
       hours_low: 6,
       hours_high: 7,
-      // The nineteen techniques hang off the four goals they teach: one
+      // The eighteen techniques hang off the four goals they teach: one
       // Framing on the page, not a goal called Framing and a playbook group
       // called Framing. Every link below was watched end-to-end and confirmed
       // to teach its exact technique. Where the syllabus deck pointed six of
@@ -334,11 +334,6 @@ const LEVEL_1: ProgramSeed = {
           detail:
             "Organising the request itself, so a long prompt reads as sections rather than one paragraph the model has to untangle before it can start.",
           teach: [
-            {
-              title: "Delimiters & sections",
-              url: "https://www.youtube.com/watch?v=aNsATNgBWqA",
-              source: "Automation Step by Step",
-            },
             {
               title: "Task decomposition (break into steps)",
               url: "https://www.youtube.com/watch?v=1c9iyoVIwDs",
@@ -536,7 +531,7 @@ const LEVEL_1: ProgramSeed = {
             "Whatever the task reads from, it reads directly. No summarising on the way in.",
         },
         {
-          title: "Prompt it with 6+ of the 19 techniques",
+          title: "Prompt it with 6+ of the 18 techniques",
           detail:
             "Framing and specification at minimum; add structure if the task has parts.",
         },
