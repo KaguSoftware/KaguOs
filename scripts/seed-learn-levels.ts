@@ -345,9 +345,8 @@ const LEVEL_1: ProgramSeed = {
               source: "Google Cloud Tech",
             },
             {
-              title: "Instruction placement & ordering",
-              url: "https://www.youtube.com/watch?v=dOxUroR57xs",
-              source: "Elvis Saravia",
+              title: "How to Write Perfect AI Prompts in 2025 (Complete Guide)",
+              url: "https://www.youtube.com/watch?v=P08jrZhyNxw",
             },
             {
               title: "Prefilling / leading the answer",
