@@ -16,7 +16,7 @@ export default function LoginPage() {
         </p>
         <LoginForm />
         <p className="mt-6 text-[13px] text-faint">
-          No account? Accounts are created by an admin — ask Parsa.
+          No account? Accounts are created by an admin — ask Parsa or Majed.
         </p>
       </div>
     </main>
