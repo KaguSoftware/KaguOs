@@ -324,8 +324,8 @@ const LEVEL_1: ProgramSeed = {
             },
             {
               title: "Ground it in reference material",
-              url: "https://www.youtube.com/watch?v=6dxkBftbukI",
-              source: "Moveworks",
+              url: "https://www.youtube.com/watch?v=qC9vLxFGMRI",
+              source: "What Is Data Grounding in AI? A Complete Guide",
             },
           ],
         },
