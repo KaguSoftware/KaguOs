@@ -560,7 +560,7 @@ function GoalRow({
   // belong to the line above" without a second heading to read.
   //
   // It opens from the same chevron as the goal's meaning, and starts closed:
-  // eighteen video rows under four goals is most of what made this page a wall,
+  // nineteen video rows under four goals is most of what made this page a wall,
   // and the watched-of-total count on the row already says they're there.
   const run = teaches && (
     <ul className="mb-1.5 ml-2.75 grid border-l border-line pl-2.5">

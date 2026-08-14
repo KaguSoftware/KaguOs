@@ -122,7 +122,7 @@ export type Technique = {
  * Goal id → the resources that teach it, in order and numbered.
  *
  * The number counts across the stage rather than restarting under each goal.
- * These eighteen videos are referred to by position — "technique 14" is the
+ * These nineteen videos are referred to by position — "technique 14" is the
  * name that one has — and four runs of 01–06 would take that name away to buy
  * nothing. A goal with nothing attached is absent from the map rather than
  * present and empty, so the caller's check is one lookup.

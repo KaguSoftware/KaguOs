@@ -11,7 +11,7 @@ import type { SprintResource } from "@/lib/types";
  * The syllabus decks put a coloured VIDEO / READ pill in front of every link.
  * Here the mark IS the badge: a play triangle means watch it, an open book
  * means read it. One glyph instead of a pill plus a glyph, which is what makes
- * eighteen of these in a column scan instead of shout.
+ * nineteen of these in a column scan instead of shout.
  *
  * Two targets, deliberately separate: the tick records that you did it, the
  * title opens it. Merging them would mark things watched that you only clicked.
