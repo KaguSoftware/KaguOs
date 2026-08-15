@@ -34,7 +34,7 @@ import { TaskRow } from "@/components/debug/task-row";
 import { BoardOrderOverlay } from "@/components/debug/board-order";
 import { DebugFocusHero } from "@/components/debug/focus-hero";
 import { EmptyState } from "@/components/ui/empty-state";
-import { Dropdown } from "@/components/ui/dropdown";
+import { Dropdown, MultiDropdown } from "@/components/ui/dropdown";
 import { Button, ConfirmButton } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/components/ui/toast";
@@ -1045,23 +1045,21 @@ export function DebugBoard({
 
   // Kind / state / priority tallies for the Filters popover, same whole-board
   // basis. One pass over the tasks rather than one filter() per option.
+  // Assignee isn't here: it left the popover for its own toolbar control, and
+  // `assigneeOptions` already carries that tally.
   const facetCounts = useMemo(() => {
     const kind: Record<string, number> = {};
     const state: Record<string, number> = {};
     const priority: Record<string, number> = {};
-    const assignee: Record<string, number> = {};
     for (const t of liveTasks) {
       kind[t.kind] = (kind[t.kind] ?? 0) + 1;
       state[t.state] = (state[t.state] ?? 0) + 1;
       priority[t.priority] = (priority[t.priority] ?? 0) + 1;
-      const holder = t.assignee_id ?? "unassigned";
-      assignee[holder] = (assignee[holder] ?? 0) + 1;
     }
     return {
       Kind: kind,
       State: state,
       Priority: priority,
-      Assignee: assignee,
     } as Record<string, Record<string, number>>;
   }, [liveTasks]);
 
@@ -1303,6 +1301,21 @@ export function DebugBoard({
             className="h-9 w-full rounded-md border border-line bg-raised pl-8 pr-3 text-sm text-ink placeholder:text-muted transition-colors duration-150 hover:border-line-strong focus-visible:border-line-strong"
           />
         </div>
+        {/* "Who's on it" earns a visible slot of its own, out of the Filters
+            popover: on a shared board it's the second question after "what
+            matches", and it's the one filter people flip several times a
+            sitting. Same `assignee` state the presets write, so My tasks /
+            Unassigned still light up when you land on them by hand. */}
+        <MultiDropdown
+          className="w-36 shrink-0"
+          label="Assignee"
+          placeholder="Anyone"
+          summaryNoun="people"
+          options={assigneeOptions}
+          values={assignee}
+          onChange={setAssignee}
+          searchPlaceholder="Find person…"
+        />
         <FiltersPopover
           kindFilter={kindFilter}
           setKindFilter={setKindFilter}
@@ -1310,9 +1323,6 @@ export function DebugBoard({
           setStateFilter={setStateFilter}
           priority={priority}
           setPriority={setPriority}
-          assignee={assignee}
-          setAssignee={setAssignee}
-          assigneeOptions={assigneeOptions}
           sort={sort}
           setSort={(v) => setSort(v as Sort)}
           counts={facetCounts}
@@ -1638,9 +1648,6 @@ function FiltersPopover({
   setStateFilter,
   priority,
   setPriority,
-  assignee,
-  setAssignee,
-  assigneeOptions,
   sort,
   setSort,
   counts,
@@ -1651,9 +1658,6 @@ function FiltersPopover({
   setStateFilter: (v: string[]) => void;
   priority: string[];
   setPriority: (v: string[]) => void;
-  assignee: string[];
-  setAssignee: (v: string[]) => void;
-  assigneeOptions: { value: string; label: string; count: number }[];
   sort: string;
   setSort: (v: string) => void;
   /** Group label → option value → how many tasks on the board match. */
@@ -1662,9 +1666,9 @@ function FiltersPopover({
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
   // Sort stays out of the badge — it always has a value, so counting it would
-  // read "1 filter active" on a board that isn't filtered at all.
-  const count =
-    kindFilter.length + stateFilter.length + priority.length + assignee.length;
+  // read "1 filter active" on a board that isn't filtered at all. Assignee is
+  // out too: it has its own trigger in the toolbar, which shows its own state.
+  const count = kindFilter.length + stateFilter.length + priority.length;
 
   // Same dismissal contract as every other popover in the app: click-away and
   // Escape both close it.
@@ -1692,12 +1696,6 @@ function FiltersPopover({
     { label: "Kind", options: KIND_FILTER_OPTIONS, values: kindFilter, set: setKindFilter },
     { label: "State", options: STATE_FILTER_OPTIONS, values: stateFilter, set: setStateFilter },
     { label: "Priority", options: PRIORITY_FILTER_OPTIONS, values: priority, set: setPriority },
-    {
-      label: "Assignee",
-      options: assigneeOptions.map((o) => ({ value: o.value, label: o.label })),
-      values: assignee,
-      set: setAssignee,
-    },
   ];
 
   return (
@@ -1815,7 +1813,6 @@ function FiltersPopover({
                 setKindFilter([]);
                 setStateFilter([]);
                 setPriority([]);
-                setAssignee([]);
               }}
               className="mt-3 w-full border-t border-line pt-2 text-left text-xs text-muted transition-colors duration-150 hover:text-ink"
             >
