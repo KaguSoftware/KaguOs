@@ -424,6 +424,16 @@ const LEVEL_1: ProgramSeed = {
       proofGoal: "A clean restart with a summary hand-off that loses nothing",
       resources: [
         {
+          title: "Context Management in Claude Code",
+          url: "https://www.youtube.com/watch?v=eW3oTyfeWZ0",
+          kind: "video",
+        },
+        {
+          title: "Most devs don't understand how context windows work",
+          url: "https://www.youtube.com/watch?v=-uW5-TaVXu4",
+          kind: "video",
+        },
+        {
           title: "What is a Context Window?",
           url: "https://www.ibm.com/think/topics/context-window",
           kind: "read",
