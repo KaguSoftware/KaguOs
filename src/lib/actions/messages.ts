@@ -126,7 +126,7 @@ export async function sendMessage(
     const [profile, membership, unread, lastMine] = await Promise.all([
       ctx.supabase
         .from("profiles")
-        .select("id, is_admin")
+        .select("id, is_admin, kind")
         .eq("id", recipientId)
         .maybeSingle(),
       ctx.supabase
@@ -159,7 +159,15 @@ export async function sendMessage(
         ok: false,
         message: "Couldn't reach the server. Please try again.",
       };
-    if (!profile.data || !(profile.data.is_admin || membership.data))
+    // kind = 'member' first (0062): a client account is in no section and holds
+    // no admin flag, so it already fails the audience test below — but this is
+    // the one action that addresses another user by id, and "can I DM this id"
+    // should answer "no" for an outsider on its own terms, not by accident.
+    if (
+      !profile.data ||
+      profile.data.kind !== "member" ||
+      !(profile.data.is_admin || membership.data)
+    )
       return { ok: false, message: "They don't have access to chat." };
 
     /**

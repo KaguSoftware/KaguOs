@@ -18,7 +18,7 @@ import { createClient } from "@/lib/supabase/client";
  * simplest correct way to reflect someone else's change.
  *
  *   useRealtimeRefresh("contacts");
- *   useRealtimeRefresh(["marketing_posts", "marketing_campaigns"]);
+ *   useRealtimeRefresh(["creatives", "marketing_campaigns"]);
  *
  * Refreshes are coalesced: a burst of changes (e.g. a batch insert) triggers a
  * single refresh on the next tick, not one per row.

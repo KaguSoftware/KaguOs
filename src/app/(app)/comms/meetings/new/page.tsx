@@ -9,7 +9,13 @@ export const metadata: Metadata = { title: "Record a meeting" };
 export default async function NewMeetingPage() {
   const ctx = await requireSectionWrite("comms");
   const profiles = await rowsOrThrow(
-    ctx.supabase.from("profiles").select("id, full_name, email").order("full_name"),
+    ctx.supabase
+      .from("profiles")
+      .select("id, full_name, email")
+      // kind = 'member' (0062) — this list is "which colleague", never an
+      // outside client account.
+      .eq("kind", "member")
+      .order("full_name"),
     "profiles"
   );
 

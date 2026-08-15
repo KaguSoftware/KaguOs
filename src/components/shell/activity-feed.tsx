@@ -21,7 +21,7 @@ const KIND: Record<ActivityKind, { icon: LucideIcon; verb: string; label: string
   idea: { icon: Lightbulb, verb: "posted an idea", label: "Ideas" },
   project: { icon: FolderKanban, verb: "started a project", label: "Projects" },
   transaction: { icon: Receipt, verb: "logged", label: "Money" },
-  post: { icon: Megaphone, verb: "planned a post", label: "Posts" },
+  creative: { icon: Megaphone, verb: "added a video", label: "Videos" },
   meeting: { icon: CalendarDays, verb: "recorded a meeting", label: "Meetings" },
   contact: { icon: UserPlus, verb: "added a contact", label: "Contacts" },
 };

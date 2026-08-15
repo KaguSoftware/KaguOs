@@ -85,10 +85,21 @@ export const STATUS_PRESETS: Record<StatusKind, StatusPreset> = {
   custom: { emoji: "💬", label: "Custom…", callDefault: false },
 };
 
+/**
+ * What kind of person this account is. Until 0062 there was only one answer and
+ * it was implicit: every user was one of the 8. A `client` is an outsider with
+ * a login — someone at a Marketing client who approves their own video cuts —
+ * and is barred from every section gate in the database (0062 §4), not merely
+ * hidden from them in the UI.
+ */
+export type ProfileKind = "member" | "client";
+
 export type Profile = {
   id: string;
   email: string;
   full_name: string | null;
+  /** Member or client. Defaults to 'member' so an older row reads as a colleague. */
+  kind: ProfileKind;
   is_admin: boolean;
   color: string | null;
   showcase_mode: boolean;
@@ -561,47 +572,155 @@ export type DebugTaskImageView = DebugTaskImage & {
   thumbUrl: string;
 };
 
+/* ── Marketing: the agency arm ──────────────────────────────────────────────
+ *
+ * This section is not a content calendar for Kagu's own brand. It is a
+ * client-services delivery system: Kagu films video for paying clients, runs
+ * paid media against it, and reports results. Client is the root object — every
+ * row below belongs to exactly one — and the unit of work is a video with a
+ * long production life and a client approval gate in the middle of it.
+ */
+
+export type ClientStatus = "active" | "paused" | "ended";
+
+/**
+ * How Kagu is paid. All three are live options and the answer is deliberately
+ * undecided (see MARKETING.md D4) — the storage does not wait for the business
+ * model, so deciding it later costs nothing.
+ */
+export type EngagementKind = "retainer" | "project" | "ad_fee";
+
+/** Whose ad account is charged. 'client' today, always; see 0062. */
+export type AdAccountOwner = "client" | "kagu";
+
+export type Client = {
+  id: string;
+  name: string;
+  status: ClientStatus;
+  currency: Currency;
+  engagement_kind: EngagementKind;
+  /** Videos owed per month on a retainer. Null for project work. */
+  monthly_deliverables: number | null;
+  ad_account_owner: AdAccountOwner;
+  brand_notes: string | null;
+  is_demo: boolean;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+/** `approver` may decide on a cut; `viewer` may only look. */
+export type ClientRole = "approver" | "viewer";
+
+export type ClientUser = {
+  user_id: string;
+  client_id: string;
+  role: ClientRole;
+  created_at: string;
+};
+
+/**
+ * The production life of one video, in order.
+ *
+ * `changes_requested` is off the main line: it is where a video lands when a
+ * client asks for something, and it goes back to `editing`. Everything else
+ * advances one step at a time — see CREATIVE_LADDER in lib/creatives.ts, which
+ * owns the transitions so the ladder is defined once rather than re-derived by
+ * every button that moves it.
+ */
+export type CreativeStatus =
+  | "idea"
+  | "scripted"
+  | "shot"
+  | "editing"
+  | "internal_review"
+  | "client_review"
+  | "changes_requested"
+  | "approved"
+  | "scheduled"
+  | "live";
+
+/** Organic post or paid creative. Decides whether ad numbers are expected. */
+export type CreativeKind = "organic" | "ad";
+
+export type Creative = {
+  id: string;
+  client_id: string;
+  campaign_id: string | null;
+  title: string;
+  /** The first two seconds, written down — what variants differ on. */
+  hook: string | null;
+  script: string | null;
+  /** The producer: responsible end to end. */
+  owner_id: string | null;
+  /** Who has it during the edit. */
+  editor_id: string | null;
+  shoot_date: string | null;
+  footage_url: string | null;
+  cut_url: string | null;
+  channel: string;
+  kind: CreativeKind;
+  publish_on: string | null;
+  published_url: string | null;
+  status: CreativeStatus;
+  /** The concept this is a variant of. Null for the concept itself. */
+  parent_creative_id: string | null;
+  is_demo: boolean;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type ReviewDecision = "approved" | "changes";
+
+/**
+ * One decision on one cut. Append-only (0064): never updated, never deleted —
+ * the sequence of these is the documentation of why a video changed.
+ */
+export type CreativeReview = {
+  id: string;
+  creative_id: string;
+  client_id: string;
+  /** Null once that account is gone — the decision outlives the reviewer (0064). */
+  reviewer_id: string | null;
+  decision: ReviewDecision;
+  comment: string | null;
+  /** Whole seconds into the cut. Null = a note about the whole video. */
+  timecode: number | null;
+  is_demo: boolean;
+  created_at: string;
+};
+
 export type CampaignStatus = "idea" | "planned" | "running" | "done";
-export type PostStatus = "draft" | "scheduled" | "published";
+
+export type AdPlatform = "meta" | "tiktok" | "google" | "other";
+export type GoalMetric = "reach" | "leads" | "sales" | "followers";
 
 export type MarketingCampaign = {
   id: string;
+  /** Null only on rows predating 0063; those can hold no creatives. */
+  client_id: string | null;
   name: string;
   channel: string;
+  /** Where the money goes, as opposed to `channel` (where the content goes). */
+  platform: AdPlatform | null;
   status: CampaignStatus;
   starts_on: string | null;
   ends_on: string | null;
   budget: number | null;
+  goal_metric: GoalMetric | null;
+  goal_target: number | null;
+  /** What actually went out, from the ad import. Never typed by hand. */
+  spend_actual: number;
   currency: Currency;
   url: string | null;
   notes: string | null;
+  /** The two fields that make a finished campaign teach something. */
+  retro_worked: string | null;
+  retro_avoid: string | null;
   created_by: string | null;
   created_at: string;
   updated_at: string;
-};
-
-export type MarketingPost = {
-  id: string;
-  title: string;
-  channel: string;
-  status: PostStatus;
-  publish_on: string | null;
-  url: string | null;
-  campaign_id: string | null;
-  owner_id: string | null;
-  notes: string | null;
-  created_by: string | null;
-  created_at: string;
-  updated_at: string;
-};
-
-export type MarketingItem = {
-  id: string;
-  title: string;
-  url: string | null;
-  note: string | null;
-  created_by: string | null;
-  created_at: string;
 };
 
 export type Reminder = {

@@ -20,6 +20,9 @@ export default async function AccountPage() {
     ctx.supabase
       .from("profiles")
       .select("id, full_name, email, color")
+      // kind = 'member' (0062) — "everyone else" means the other seven, not a
+      // client account whose colour you will never see next to your own.
+      .eq("kind", "member")
       .neq("id", ctx.profile.id),
     "profiles"
   );

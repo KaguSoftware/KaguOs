@@ -2,7 +2,12 @@ import { cache } from "react";
 import { after } from "next/server";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { SECTION_LABELS, type Profile, type Section } from "@/lib/types";
+import {
+  SECTION_LABELS,
+  type Profile,
+  type ProfileKind,
+  type Section,
+} from "@/lib/types";
 
 /**
  * How much a membership lets you do. 'write' is the default and the only thing
@@ -30,6 +35,22 @@ export type SessionContext = {
   isAdmin: boolean;
   /** When true, the app shows obviously-fake demo data (client showcase). */
   showcase: boolean;
+  /**
+   * Member or client (0062). A client is an outsider with a login — someone at
+   * a Marketing client who approves their own cuts — and belongs to no section.
+   *
+   * Kept as the raw kind rather than only a boolean because the interesting
+   * question at most call sites is "which surface does this person get", and a
+   * two-valued name answers it more legibly than `!isClient`.
+   */
+  kind: ProfileKind;
+  /**
+   * The tenant this user belongs to, null for members. Every read in the
+   * Marketing section that a client can reach is filtered by it — in the
+   * database first (0062 §6), and here so the UI never asks for rows it will
+   * not get back.
+   */
+  clientId: string | null;
 };
 
 /**
@@ -68,6 +89,13 @@ export const getSessionContext = cache(async function getSessionContext(): Promi
     // Optional so a stale RPC (migration not yet applied, or a rollback) can't
     // lock the whole company out — see the permissive default in canWrite.
     access?: Record<Section, SectionAccess>;
+    // Also optional, for the same deploy-window reason — but note the default
+    // below goes the OTHER way. A missing `access` must read as "full write" or
+    // the company loses its own app; a missing `kind` must read as "member",
+    // which is the same permissive direction because the restricted principal
+    // is the client. Both defaults describe the world before 0062.
+    kind?: ProfileKind;
+    client_id?: string | null;
   } | null;
   if (!ctx?.profile) redirect("/login");
 
@@ -91,18 +119,41 @@ export const getSessionContext = cache(async function getSessionContext(): Promi
     });
   }
 
+  // `kind` is read from the RPC's own key, not from `profile.kind`, so that the
+  // one place this value is decided is the same place `client_id` comes from.
+  const kind: ProfileKind = ctx.kind ?? profile.kind ?? "member";
+  const isClient = kind === "client";
+
   return {
     supabase,
     userId,
     profile,
     sections,
     access,
-    isAdmin: profile.is_admin,
-    showcase: Boolean(profile.showcase_mode),
+    // A client is never an admin and never showcases. The database refuses both
+    // (0062 §1 as a constraint, §4 in the gate functions); mirrored here so the
+    // UI cannot render an admin nav or a showcase banner for one even if a row
+    // somehow carried the flag.
+    isAdmin: profile.is_admin && !isClient,
+    showcase: Boolean(profile.showcase_mode) && !isClient,
+    kind,
+    clientId: isClient ? (ctx.client_id ?? null) : null,
   };
 });
 
+/** An outsider with a login — see SessionContext.kind. */
+export function isClient(ctx: SessionContext) {
+  return ctx.kind === "client";
+}
+
 export function canAccess(ctx: SessionContext, section: Section) {
+  // A client belongs to no section and must never roam. Checked first, above
+  // the showcase arm in particular: showcase deliberately grants access to
+  // every section, and it is the one clause here that could hand an outsider
+  // the whole app. (ctx.showcase is already forced false for clients above —
+  // this is the second lock on the same door, because one bad `?? true` in the
+  // parsing above would otherwise be enough.)
+  if (isClient(ctx)) return false;
   // In showcase mode everyone can roam every section — it's all demo data, so
   // there's nothing real to protect and the point is to show the whole app off.
   return ctx.isAdmin || ctx.showcase || ctx.sections.has(section);
@@ -121,6 +172,11 @@ export function canAccess(ctx: SessionContext, section: Section) {
  * writing during a deploy window.
  */
 export function canWrite(ctx: SessionContext, section: Section) {
+  // ⚠️ A client must NEVER satisfy canWrite("marketing"). That check is the
+  // whole distance between "approve my video" and "edit the agency's
+  // pipeline" — so the client's one write (a review, 0064) is gated on being
+  // that creative's approver, and never on this function.
+  if (isClient(ctx)) return false;
   // Showcase roams everywhere and writes nowhere — it must not gain a write
   // path here that blockIfShowcase would otherwise have stopped.
   if (ctx.showcase) return false;
@@ -152,11 +208,46 @@ export function demoFlag(ctx: SessionContext): boolean {
   return ctx.showcase;
 }
 
-/** Page guard: members (or admins) only — everyone else lands back on the dashboard. */
+/**
+ * Where this person's app STARTS. Members get the teammate dashboard; clients
+ * get their portal.
+ *
+ * Every "send them back" in the app used to be a bare `redirect("/")`, which
+ * for a client is a redirect to a page that immediately redirects them here —
+ * a loop if it were ever wrong, and a flash of the wrong shell even when right.
+ * One function so there is one answer.
+ */
+export function homeFor(ctx: SessionContext) {
+  return isClient(ctx) ? "/portal" : "/";
+}
+
+/** Page guard: members (or admins) only — everyone else lands back at their home. */
 export async function requireSection(section: Section): Promise<SessionContext> {
   const ctx = await getSessionContext();
-  if (!canAccess(ctx, section)) redirect("/");
+  if (!canAccess(ctx, section)) redirect(homeFor(ctx));
   return ctx;
+}
+
+/**
+ * Page guard for the client portal — the mirror of requireSection, and the only
+ * door into the `(client)` route group.
+ *
+ * Returns a narrowed context whose `clientId` is a plain string, so every query
+ * behind this guard can filter on the tenant without a null check that would
+ * otherwise be tempting to write as `?? ""` (which matches nothing) or skip
+ * entirely (which matches everything).
+ *
+ * A client whose `client_users` row is missing has no tenant and therefore no
+ * portal; they land on /login rather than an empty shell, because a signed-in
+ * account with nothing to show is a provisioning bug, not a user state.
+ */
+export async function requireClient(): Promise<
+  SessionContext & { clientId: string }
+> {
+  const ctx = await getSessionContext();
+  if (!isClient(ctx)) redirect("/");
+  if (!ctx.clientId) redirect("/login");
+  return ctx as SessionContext & { clientId: string };
 }
 
 /**
@@ -189,6 +280,12 @@ export async function blockIfReadOnly(
   section: Section
 ): Promise<{ ok: false; message: string } | null> {
   const ctx = await getSessionContext();
+  // A client reaching a section action at all means a member-only affordance
+  // leaked into the portal. Refuse it in its own arm rather than letting it
+  // fall through to the view-only message, which would describe a section this
+  // person cannot see and does not know exists.
+  if (isClient(ctx))
+    return { ok: false, message: "That isn't something your account can do." };
   if (ctx.showcase)
     return {
       ok: false,
@@ -209,12 +306,12 @@ export async function blockIfReadOnly(
  */
 export async function requireSectionWrite(section: Section): Promise<SessionContext> {
   const ctx = await getSessionContext();
-  if (!canWrite(ctx, section)) redirect("/");
+  if (!canWrite(ctx, section)) redirect(homeFor(ctx));
   return ctx;
 }
 
 export async function requireAdmin(): Promise<SessionContext> {
   const ctx = await getSessionContext();
-  if (!ctx.isAdmin) redirect("/");
+  if (!ctx.isAdmin) redirect(homeFor(ctx));
   return ctx;
 }

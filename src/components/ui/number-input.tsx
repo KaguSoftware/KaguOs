@@ -16,6 +16,8 @@ export function NumberInput({
   decimals = 2,
   suffix,
   className,
+  onValueChange,
+  onCommit,
 }: {
   name: string;
   id?: string;
@@ -24,6 +26,14 @@ export function NumberInput({
   decimals?: number;
   suffix?: string;
   className?: string;
+  /** Notified with the cleaned string on every keystroke. FormData still works. */
+  onValueChange?: (value: string) => void;
+  /**
+   * Notified on blur, AFTER normalisation — the value the user settled on.
+   * Use this for save-on-blur; `onValueChange` fires mid-typing, where "1" is a
+   * legitimate keystroke on the way to "12" and saving it would be wrong.
+   */
+  onCommit?: (value: string) => void;
 }) {
   const [value, setValue] = useState(String(defaultValue ?? ""));
 
@@ -36,12 +46,18 @@ export function NumberInput({
         next.slice(0, firstDot + 1) + next.slice(firstDot + 1).replace(/\./g, "");
     }
     setValue(next);
+    onValueChange?.(next);
   }
 
   function handleBlur() {
-    if (!value.trim()) return;
+    if (!value.trim()) {
+      onCommit?.("");
+      return;
+    }
     const parsed = Number(value);
-    if (Number.isFinite(parsed)) setValue(parsed.toFixed(decimals));
+    const settled = Number.isFinite(parsed) ? parsed.toFixed(decimals) : value;
+    if (settled !== value) setValue(settled);
+    onCommit?.(settled);
   }
 
   return (

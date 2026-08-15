@@ -80,8 +80,11 @@ export const getPulse = cache(async function getPulse(
     learn: canAccess(ctx, "learn")
       ? count("sprints", (q) => q.lte("starts_on", today).gte("ends_on", today))
       : null,
+    // Videos in flight, not running campaigns: since 0063 the unit of work in
+    // this section is the video, and "2 campaigns" on the tile says nothing
+    // about whether anyone owes anything this week.
     marketing: canAccess(ctx, "marketing")
-      ? count("marketing_campaigns", (q) => q.eq("status", "running"))
+      ? count("creatives", (q) => q.neq("status", "live"))
       : null,
     comms: canAccess(ctx, "comms")
       ? count("contacts", (q) => q.eq("kind", "lead"))
@@ -117,7 +120,7 @@ export const getPulse = cache(async function getPulse(
   put("debug", debug, "open");
   put("work", work, "projects", "project");
   put("learn", learn, "sprints", "sprint");
-  put("marketing", marketing, "campaigns", "campaign");
+  put("marketing", marketing, "videos", "video");
   put("comms", comms, "leads", "lead");
 
   return { stats, overdue: overdue?.count ?? 0 };

@@ -38,7 +38,12 @@ export const getMembersMap = cache(async function getMembersMap(
 ): Promise<MembersMap> {
   const [data, ctx] = await Promise.all([
     rowsOrThrow(
-      supabase.from("profiles").select("id, full_name, email, color"),
+      // ⚠️ kind = 'member' (0062). This map is the app's answer to "who is a
+      // person here" — it colours every author line, fills the @-mention list,
+      // and names notification actors. Client accounts are logins, not
+      // colleagues; without this filter one appears in the mention menu of a
+      // chat they cannot see, next to the eight people who can.
+      supabase.from("profiles").select("id, full_name, email, color").eq("kind", "member"),
       "members: profiles"
     ),
     getSessionContext(),

@@ -22,7 +22,13 @@ export default async function EditMeetingPage({
       "comms_meeting"
     ),
     rowsOrThrow(
-      ctx.supabase.from("profiles").select("id, full_name, email").order("full_name"),
+      ctx.supabase
+        .from("profiles")
+        .select("id, full_name, email")
+        // kind = 'member' (0062) — this list is "which colleague", never an
+        // outside client account.
+        .eq("kind", "member")
+        .order("full_name"),
       "profiles"
     ),
   ]);

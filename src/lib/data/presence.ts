@@ -39,7 +39,12 @@ export const getPresence = cache(async function getPresence(
         .from("profiles")
         .select(
           "id, full_name, email, color, is_admin, last_seen_at, status_kind, status_emoji, status_text, available_to_call, status_until"
-        ),
+        )
+        // kind = 'member' (0062). The admin arm of the filter below is `is_admin
+        // or in chat` — and a client is neither, so this is belt and braces.
+        // It stays because the denominator here is also the DM contact list,
+        // and "who can I message" must never include someone outside Kagu.
+        .eq("kind", "member"),
       "presence: profiles"
     ),
     rowsOrThrow(

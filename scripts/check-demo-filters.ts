@@ -24,9 +24,13 @@ import { join } from "node:path";
 /** Tables carrying an is_demo column (0014 + 0016 + 0022). Keep in sync with those migrations. */
 const DEMOABLE = [
   "projects", "ideas", "debug_tasks", "transactions", "recurring_items",
-  "marketing_campaigns", "marketing_posts", "contacts", "contracts",
+  "marketing_campaigns", "contacts", "contracts",
   "idea_comments", "idea_votes", "project_secrets", "contact_links",
-  "marketing_items", "sprints", "sprint_resources", "sprint_participants",
+  // Marketing's client-services model (0062–0064). `marketing_posts` and
+  // `marketing_items` were dropped by 0063 and are gone from this list with
+  // them — a name here that no longer exists is a check that can never fire.
+  "clients", "creatives", "creative_reviews",
+  "sprints", "sprint_resources", "sprint_participants",
   "sprint_goals", "sprint_goal_progress", "sprint_questions",
   "sprint_question_replies", "contact_interactions",
   "sprint_stages", "sprint_practices", "sprint_resource_progress",

@@ -17,7 +17,12 @@ export default async function AdminPage() {
 
   const [profiles, memberships] = await Promise.all([
     rowsOrThrow(
-      ctx.supabase.from("profiles").select("*").order("created_at"),
+      // kind = 'member' (0062). This screen hands out sections and the admin
+      // flag, neither of which a client account can hold — listing them here
+      // would offer an admin controls that the database refuses, and mix
+      // outsiders into the company roster. Client accounts are provisioned and
+      // revoked from the Marketing section, where their tenant is visible.
+      ctx.supabase.from("profiles").select("*").eq("kind", "member").order("created_at"),
       "profiles"
     ),
     rowsOrThrow(

@@ -16,7 +16,13 @@ type NotifyKind =
   | "learn_review"
   | "status_change"
   | "message"
-  | "debug_note";
+  | "debug_note"
+  // Marketing (0063/0064). The hand-offs in a video's production life that are
+  // worth a bell: you've been given one to produce, one you edit is ready, and
+  // a decision has landed on a cut.
+  | "creative_assigned"
+  | "creative_status"
+  | "creative_review";
 
 type NotifyInput = {
   kind: NotifyKind;
@@ -73,10 +79,19 @@ export function notifySection(
   });
 }
 
-/** Notify everyone with an account (minus the actor) — e.g. team reminders. */
+/**
+ * Notify everyone with an account (minus the actor) — e.g. team reminders.
+ *
+ * "Everyone" means everyone at KAGU. kind = 'member' (0062): a client account
+ * has an account too, and this function is how a team reminder would otherwise
+ * arrive in an outsider's notification bell.
+ */
 export function notifyEveryone(ctx: SessionContext, input: NotifyInput) {
   after(async () => {
-    const { data } = await ctx.supabase.from("profiles").select("id");
+    const { data } = await ctx.supabase
+      .from("profiles")
+      .select("id")
+      .eq("kind", "member");
     await insertFor(ctx, (data ?? []).map((p) => p.id), input);
   });
 }
@@ -87,6 +102,7 @@ export function notifyAdmins(ctx: SessionContext, input: NotifyInput) {
     const { data } = await ctx.supabase
       .from("profiles")
       .select("id")
+      .eq("kind", "member")
       .eq("is_admin", true);
     await insertFor(ctx, (data ?? []).map((p) => p.id), input);
   });
@@ -103,7 +119,11 @@ export function notifyAdmins(ctx: SessionContext, input: NotifyInput) {
 export function notifyChatTeam(ctx: SessionContext, input: NotifyInput) {
   after(async () => {
     const [{ data: admins }, { data: chat }] = await Promise.all([
-      ctx.supabase.from("profiles").select("id").eq("is_admin", true),
+      ctx.supabase
+        .from("profiles")
+        .select("id")
+        .eq("kind", "member")
+        .eq("is_admin", true),
       ctx.supabase
         .from("section_memberships")
         .select("user_id")

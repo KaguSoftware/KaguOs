@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "eslint",
     "check:demo": "tsx scripts/check-demo-filters.ts",
+    "check:principals": "tsx scripts/check-principals.ts",
     "seed:learn": "tsx scripts/seed-learn-levels.ts"
   },
   "dependencies": {

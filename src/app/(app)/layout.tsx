@@ -2,7 +2,13 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { SIDEBAR_COOKIE } from "@/lib/sidebar-pref";
-import { canAccess, canWrite, getSessionContext, getUserId } from "@/lib/data/session";
+import {
+  canAccess,
+  canWrite,
+  getSessionContext,
+  getUserId,
+  isClient,
+} from "@/lib/data/session";
 import { getMembersMap } from "@/lib/data/members";
 import { getPresence } from "@/lib/data/presence";
 import { getPulse } from "@/lib/data/pulse";
@@ -51,6 +57,18 @@ export default async function AppLayout({
     ),
     getMembersMap(supabase),
   ]);
+
+  // THE SEAM. Everything below this line — presence, the pulse, the inbox, the
+  // sidebar, the command palette — is the teammate shell, and a client account
+  // must not reach any of it. One redirect here covers every route in the group
+  // rather than a guard per page, and it sits above the second wave so a client
+  // never pays for (or is described by) a presence query.
+  //
+  // The first wave above has already run for them: notifications are their own
+  // rows, and getMembersMap is filtered to members (0062). Neither leaks. It is
+  // placed here rather than higher because `ctx` is what decides, and ctx
+  // arrives with that wave.
+  if (isClient(ctx)) redirect("/portal");
 
   // Presence for the always-open sidebar panel + the mobile menu's live tile
   // counts. Both need ctx (access/showcase gating), both are cache()-deduped,

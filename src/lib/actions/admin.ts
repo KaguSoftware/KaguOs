@@ -233,9 +233,14 @@ export async function importDebugTasks(rows: ImportTaskRow[]): Promise<ActionRes
   }
   if (rows.length > 500) return { ok: false, message: "Max 500 rows per import." };
 
+  // kind = 'member' (0062). This map turns a name in the old spreadsheet into
+  // an assignee. A client account sharing a first name with a colleague would
+  // otherwise be a candidate, and the import would hand them a debug task —
+  // which they cannot see, so it would read as "assigned to nobody" forever.
   const { data: profiles } = await ctx.supabase
     .from("profiles")
-    .select("id, full_name, email");
+    .select("id, full_name, email")
+    .eq("kind", "member");
   const byName = new Map<string, string>();
   for (const p of profiles ?? []) {
     if (p.full_name) byName.set(p.full_name.trim().toLowerCase(), p.id);
