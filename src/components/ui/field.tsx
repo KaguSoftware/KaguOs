@@ -17,12 +17,12 @@ export function Field({
 }) {
   return (
     <div className={cn("space-y-1.5", className)}>
-      <label htmlFor={htmlFor} className="block text-[13px] font-medium text-muted">
+      <label htmlFor={htmlFor} className="block text-[calc(13px*var(--text-scale,1))] font-medium text-muted">
         {label}
       </label>
       {children}
-      {hint && !error && <p className="text-[13px] text-faint">{hint}</p>}
-      {error && <p className="text-[13px] text-danger">{error}</p>}
+      {hint && !error && <p className="text-[calc(13px*var(--text-scale,1))] text-faint">{hint}</p>}
+      {error && <p className="text-[calc(13px*var(--text-scale,1))] text-danger">{error}</p>}
     </div>
   );
 }

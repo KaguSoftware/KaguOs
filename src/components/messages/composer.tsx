@@ -394,7 +394,7 @@ export const Composer = forwardRef<
                 }}
                 onMouseEnter={() => setPick(i)}
                 className={cn(
-                  "flex w-full items-center gap-2 px-3 py-1.5 text-left text-[13px]",
+                  "flex w-full items-center gap-2 px-3 py-1.5 text-left text-[calc(13px*var(--text-scale,1))]",
                   i === pick ? "bg-line-strong/40 text-ink" : "text-muted"
                 )}
               >

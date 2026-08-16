@@ -82,7 +82,7 @@ export function CreateForm({
 
       {warningText ? (
         <div className="flex flex-wrap items-center gap-3 rounded-md border border-amber/30 bg-amber/10 px-3 py-2.5">
-          <p className="text-[13px] text-amber">{warningText}</p>
+          <p className="text-[calc(13px*var(--text-scale,1))] text-amber">{warningText}</p>
           <div className="flex gap-2">
             <Button
               type="submit"
@@ -138,7 +138,7 @@ export function CreatePage({
     <div className={cn("mx-auto", wide ? "max-w-2xl" : "max-w-xl")}>
       <div className="mb-6 flex items-start justify-between gap-3">
         <div>
-          <h1 className="text-[22px] font-semibold tracking-tight">{title}</h1>
+          <h1 className="text-[calc(22px*var(--text-scale,1))] font-semibold tracking-tight">{title}</h1>
           {hint && <p className="mt-1 text-sm text-muted">{hint}</p>}
         </div>
         <Button
@@ -191,7 +191,7 @@ export function CreateOverlay({
       <div className="mx-auto max-w-xl animate-overlay-in px-6 py-10 md:py-16">
         <div className="mb-6 flex items-start justify-between gap-3">
           <div>
-            <h1 className="text-[22px] font-semibold tracking-tight">{title}</h1>
+            <h1 className="text-[calc(22px*var(--text-scale,1))] font-semibold tracking-tight">{title}</h1>
             {hint && <p className="mt-1 text-sm text-muted">{hint}</p>}
           </div>
           <Button type="button" variant="ghost" size="sm" onClick={onClose} aria-label="Close">

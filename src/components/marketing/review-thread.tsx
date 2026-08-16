@@ -61,7 +61,7 @@ export function ReviewThread({
         <ReviewForm creativeId={creativeId} asClient={asClient} />
       ) : (
         reviews.length === 0 && (
-          <p className="text-[13px] text-faint">
+          <p className="text-[calc(13px*var(--text-scale,1))] text-faint">
             No notes on this cut yet.
           </p>
         )
@@ -95,7 +95,7 @@ function ReviewEntry({
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
         <span
           className={cn(
-            "inline-flex items-center gap-1 text-[13px] font-medium",
+            "inline-flex items-center gap-1 text-[calc(13px*var(--text-scale,1))] font-medium",
             approved ? "text-primary-dim" : "text-amber"
           )}
         >
@@ -107,7 +107,7 @@ function ReviewEntry({
           {approved ? "Approved" : "Changes asked"}
         </span>
         <span
-          className="text-[13px]"
+          className="text-[calc(13px*var(--text-scale,1))]"
           style={member ? { color: member.color } : undefined}
         >
           {name}
@@ -124,7 +124,7 @@ function ReviewEntry({
         </span>
       </div>
       {review.comment && (
-        <p className="mt-1.5 max-w-[70ch] whitespace-pre-wrap text-[13px] text-ink">
+        <p className="mt-1.5 max-w-[70ch] whitespace-pre-wrap text-[calc(13px*var(--text-scale,1))] text-ink">
           {review.comment}
         </p>
       )}

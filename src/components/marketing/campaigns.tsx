@@ -134,7 +134,7 @@ function CampaignRow({
 
         {budget > 0 && (
           <div>
-            <div className="flex items-baseline justify-between gap-3 text-[13px]">
+            <div className="flex items-baseline justify-between gap-3 text-[calc(13px*var(--text-scale,1))]">
               <span className="font-mono tabular-nums text-ink">
                 {formatMoney(spent, campaign.currency)}
               </span>
@@ -156,7 +156,7 @@ function CampaignRow({
         )}
 
         {campaign.notes && (
-          <p className="max-w-[70ch] text-[13px] text-muted">{campaign.notes}</p>
+          <p className="max-w-[70ch] text-[calc(13px*var(--text-scale,1))] text-muted">{campaign.notes}</p>
         )}
 
         <Retro campaign={campaign} canWrite={canWrite} />
@@ -209,7 +209,7 @@ function Retro({
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="text-[13px] text-faint underline-offset-2 transition-colors duration-150 hover:text-muted hover:underline"
+        className="text-[calc(13px*var(--text-scale,1))] text-faint underline-offset-2 transition-colors duration-150 hover:text-muted hover:underline"
       >
         {hasRetro ? "Show retro" : "Add a retro"}
       </button>
@@ -265,8 +265,8 @@ function RetroRead({ label, body }: { label: string; body: string | null }) {
   if (!body) return null;
   return (
     <div>
-      <p className="text-[13px] font-medium text-muted">{label}</p>
-      <p className="max-w-[70ch] text-[13px] text-ink">{body}</p>
+      <p className="text-[calc(13px*var(--text-scale,1))] font-medium text-muted">{label}</p>
+      <p className="max-w-[70ch] text-[calc(13px*var(--text-scale,1))] text-ink">{body}</p>
     </div>
   );
 }

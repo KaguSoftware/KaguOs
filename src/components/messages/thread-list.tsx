@@ -154,7 +154,7 @@ function Avatar({
   return (
     <span className="relative shrink-0">
       <span
-        className="flex size-8 items-center justify-center rounded-full text-[13px] font-semibold text-bg"
+        className="flex size-8 items-center justify-center rounded-full text-[calc(13px*var(--text-scale,1))] font-semibold text-bg"
         style={{ backgroundColor: person.color }}
         aria-hidden
       >
@@ -220,7 +220,7 @@ function Row({
         </span>
         <span
           className={cn(
-            "block truncate text-[13px]",
+            "block truncate text-[calc(13px*var(--text-scale,1))]",
             hot ? "text-ink" : "text-muted"
           )}
         >

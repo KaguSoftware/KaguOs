@@ -51,7 +51,7 @@ export function DmHeader({
     <>
       <span className="relative shrink-0" aria-hidden>
         <span
-          className="flex size-8 items-center justify-center rounded-full text-[13px] font-semibold text-bg"
+          className="flex size-8 items-center justify-center rounded-full text-[calc(13px*var(--text-scale,1))] font-semibold text-bg"
           style={{ backgroundColor: color }}
         >
           {name.slice(0, 1).toUpperCase()}
@@ -66,7 +66,7 @@ export function DmHeader({
         )}
       </span>
       <div className="min-w-0">
-        <h1 className="truncate text-[15px] font-semibold" style={{ color }}>
+        <h1 className="truncate text-[calc(15px*var(--text-scale,1))] font-semibold" style={{ color }}>
           {name}
           {statusEmoji && (
             <span className="ml-1.5" aria-hidden>
@@ -75,11 +75,11 @@ export function DmHeader({
           )}
         </h1>
         {former ? (
-          <p className="truncate text-[12px] text-faint">
+          <p className="truncate text-[calc(12px*var(--text-scale,1))] text-faint">
             No longer on the work team — you can still read this.
           </p>
         ) : (
-          <p className="truncate text-[12px] text-faint">
+          <p className="truncate text-[calc(12px*var(--text-scale,1))] text-faint">
             {LABEL[state]}
             {statusText && <span> · {statusText}</span>}
           </p>

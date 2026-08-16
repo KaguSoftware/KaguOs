@@ -16,7 +16,7 @@ function ResultNote({ result }: { result: ActionResult }) {
   return (
     <p
       role="status"
-      className={cn("text-[13px]", result.ok ? "text-primary-dim" : "text-danger")}
+      className={cn("text-[calc(13px*var(--text-scale,1))]", result.ok ? "text-primary-dim" : "text-danger")}
     >
       {result.message}
     </p>
@@ -44,7 +44,7 @@ export function CreateUserForm() {
         <Input id="new-password" name="password" type="text" minLength={8} required />
       </Field>
       <fieldset>
-        <legend className="mb-1.5 block text-[13px] font-medium text-muted">
+        <legend className="mb-1.5 block text-[calc(13px*var(--text-scale,1))] font-medium text-muted">
           Sections
         </legend>
         {/* Checked = they get the section; the View box next to it downgrades
@@ -61,7 +61,7 @@ export function CreateUserForm() {
               />
               <Checkbox
                 size="sm"
-                className="shrink-0 text-[12px] text-faint"
+                className="shrink-0 text-[calc(12px*var(--text-scale,1))] text-faint"
                 label="View only"
                 name={`access:${section}`}
                 value="read"
@@ -69,7 +69,7 @@ export function CreateUserForm() {
             </div>
           ))}
         </div>
-        <p className="mt-1.5 text-[13px] text-faint">
+        <p className="mt-1.5 text-[calc(13px*var(--text-scale,1))] text-faint">
           Sections are independent — tick exactly what they should see. &ldquo;View
           only&rdquo; lets them read the section without changing anything in it.
         </p>

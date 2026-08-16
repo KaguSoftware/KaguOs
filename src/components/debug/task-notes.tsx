@@ -90,14 +90,14 @@ export function TaskNotes({
 							<li key={note.id} className="group">
 								<p className="flex flex-wrap items-baseline gap-x-2">
 									<span
-										className="text-[13px] font-medium"
+										className="text-[calc(13px*var(--text-scale,1))] font-medium"
 										style={{ color: author?.color }}
 									>
 										{isMine
 											? "You"
 											: (author?.name ?? "Someone")}
 									</span>
-									<span className="text-[11px] text-faint">
+									<span className="text-[calc(11px*var(--text-scale,1))] text-faint">
 										{formatRelative(note.created_at)}
 										{edited && " · edited"}
 									</span>
@@ -199,7 +199,7 @@ export function TaskNotes({
 										</div>
 									</div>
 								) : (
-									<p className="whitespace-pre-wrap text-[13px] leading-relaxed text-muted">
+									<p className="whitespace-pre-wrap text-[calc(13px*var(--text-scale,1))] leading-relaxed text-muted">
 										{note.body}
 									</p>
 								)}
@@ -244,7 +244,7 @@ export function TaskNotes({
 								)}
 								Add note
 							</Button>
-							<span className="text-[11px] text-faint">
+							<span className="text-[calc(11px*var(--text-scale,1))] text-faint">
 								Enter to send · Shift+Enter for a new line
 							</span>
 						</div>

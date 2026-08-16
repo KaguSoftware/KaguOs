@@ -189,7 +189,7 @@ export default async function LearnPage() {
               Yours
             </h2>
             {yours.length === 0 ? (
-              <p className="rounded-lg border border-dashed border-line px-4 py-6 text-center text-[13px] text-faint">
+              <p className="rounded-lg border border-dashed border-line px-4 py-6 text-center text-[calc(13px*var(--text-scale,1))] text-faint">
                 {openToJoin.length > 0
                   ? "Nothing running. Join one below."
                   : "Nothing running for you right now."}
@@ -251,7 +251,7 @@ export default async function LearnPage() {
 
                         <div className="mt-2.5 flex flex-wrap items-center gap-x-4 gap-y-1">
                           {current?.stage && (
-                            <p className="min-w-0 text-[13px] text-muted">
+                            <p className="min-w-0 text-[calc(13px*var(--text-scale,1))] text-muted">
                               <span className="text-ink">{current.stage.title}</span>
                               {nextGoal && (
                                 <span className="text-faint"> · {nextGoal.title}</span>
@@ -259,7 +259,7 @@ export default async function LearnPage() {
                             </p>
                           )}
                           {!current && goals.length > 0 && (
-                            <p className="text-[13px] text-primary-dim">
+                            <p className="text-[calc(13px*var(--text-scale,1))] text-primary-dim">
                               All goals done
                             </p>
                           )}
@@ -334,7 +334,7 @@ export default async function LearnPage() {
                             {meta.join(" · ")}
                           </p>
                           {sprint.description && (
-                            <p className="mt-2 line-clamp-2 max-w-[70ch] text-[13px] leading-relaxed text-muted">
+                            <p className="mt-2 line-clamp-2 max-w-[70ch] text-[calc(13px*var(--text-scale,1))] leading-relaxed text-muted">
                               {sprint.description}
                             </p>
                           )}
@@ -385,7 +385,7 @@ export default async function LearnPage() {
                         href={`/learn/${sprint.id}`}
                         className="flex flex-wrap items-center gap-x-4 gap-y-1 px-4 py-2.5 transition-colors duration-150 hover:bg-raised/40"
                       >
-                        <span className="min-w-0 flex-1 truncate text-[13px] text-muted">
+                        <span className="min-w-0 flex-1 truncate text-[calc(13px*var(--text-scale,1))] text-muted">
                           {sprint.title}
                         </span>
                         <span className="font-mono text-xs text-faint">

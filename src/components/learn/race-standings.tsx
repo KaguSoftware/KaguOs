@@ -118,7 +118,7 @@ export function RaceStandings({
               <span className="min-w-0 flex-1 sm:w-28 sm:flex-none">
                 <span
                   style={{ color: person.color }}
-                  className="block truncate text-[13px] font-medium"
+                  className="block truncate text-[calc(13px*var(--text-scale,1))] font-medium"
                   title={person.name}
                 >
                   {isMe ? "You" : firstName(person.name)}
@@ -168,7 +168,7 @@ export function RaceStandings({
                   return (
                     <li
                       key={goal.id}
-                      className="flex items-center gap-2 text-[13px]"
+                      className="flex items-center gap-2 text-[calc(13px*var(--text-scale,1))]"
                     >
                       <span
                         aria-hidden
@@ -188,7 +188,7 @@ export function RaceStandings({
                         {goal.title}
                       </span>
                       {isCurrent && (
-                        <span className="shrink-0 font-mono text-[11px] text-faint">
+                        <span className="shrink-0 font-mono text-[calc(11px*var(--text-scale,1))] text-faint">
                           now
                         </span>
                       )}

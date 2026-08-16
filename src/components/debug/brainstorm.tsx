@@ -238,7 +238,7 @@ export function Brainstorm({
       <div className="mx-auto max-w-2xl">
         <header className="mb-6 flex items-start justify-between gap-3">
           <div>
-            <h1 className="text-[22px] font-semibold tracking-tight">Brainstorm</h1>
+            <h1 className="text-[calc(22px*var(--text-scale,1))] font-semibold tracking-tight">Brainstorm</h1>
             <p className="mt-1 text-sm text-muted">
               Spam titles — Enter adds a line, nothing posts until you hit Done.
             </p>
@@ -281,7 +281,7 @@ export function Brainstorm({
               placeholder="Type a task, hit Enter, keep going…"
               aria-label="New task title"
               data-no-ring
-              className="h-11 w-full rounded-lg border border-line bg-raised pl-10 pr-3 text-[15px] text-ink placeholder:text-faint transition-colors duration-150 hover:border-line-strong focus-visible:border-primary/40"
+              className="h-11 w-full rounded-lg border border-line bg-raised pl-10 pr-3 text-[calc(15px*var(--text-scale,1))] text-ink placeholder:text-faint transition-colors duration-150 hover:border-line-strong focus-visible:border-primary/40"
             />
           </div>
           <Dropdown
@@ -296,7 +296,7 @@ export function Brainstorm({
           <ul className="mt-4 divide-y divide-line rounded-lg border border-line bg-surface">
             {titles.map((t, i) => (
               <li key={i} className="flex items-center gap-3 px-3 py-2">
-                <span className="w-6 shrink-0 text-right font-mono text-[11px] text-faint">
+                <span className="w-6 shrink-0 text-right font-mono text-[calc(11px*var(--text-scale,1))] text-faint">
                   {i + 1}
                 </span>
                 <input
@@ -324,7 +324,7 @@ export function Brainstorm({
             ))}
           </ul>
         ) : (
-          <p className="mt-4 rounded-lg border border-dashed border-line px-4 py-8 text-center text-[13px] text-faint">
+          <p className="mt-4 rounded-lg border border-dashed border-line px-4 py-8 text-center text-[calc(13px*var(--text-scale,1))] text-faint">
             The list builds here as you type. Paste a multi-line list to add it all at once.
           </p>
         )}
@@ -357,7 +357,7 @@ export function Brainstorm({
             the server, so the overflow simply vanished; saying it here means you
             can still split the batch while the titles are in front of you. */}
         {overBatchCap && (
-          <p role="status" className="mt-3 text-[13px] text-amber">
+          <p role="status" className="mt-3 text-[calc(13px*var(--text-scale,1))] text-amber">
             Only the first {MAX_TASKS_PER_BATCH} will post —{" "}
             {overflowNote(titles.length - MAX_TASKS_PER_BATCH)}
           </p>
@@ -381,7 +381,7 @@ export function Brainstorm({
     <div className="mx-auto max-w-2xl">
       <header className="mb-4 flex items-start justify-between gap-3">
         <div>
-          <h1 className="text-[22px] font-semibold tracking-tight">Add details</h1>
+          <h1 className="text-[calc(22px*var(--text-scale,1))] font-semibold tracking-tight">Add details</h1>
           <p className="mt-1 text-sm text-muted">
             All {tasks.length} are posted already — open the ones worth filling in.
           </p>
@@ -414,7 +414,7 @@ export function Brainstorm({
       </ul>
 
       <div className="mt-5 flex items-center gap-3">
-        <p className="text-[13px] text-faint">
+        <p className="text-[calc(13px*var(--text-scale,1))] text-faint">
           Anything you leave closed stays exactly as posted.
         </p>
         <Button
@@ -495,7 +495,7 @@ function DetailRow({
         aria-expanded={open}
         className="flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors duration-150 hover:bg-raised/60"
       >
-        <span className="w-6 shrink-0 text-right font-mono text-[11px] text-faint">
+        <span className="w-6 shrink-0 text-right font-mono text-[calc(11px*var(--text-scale,1))] text-faint">
           {index + 1}
         </span>
         <span className="w-4 shrink-0" aria-hidden>

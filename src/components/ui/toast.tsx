@@ -263,12 +263,12 @@ function ToastViewport({
             {t.href ? (
               <Link
                 href={t.href}
-                className="min-w-0 flex-1 text-[13px] leading-snug text-ink hover:underline"
+                className="min-w-0 flex-1 text-[calc(13px*var(--text-scale,1))] leading-snug text-ink hover:underline"
               >
                 {t.message}
               </Link>
             ) : (
-              <p className="min-w-0 flex-1 text-[13px] leading-snug text-ink">{t.message}</p>
+              <p className="min-w-0 flex-1 text-[calc(13px*var(--text-scale,1))] leading-snug text-ink">{t.message}</p>
             )}
             <button
               type="button"

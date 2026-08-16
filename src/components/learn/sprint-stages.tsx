@@ -257,7 +257,7 @@ export function SprintStages({
                         than after everything else on the page. */}
                     {resources.length > 0 && (
                       <div className="mb-3 border-b border-line pb-3">
-                        <p className="mb-1.5 font-mono text-[11px] uppercase tracking-wider text-faint">
+                        <p className="mb-1.5 font-mono text-[calc(11px*var(--text-scale,1))] uppercase tracking-wider text-faint">
                           Where to learn it
                         </p>
                         <ul className="grid gap-0.5">
@@ -275,7 +275,7 @@ export function SprintStages({
                     )}
 
                     {view.stage?.summary && (
-                      <p className="mb-3 max-w-[70ch] text-[13px] leading-relaxed text-muted">
+                      <p className="mb-3 max-w-[70ch] text-[calc(13px*var(--text-scale,1))] leading-relaxed text-muted">
                         {view.stage.summary}
                       </p>
                     )}
@@ -295,7 +295,7 @@ export function SprintStages({
                         {view.stage.detail.split("\n\n").map((para, i) => (
                           <p
                             key={i}
-                            className="max-w-[70ch] text-[13px] leading-relaxed text-muted"
+                            className="max-w-[70ch] text-[calc(13px*var(--text-scale,1))] leading-relaxed text-muted"
                           >
                             {para}
                           </p>
@@ -304,7 +304,7 @@ export function SprintStages({
                     )}
 
                     {view.total === 0 ? (
-                      <p className="text-[13px] text-faint">No goals in this stage yet.</p>
+                      <p className="text-[calc(13px*var(--text-scale,1))] text-faint">No goals in this stage yet.</p>
                     ) : (
                       <ul className="grid gap-0.5">
                         {view.goals.map((goal) => (
@@ -342,16 +342,16 @@ export function SprintStages({
 
                     {id === buildOwnerId && (
                       <div className="mt-3 border-t border-line pt-3">
-                        <p className="mb-1.5 font-mono text-[11px] uppercase tracking-wider text-faint">
+                        <p className="mb-1.5 font-mono text-[calc(11px*var(--text-scale,1))] uppercase tracking-wider text-faint">
                           Build timeline
                         </p>
                         <ul className="grid gap-1.5">
                           {build.map((step) => (
                             <li key={step.id} className="flex min-w-0 items-baseline gap-3">
-                              <span className="w-8 shrink-0 font-mono text-[11px] tabular-nums text-primary-dim">
+                              <span className="w-8 shrink-0 font-mono text-[calc(11px*var(--text-scale,1))] tabular-nums text-primary-dim">
                                 {step.label}
                               </span>
-                              <span className="min-w-0 max-w-[70ch] text-[13px] leading-relaxed text-muted">
+                              <span className="min-w-0 max-w-[70ch] text-[calc(13px*var(--text-scale,1))] leading-relaxed text-muted">
                                 {step.body ?? step.title}
                               </span>
                             </li>
@@ -405,7 +405,7 @@ function StageNode({
       ) : (
         <span
           className={cn(
-            "font-mono text-[11px] tabular-nums",
+            "font-mono text-[calc(11px*var(--text-scale,1))] tabular-nums",
             capstone && "-rotate-45"
           )}
         >
@@ -532,7 +532,7 @@ function GoalRow({
   const label = (
     <span
       className={cn(
-        "min-w-0 flex-1 text-[13px] leading-relaxed transition-colors duration-150",
+        "min-w-0 flex-1 text-[calc(13px*var(--text-scale,1))] leading-relaxed transition-colors duration-150",
         done
           ? "text-faint line-through decoration-line-strong"
           : locked
@@ -547,7 +547,7 @@ function GoalRow({
   const tally = teaches && (
     <span
       className={cn(
-        "mt-px shrink-0 font-mono text-[11px] tabular-nums transition-colors duration-150",
+        "mt-px shrink-0 font-mono text-[calc(11px*var(--text-scale,1))] tabular-nums transition-colors duration-150",
         seenAll ? "text-primary-dim" : "text-faint"
       )}
     >
@@ -653,7 +653,7 @@ function GoalRow({
           )}
           {run}
           {locked && (
-            <p className="mb-1.5 ml-2.75 border-l border-line pl-2.5 font-mono text-[11px] text-faint">
+            <p className="mb-1.5 ml-2.75 border-l border-line pl-2.5 font-mono text-[calc(11px*var(--text-scale,1))] text-faint">
               {(teaches?.length ?? 0) - watched} left to watch before this goal ticks
             </p>
           )}

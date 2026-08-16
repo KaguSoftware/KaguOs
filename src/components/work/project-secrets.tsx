@@ -57,7 +57,7 @@ export function ProjectSecrets({
         )}
 
         {secrets.length === 0 && !adding ? (
-          <p className="py-4 text-center text-[13px] text-faint">
+          <p className="py-4 text-center text-[calc(13px*var(--text-scale,1))] text-faint">
             No credentials saved yet.
           </p>
         ) : (
@@ -145,10 +145,10 @@ function SecretRow({
       <div className="min-w-0 flex-1">
         <p className="text-sm font-medium text-ink">{secret.label}</p>
         {secret.username && (
-          <p className="mt-0.5 truncate text-[13px] text-muted">{secret.username}</p>
+          <p className="mt-0.5 truncate text-[calc(13px*var(--text-scale,1))] text-muted">{secret.username}</p>
         )}
         {secret.secret && (
-          <p className="mt-0.5 flex items-center gap-1.5 font-mono text-[13px] text-muted">
+          <p className="mt-0.5 flex items-center gap-1.5 font-mono text-[calc(13px*var(--text-scale,1))] text-muted">
             <span className="truncate">
               {revealed ? secret.secret : "•".repeat(Math.min(12, secret.secret.length))}
             </span>

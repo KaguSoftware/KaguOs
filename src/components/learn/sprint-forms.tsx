@@ -313,7 +313,7 @@ export function ResourcesEditor({
           </li>
         ))}
         {resources.length === 0 && (
-          <li className="text-[13px] text-faint">No resources yet.</li>
+          <li className="text-[calc(13px*var(--text-scale,1))] text-faint">No resources yet.</li>
         )}
       </ul>
       <Button variant="outline" size="sm" onClick={() => setAdding(true)}>

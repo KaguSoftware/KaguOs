@@ -2,6 +2,7 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { SIDEBAR_COOKIE } from "@/lib/sidebar-pref";
+import { TEXT_SIZE_COOKIE, parseTextSize, textScaleCss } from "@/lib/text-size";
 import {
   canAccess,
   canWrite,
@@ -37,10 +38,13 @@ export default async function AppLayout({
   const userId = await getUserId(supabase);
   if (!userId) redirect("/login");
 
-  // Rail width, read server-side so the first paint is already correct — see
-  // lib/sidebar-pref.ts. cookies() is already resolved for this request by the
-  // Supabase client above, so this costs nothing.
-  const sidebarCollapsed = (await cookies()).get(SIDEBAR_COOKIE)?.value === "1";
+  // Rail width and text size, read server-side so the first paint is already
+  // correct — see lib/sidebar-pref.ts and lib/text-size.ts. cookies() is
+  // already resolved for this request by the Supabase client above, so this
+  // costs nothing.
+  const jar = await cookies();
+  const sidebarCollapsed = jar.get(SIDEBAR_COOKIE)?.value === "1";
+  const textSize = parseTextSize(jar.get(TEXT_SIZE_COOKIE)?.value);
 
   // One wave: the profile lookup, the notifications, and the members map all
   // fly together. getMembersMap is cache()-deduped against the page's own call.
@@ -101,6 +105,17 @@ export default async function AppLayout({
   return (
     <ToastProvider>
       {/*
+        The text-size preference (lib/text-size.ts), first thing in the stream
+        so nothing has been painted at the wrong size by the time it lands.
+        Only the teammate shell carries it — the setting lives in Account,
+        which is a teammate page, so a client's portal has nothing to restore.
+
+        Not `precedence`, which would let React dedupe it by href and keep a
+        stale rule after the preference changes. Plain content React updates
+        like any other child.
+      */}
+      <style>{textScaleCss(textSize)}</style>
+      {/*
         Skip link — the first tab stop on every page. Without it a keyboard user
         tabs through all six section links, search, the bell, and the account row
         before reaching the content, on EVERY navigation. Invisible until
@@ -108,7 +123,7 @@ export default async function AppLayout({
       */}
       <a
         href="#main"
-        className="sr-only left-4 top-4 z-50 rounded-md border border-line-strong bg-raised px-3 py-2 text-[13px] text-ink focus-visible:not-sr-only focus-visible:fixed"
+        className="sr-only left-4 top-4 z-50 rounded-md border border-line-strong bg-raised px-3 py-2 text-[calc(13px*var(--text-scale,1))] text-ink focus-visible:not-sr-only focus-visible:fixed"
       >
         Skip to content
       </a>

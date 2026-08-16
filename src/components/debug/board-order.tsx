@@ -89,9 +89,9 @@ export function BoardOrderOverlay({
     >
       <div className="space-y-5">
         <section className="space-y-1.5">
-          <h3 className="text-[13px] font-medium text-muted">Pinned first</h3>
+          <h3 className="text-[calc(13px*var(--text-scale,1))] font-medium text-muted">Pinned first</h3>
           {pinned.length === 0 ? (
-            <p className="rounded-lg border border-dashed border-line px-3 py-2.5 text-[13px] text-faint">
+            <p className="rounded-lg border border-dashed border-line px-3 py-2.5 text-[calc(13px*var(--text-scale,1))] text-faint">
               Nothing pinned — the rail is fully automatic. Pin a board to
               bring attention to it.
             </p>
@@ -102,13 +102,13 @@ export function BoardOrderOverlay({
                   key={p.id}
                   className="flex items-center gap-2 rounded-lg border border-line bg-surface/60 px-3 py-2"
                 >
-                  <span className="w-4 shrink-0 font-mono text-[11px] text-faint">
+                  <span className="w-4 shrink-0 font-mono text-[calc(11px*var(--text-scale,1))] text-faint">
                     {i + 1}
                   </span>
-                  <span className="min-w-0 flex-1 truncate text-[13px] text-ink">
+                  <span className="min-w-0 flex-1 truncate text-[calc(13px*var(--text-scale,1))] text-ink">
                     {p.name}
                   </span>
-                  <span className="shrink-0 font-mono text-[11px] text-muted">
+                  <span className="shrink-0 font-mono text-[calc(11px*var(--text-scale,1))] text-muted">
                     {openCounts[p.id] ?? 0} open
                   </span>
                   <div className="flex shrink-0 items-center gap-0.5">
@@ -147,11 +147,11 @@ export function BoardOrderOverlay({
         </section>
 
         <section className="space-y-1.5">
-          <h3 className="text-[13px] font-medium text-muted">
+          <h3 className="text-[calc(13px*var(--text-scale,1))] font-medium text-muted">
             Auto — sorted by open tasks
           </h3>
           {rest.length === 0 ? (
-            <p className="rounded-lg border border-dashed border-line px-3 py-2.5 text-[13px] text-faint">
+            <p className="rounded-lg border border-dashed border-line px-3 py-2.5 text-[calc(13px*var(--text-scale,1))] text-faint">
               Every board is pinned.
             </p>
           ) : (
@@ -161,10 +161,10 @@ export function BoardOrderOverlay({
                   key={p.id}
                   className="flex items-center gap-2 rounded-lg border border-line bg-surface/60 px-3 py-2"
                 >
-                  <span className="min-w-0 flex-1 truncate text-[13px] text-ink">
+                  <span className="min-w-0 flex-1 truncate text-[calc(13px*var(--text-scale,1))] text-ink">
                     {p.name}
                   </span>
-                  <span className="shrink-0 font-mono text-[11px] text-muted">
+                  <span className="shrink-0 font-mono text-[calc(11px*var(--text-scale,1))] text-muted">
                     {openCounts[p.id] ?? 0} open
                   </span>
                   <button

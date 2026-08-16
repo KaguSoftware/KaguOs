@@ -664,7 +664,7 @@ export function TaskRow({
             <>
               <span
                 style={{ color: members[task.assignee_id]?.color }}
-                className="truncate text-[13px] font-medium"
+                className="truncate text-[calc(13px*var(--text-scale,1))] font-medium"
               >
                 {mine ? "You" : (members[task.assignee_id]?.name ?? "Someone")}
               </span>
@@ -740,7 +740,7 @@ export function TaskRow({
                     patchTask(() => setTaskState(task.id, state), { state })
                   }
                   className={cn(
-                    "h-9 text-[13px] transition-colors duration-150",
+                    "h-9 text-[calc(13px*var(--text-scale,1))] transition-colors duration-150",
                     // Dividers on the segments themselves, so the three cells
                     // stay exactly equal — a gap-separated flex would not.
                     i > 0 && "border-l border-line",
@@ -752,7 +752,7 @@ export function TaskRow({
               ))}
             </div>
             <div className="flex min-h-9 items-center justify-between gap-3">
-              <span className="min-w-0 truncate text-[13px]">
+              <span className="min-w-0 truncate text-[calc(13px*var(--text-scale,1))]">
                 {task.assignee_id ? (
                   <>
                     <span className="text-faint">Held by </span>
@@ -818,7 +818,7 @@ export function TaskRow({
                 "lg:grid lg:grid-cols-[minmax(0,70ch)_minmax(0,18rem)] lg:items-start lg:gap-6"
               )}
             >
-              <p className="max-w-[70ch] whitespace-pre-wrap text-[13px] leading-relaxed text-muted">
+              <p className="max-w-[70ch] whitespace-pre-wrap text-[calc(13px*var(--text-scale,1))] leading-relaxed text-muted">
                 {task.description || "No details."}
               </p>
               {/* Screenshots are part of what the task SAYS, not something you
@@ -880,14 +880,14 @@ export function TaskRow({
                       href={`/debug?f=${task.id}`}
                       title={`Show the ${foundCount} task${foundCount === 1 ? "" : "s"} this audit found`}
                       className={cn(
-                        "inline-flex items-center gap-1 rounded-md border border-line px-2.5 text-[13px] text-muted",
+                        "inline-flex items-center gap-1 rounded-md border border-line px-2.5 text-[calc(13px*var(--text-scale,1))] text-muted",
                         "transition-colors duration-150 hover:border-line-strong hover:bg-raised hover:text-ink",
                         // Hand-rolled, so it needs the height the Buttons get
                         // from ACTION_HEIGHT rather than a py- pair.
                         ACTION_HEIGHT
                       )}
                     >
-                      <span className="font-mono text-[11px] tabular-nums text-ink">
+                      <span className="font-mono text-[calc(11px*var(--text-scale,1))] tabular-nums text-ink">
                         {foundCount}
                       </span>
                       found
@@ -982,7 +982,7 @@ export function TaskRow({
                 aria-label="What the audit found, one per line"
               />
               <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
-                <p className="text-[11px] text-faint">
+                <p className="text-[calc(11px*var(--text-scale,1))] text-faint">
                   {findingLines.length > 0
                     ? `${findingLines.length} task${findingLines.length === 1 ? "" : "s"} — they land on this board as fixes.`
                     : "One per line."}

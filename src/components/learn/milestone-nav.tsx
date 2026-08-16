@@ -81,7 +81,7 @@ export function MilestoneNav({ milestones }: { milestones: Milestone[] }) {
       <div className="flex items-baseline justify-between gap-4 pt-3">
         {/* Hidden from assistive tech: every word of it is already in the stop's
             own label below, and read twice it's just noise. */}
-        <p aria-hidden className="min-w-0 truncate text-[13px] text-muted">
+        <p aria-hidden className="min-w-0 truncate text-[calc(13px*var(--text-scale,1))] text-muted">
           <span className={cn("font-medium", focus.done ? "text-muted" : "text-ink")}>
             {focus.title}
           </span>
@@ -163,7 +163,7 @@ export function MilestoneNav({ milestones }: { milestones: Milestone[] }) {
 
                   <span
                     className={cn(
-                      "mt-2 flex items-center justify-center gap-1 px-1 text-[13px] font-medium transition-colors duration-150 motion-reduce:transition-none",
+                      "mt-2 flex items-center justify-center gap-1 px-1 text-[calc(13px*var(--text-scale,1))] font-medium transition-colors duration-150 motion-reduce:transition-none",
                       here ? "text-ink" : "text-muted"
                     )}
                   >
@@ -173,7 +173,7 @@ export function MilestoneNav({ milestones }: { milestones: Milestone[] }) {
                     <span className="truncate">{milestone.title}</span>
                   </span>
                   {/* Held open even when undated, so the rail keeps one baseline. */}
-                  <span className="mt-0.5 block truncate px-1 text-center font-mono text-[11px] tabular-nums text-faint">
+                  <span className="mt-0.5 block truncate px-1 text-center font-mono text-[calc(11px*var(--text-scale,1))] tabular-nums text-faint">
                     {milestone.day ?? " "}
                   </span>
 

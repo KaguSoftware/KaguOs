@@ -80,7 +80,7 @@ export function MeetingList({
                     {m.title}
                   </p>
                   {m.summary && (
-                    <p className="mt-0.5 line-clamp-1 text-[13px] text-muted">
+                    <p className="mt-0.5 line-clamp-1 text-[calc(13px*var(--text-scale,1))] text-muted">
                       {m.summary}
                     </p>
                   )}
@@ -100,7 +100,7 @@ export function MeetingList({
 
               {expanded && (
                 <div className="mt-2 flex items-start justify-between gap-4">
-                  <p className="max-w-[70ch] whitespace-pre-wrap text-[13px] leading-relaxed text-muted">
+                  <p className="max-w-[70ch] whitespace-pre-wrap text-[calc(13px*var(--text-scale,1))] leading-relaxed text-muted">
                     {m.notes || "No notes."}
                   </p>
                   <div className="flex shrink-0 items-center gap-1.5">
@@ -229,7 +229,7 @@ export function NoteList({
       </form>
 
       {sorted.length === 0 ? (
-        <p className="px-4 py-6 text-center text-[13px] text-faint">
+        <p className="px-4 py-6 text-center text-[calc(13px*var(--text-scale,1))] text-faint">
           Nothing noted yet. Anything here is visible to everyone in Comms.
         </p>
       ) : (
@@ -256,7 +256,7 @@ export function NoteList({
                   />
                 </button>
                 <div className="min-w-0 flex-1">
-                  <p className="whitespace-pre-wrap text-[13px] leading-relaxed text-muted">
+                  <p className="whitespace-pre-wrap text-[calc(13px*var(--text-scale,1))] leading-relaxed text-muted">
                     {note.body}
                   </p>
                   <p className="mt-0.5 text-xs text-faint">

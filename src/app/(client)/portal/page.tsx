@@ -92,7 +92,7 @@ export default async function PortalPage() {
       <LiveRefresh tables={["creatives", "creative_reviews"]} />
 
       <div className="mb-8">
-        <h1 className="text-[22px] font-semibold tracking-tight">
+        <h1 className="text-[calc(22px*var(--text-scale,1))] font-semibold tracking-tight">
           {waiting.length > 0
             ? waiting.length === 1
               ? "One video is waiting for you"
@@ -118,7 +118,7 @@ export default async function PortalPage() {
                       href={creative.cut_url}
                       target="_blank"
                       rel="noreferrer"
-                      className="inline-flex h-7 items-center gap-1.5 rounded-md bg-primary px-2.5 text-[13px] font-medium text-primary-ink transition-transform duration-150 ease-mac hover:bg-primary-dim active:scale-[0.98]"
+                      className="inline-flex h-7 items-center gap-1.5 rounded-md bg-primary px-2.5 text-[calc(13px*var(--text-scale,1))] font-medium text-primary-ink transition-transform duration-150 ease-mac hover:bg-primary-dim active:scale-[0.98]"
                     >
                       Watch the cut
                       <ExternalLink className="size-3" aria-hidden />
@@ -128,7 +128,7 @@ export default async function PortalPage() {
               />
               <div className="space-y-4 px-4 py-4">
                 {creative.hook && (
-                  <p className="max-w-[70ch] text-[13px] text-muted">
+                  <p className="max-w-[70ch] text-[calc(13px*var(--text-scale,1))] text-muted">
                     <span className="text-faint">Opens with: </span>
                     {creative.hook}
                   </p>
@@ -224,7 +224,7 @@ function PortalList({
                 href={creative.published_url}
                 target="_blank"
                 rel="noreferrer"
-                className="inline-flex items-center gap-1 text-[13px] text-primary-dim underline-offset-2 hover:underline"
+                className="inline-flex items-center gap-1 text-[calc(13px*var(--text-scale,1))] text-primary-dim underline-offset-2 hover:underline"
               >
                 See the post
                 <ExternalLink className="size-3" aria-hidden />

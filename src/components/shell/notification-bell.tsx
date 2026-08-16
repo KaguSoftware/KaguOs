@@ -64,7 +64,7 @@ export function NotificationBell({
         <Bell className="size-4" aria-hidden />
         {unread > 0 && (
           <span
-            className="absolute -right-0.5 -top-0.5 flex min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-semibold leading-4 text-primary-ink"
+            className="absolute -right-0.5 -top-0.5 flex min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[calc(10px*var(--text-scale,1))] font-semibold leading-4 text-primary-ink"
             aria-hidden
           >
             {unread > 9 ? "9+" : unread}
@@ -82,7 +82,7 @@ export function NotificationBell({
           )}
         >
           <div className="flex items-center justify-between border-b border-line px-3 py-2">
-            <span className="text-[13px] font-semibold text-ink">Notifications</span>
+            <span className="text-[calc(13px*var(--text-scale,1))] font-semibold text-ink">Notifications</span>
             {notifications.length > 0 && (
               <button
                 type="button"
@@ -98,7 +98,7 @@ export function NotificationBell({
           </div>
 
           {notifications.length === 0 ? (
-            <p className="flex items-center justify-center gap-1.5 px-3 py-8 text-center text-[13px] text-faint">
+            <p className="flex items-center justify-center gap-1.5 px-3 py-8 text-center text-[calc(13px*var(--text-scale,1))] text-faint">
               <Check className="size-3.5" aria-hidden />
               You&apos;re all caught up.
             </p>
@@ -113,7 +113,7 @@ export function NotificationBell({
                       !n.read_at && "bg-primary/5"
                     )}
                   >
-                    <p className="text-[13px] leading-snug text-ink">{n.title}</p>
+                    <p className="text-[calc(13px*var(--text-scale,1))] leading-snug text-ink">{n.title}</p>
                     <p className="mt-0.5 text-xs text-faint">
                       {actor && (
                         <span style={{ color: actor.color }}>{actor.name} · </span>

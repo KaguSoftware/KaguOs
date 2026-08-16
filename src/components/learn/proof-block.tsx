@@ -126,7 +126,7 @@ export function ProofBlock({
   return (
     <div className="mt-3 border-t border-dashed border-line pt-3">
       <div className="mb-2 flex items-center justify-between gap-3">
-        <p className="font-mono text-[11px] uppercase tracking-wider text-faint">
+        <p className="font-mono text-[calc(11px*var(--text-scale,1))] uppercase tracking-wider text-faint">
           Proof
         </p>
         {submission && <StatusBadge status={submission.status} />}
@@ -148,7 +148,7 @@ export function ProofBlock({
             proof, worded shorter. The long version is behind "The brief". */}
         <span
           className={cn(
-            "min-w-0 flex-1 text-[13px] leading-relaxed",
+            "min-w-0 flex-1 text-[calc(13px*var(--text-scale,1))] leading-relaxed",
             done ? "text-faint line-through decoration-line-strong" : "text-ink"
           )}
         >
@@ -173,7 +173,7 @@ export function ProofBlock({
                 {stage.proof_brief.split("\n\n").map((para, i) => (
                   <p
                     key={i}
-                    className="max-w-[70ch] text-[13px] leading-relaxed text-muted"
+                    className="max-w-[70ch] text-[calc(13px*var(--text-scale,1))] leading-relaxed text-muted"
                   >
                     {para}
                   </p>
@@ -197,11 +197,11 @@ export function ProofBlock({
                   <li key={criterion.id} className="flex items-start gap-2.5">
                     <span
                       aria-hidden
-                      className="mt-px w-4 shrink-0 text-right font-mono text-[11px] tabular-nums text-faint"
+                      className="mt-px w-4 shrink-0 text-right font-mono text-[calc(11px*var(--text-scale,1))] tabular-nums text-faint"
                     >
                       {index + 1}
                     </span>
-                    <span className="max-w-[66ch] text-[13px] leading-relaxed text-muted">
+                    <span className="max-w-[66ch] text-[calc(13px*var(--text-scale,1))] leading-relaxed text-muted">
                       {criterion.body}
                     </span>
                   </li>
@@ -221,7 +221,7 @@ export function ProofBlock({
           {/* What to send only appears once the box is open — read on its own
               it's an instruction for a thing that isn't there yet. */}
           {editing && stage?.proof_submit && (
-            <p className="mb-2 max-w-[70ch] text-[13px] leading-relaxed text-ink">
+            <p className="mb-2 max-w-[70ch] text-[calc(13px*var(--text-scale,1))] leading-relaxed text-ink">
               {stage.proof_submit}
             </p>
           )}
@@ -352,7 +352,7 @@ function Handed({
         bodyClassName="grid gap-2"
       >
         {submission.body && (
-          <p className="max-w-[70ch] whitespace-pre-wrap text-[13px] leading-relaxed text-ink">
+          <p className="max-w-[70ch] whitespace-pre-wrap text-[calc(13px*var(--text-scale,1))] leading-relaxed text-ink">
             {submission.body}
           </p>
         )}
@@ -374,7 +374,7 @@ function Handed({
       {submission.review_note && (
         <p
           className={cn(
-            "max-w-[70ch] border-l-2 pl-2.5 text-[13px] leading-relaxed",
+            "max-w-[70ch] border-l-2 pl-2.5 text-[calc(13px*var(--text-scale,1))] leading-relaxed",
             submission.status === "accepted"
               ? "border-primary/40 text-muted"
               : "border-amber/50 text-ink"

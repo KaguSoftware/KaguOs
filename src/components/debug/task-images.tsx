@@ -330,7 +330,7 @@ export function TaskImages({
             disabled={busy}
             onClick={() => fileRef.current?.click()}
             className={cn(
-              "mt-2 inline-flex items-center gap-1.5 text-[13px] text-faint",
+              "mt-2 inline-flex items-center gap-1.5 text-[calc(13px*var(--text-scale,1))] text-faint",
               "transition-colors duration-150 hover:text-muted disabled:opacity-50"
             )}
           >
@@ -343,7 +343,7 @@ export function TaskImages({
           </button>
           {/* Paste is invisible unless it's named. The hint sits on the same
               line as the button so the two read as one affordance. */}
-          <span className="ml-2 text-[11px] text-faint">or paste a screenshot</span>
+          <span className="ml-2 text-[calc(11px*var(--text-scale,1))] text-faint">or paste a screenshot</span>
         </>
       )}
 

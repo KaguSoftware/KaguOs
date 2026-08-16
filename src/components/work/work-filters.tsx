@@ -158,7 +158,7 @@ export function ChipRow({
             {opt.count !== undefined && (
               <span
                 className={cn(
-                  "font-mono tabular-nums text-[11px]",
+                  "font-mono tabular-nums text-[calc(11px*var(--text-scale,1))]",
                   selected ? "text-primary-dim" : "text-faint"
                 )}
               >
@@ -267,7 +267,7 @@ export function FilterBar({
         />
         <div className="flex items-center gap-3">
           {active && (
-            <span className="font-mono text-[11px] tabular-nums text-faint">
+            <span className="font-mono text-[calc(11px*var(--text-scale,1))] tabular-nums text-faint">
               {resultCount} / {totalCount}
             </span>
           )}
@@ -275,7 +275,7 @@ export function FilterBar({
             <button
               type="button"
               onClick={clear}
-              className="inline-flex items-center gap-1 text-[11px] text-muted transition-colors duration-150 hover:text-ink"
+              className="inline-flex items-center gap-1 text-[calc(11px*var(--text-scale,1))] text-muted transition-colors duration-150 hover:text-ink"
             >
               <X className="size-3" aria-hidden />
               Clear

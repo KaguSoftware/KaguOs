@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { cookies } from "next/headers";
 import { getSessionContext } from "@/lib/data/session";
 import { rowsOrThrow } from "@/lib/data/query";
 import { PageHeader } from "@/components/shell/page-header";
@@ -6,14 +7,21 @@ import { Panel, PanelHeader } from "@/components/ui/panel";
 import { NameForm, PasswordForm } from "@/components/account/account-forms";
 import { MyColorForm } from "@/components/account/color-form";
 import { ChatAlertsForm } from "@/components/account/alerts-form";
+import { TextSizeForm } from "@/components/account/text-size-form";
 import { Badge } from "@/components/ui/badge";
 import { defaultColorKey, memberColorCss } from "@/lib/colors";
+import { TEXT_SIZE_COOKIE, parseTextSize } from "@/lib/text-size";
 import { SECTION_LABELS, type Section } from "@/lib/types";
 
 export const metadata: Metadata = { title: "Account" };
 
 export default async function AccountPage() {
   const ctx = await getSessionContext();
+
+  // Seeded from the cookie rather than from the DOM after mount, so the picker
+  // shows the right option selected in its first paint — the same reason the
+  // layout reads it (lib/text-size.ts). Already resolved for this request.
+  const textSize = parseTextSize((await cookies()).get(TEXT_SIZE_COOKIE)?.value);
 
   // Everyone else's colors, so you can pick something that stands apart.
   const others = await rowsOrThrow(
@@ -49,6 +57,10 @@ export default async function AccountPage() {
           />
         </Panel>
         <Panel>
+          <PanelHeader title="Text size" />
+          <TextSizeForm current={textSize} />
+        </Panel>
+        <Panel>
           <PanelHeader title="Message alerts" />
           <ChatAlertsForm />
         </Panel>
@@ -64,7 +76,7 @@ export default async function AccountPage() {
               <Badge key={s}>{SECTION_LABELS[s as Section]}</Badge>
             ))}
             {ctx.sections.size === 0 && !ctx.isAdmin && (
-              <p className="text-[13px] text-faint">
+              <p className="text-[calc(13px*var(--text-scale,1))] text-faint">
                 No sections yet — an admin can add you.
               </p>
             )}

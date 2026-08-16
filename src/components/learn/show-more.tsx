@@ -82,7 +82,7 @@ export function ShowMore({
           )}
         />
         <span>{open ? "Less" : label}</span>
-        {hint && !open && <span className="font-mono text-[11px]">{hint}</span>}
+        {hint && !open && <span className="font-mono text-[calc(11px*var(--text-scale,1))]">{hint}</span>}
       </button>
       {open && <div className={cn("mt-1.5", bodyClassName)}>{children}</div>}
     </div>

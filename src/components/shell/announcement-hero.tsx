@@ -151,7 +151,7 @@ export function AnnouncementHero({
       <button
         type="button"
         onClick={() => openComposer(null)}
-        className="mb-6 flex w-full items-center gap-2 rounded-lg border border-dashed border-line px-4 py-2.5 text-[13px] text-faint transition-colors duration-150 hover:border-line-strong hover:text-muted"
+        className="mb-6 flex w-full items-center gap-2 rounded-lg border border-dashed border-line px-4 py-2.5 text-[calc(13px*var(--text-scale,1))] text-faint transition-colors duration-150 hover:border-line-strong hover:text-muted"
       >
         <Plus className="size-3.5" aria-hidden />
         Post an announcement to the team

@@ -72,7 +72,7 @@ export default async function ContactPage({
     <>
       <Link
         href="/comms"
-        className="mb-4 inline-flex items-center gap-1.5 text-[13px] text-muted hover:text-ink"
+        className="mb-4 inline-flex items-center gap-1.5 text-[calc(13px*var(--text-scale,1))] text-muted hover:text-ink"
       >
         <ArrowLeft className="size-3.5" aria-hidden />
         All contacts
@@ -94,7 +94,7 @@ export default async function ContactPage({
             {CONTACT_STATUS_LABEL[c.status]}
           </Badge>
           {owner && (
-            <span className="text-[13px] text-faint">
+            <span className="text-[calc(13px*var(--text-scale,1))] text-faint">
               owner{" "}
               <span style={{ color: owner.color }}>{owner.name}</span>
             </span>

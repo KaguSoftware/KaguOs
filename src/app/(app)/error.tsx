@@ -51,7 +51,7 @@ export default function SectionError({
         {/* The reference. Mono + break-all because a digest is an opaque hash
             and a long dev message can be a full Postgres error. */}
         {(error.digest || error.message) && (
-          <p className="mt-4 break-all rounded-md border border-line bg-raised px-3 py-2 font-mono text-[11px] text-faint">
+          <p className="mt-4 break-all rounded-md border border-line bg-raised px-3 py-2 font-mono text-[calc(11px*var(--text-scale,1))] text-faint">
             {error.digest ?? error.message}
           </p>
         )}

@@ -49,7 +49,7 @@ export function TransactionRow({ transaction }: { transaction: Transaction }) {
       <td className="max-w-40 truncate px-4 py-2.5 text-sm text-muted">
         {transaction.client || "—"}
       </td>
-      <td className="max-w-56 truncate px-4 py-2.5 text-[13px] text-faint">
+      <td className="max-w-56 truncate px-4 py-2.5 text-[calc(13px*var(--text-scale,1))] text-faint">
         {transaction.notes || ""}
       </td>
       <td className="px-4 py-2.5 text-right">

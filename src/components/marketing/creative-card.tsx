@@ -64,7 +64,7 @@ export function CreativeCard({
             {creative.title}
           </Link>
           {creative.hook && (
-            <p className="mt-0.5 line-clamp-1 text-[13px] text-muted">{creative.hook}</p>
+            <p className="mt-0.5 line-clamp-1 text-[calc(13px*var(--text-scale,1))] text-muted">{creative.hook}</p>
           )}
         </div>
         {showStatus && (
@@ -117,7 +117,7 @@ export function CreativeCard({
               });
             }}
             className={cn(
-              "inline-flex h-7 items-center gap-1.5 rounded-md border border-line-strong px-2.5 text-[13px] text-muted",
+              "inline-flex h-7 items-center gap-1.5 rounded-md border border-line-strong px-2.5 text-[calc(13px*var(--text-scale,1))] text-muted",
               "transition-[color,background-color,border-color,transform] duration-150 ease-mac",
               "hover:bg-raised hover:text-ink active:scale-[0.98]",
               "disabled:pointer-events-none disabled:opacity-50"

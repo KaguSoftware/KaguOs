@@ -203,7 +203,7 @@ export function DebugFocusHero({
           <button
             type="button"
             onClick={() => setOpen(true)}
-            className="mb-4 flex w-full items-center gap-2 rounded-lg border border-dashed border-line px-4 py-2.5 text-[13px] text-faint transition-colors duration-150 hover:border-line-strong hover:text-muted"
+            className="mb-4 flex w-full items-center gap-2 rounded-lg border border-dashed border-line px-4 py-2.5 text-[calc(13px*var(--text-scale,1))] text-faint transition-colors duration-150 hover:border-line-strong hover:text-muted"
           >
             <Plus className="size-3.5" aria-hidden />
             Set the focus for the Debug board
@@ -242,14 +242,14 @@ export function DebugFocusHero({
         <div className="mb-4 overflow-hidden rounded-lg border border-line bg-surface">
           <div className="flex items-center gap-2 border-b border-line px-4 py-2">
             <Target className="size-3.5 text-faint" aria-hidden />
-            <span className="text-[11px] font-medium uppercase tracking-wide text-faint">
+            <span className="text-[calc(11px*var(--text-scale,1))] font-medium uppercase tracking-wide text-faint">
               Focus — {items.length} things
             </span>
             {isAdmin && (
               <button
                 type="button"
                 onClick={() => setOpen(true)}
-                className="ml-auto inline-flex items-center gap-1 text-[11px] text-muted transition-colors duration-150 hover:text-ink"
+                className="ml-auto inline-flex items-center gap-1 text-[calc(11px*var(--text-scale,1))] text-muted transition-colors duration-150 hover:text-ink"
               >
                 <Pencil className="size-3" aria-hidden />
                 Edit
@@ -268,7 +268,7 @@ export function DebugFocusHero({
                 />
                 {/* The board names are already the head of the sentence, so
                     there's no separate project label to repeat here. */}
-                <p className="min-w-0 flex-1 whitespace-pre-wrap text-[13px] text-ink">
+                <p className="min-w-0 flex-1 whitespace-pre-wrap text-[calc(13px*var(--text-scale,1))] text-ink">
                   {item.body}
                 </p>
               </li>
@@ -295,7 +295,7 @@ function Chip({
       onClick={onClick}
       aria-pressed={selected}
       className={cn(
-        "rounded-md border px-2.5 py-1 text-[12px]",
+        "rounded-md border px-2.5 py-1 text-[calc(12px*var(--text-scale,1))]",
         "transition-[background-color,border-color,transform] duration-150 ease-mac",
         "active:scale-[0.97]",
         selected
@@ -510,7 +510,7 @@ function FocusModal({
                     )}
                     aria-hidden
                   />
-                  <p className="min-w-0 flex-1 text-[13px] leading-relaxed text-ink">
+                  <p className="min-w-0 flex-1 text-[calc(13px*var(--text-scale,1))] leading-relaxed text-ink">
                     {item.body}
                   </p>
                   <div className="flex shrink-0 items-center gap-0.5">
@@ -567,10 +567,10 @@ function FocusModal({
             <div className="space-y-4 rounded-lg border border-line-strong bg-surface/60 p-3">
               <div>
                 <div className="mb-2 flex items-baseline gap-2">
-                  <p className="text-[11px] font-medium uppercase tracking-wide text-faint">
+                  <p className="text-[calc(11px*var(--text-scale,1))] font-medium uppercase tracking-wide text-faint">
                     Which boards
                   </p>
-                  <span className="text-[11px] text-faint/70">
+                  <span className="text-[calc(11px*var(--text-scale,1))] text-faint/70">
                     {draft.projectIds.length === 0
                       ? "none picked · the whole board"
                       : `${draft.projectIds.length} picked`}
@@ -585,7 +585,7 @@ function FocusModal({
                             : d
                         )
                       }
-                      className="ml-auto text-[11px] text-faint transition-colors duration-150 hover:text-ink"
+                      className="ml-auto text-[calc(11px*var(--text-scale,1))] text-faint transition-colors duration-150 hover:text-ink"
                     >
                       Clear
                     </button>
@@ -614,7 +614,7 @@ function FocusModal({
                       data-no-ring
                       placeholder="Find a board…"
                       aria-label="Find a board"
-                      className="h-8 w-full rounded-md border border-line bg-raised pl-8 pr-3 text-[13px] text-ink placeholder:text-faint transition-colors duration-150 hover:border-line-strong focus-visible:border-line-strong"
+                      className="h-8 w-full rounded-md border border-line bg-raised pl-8 pr-3 text-[calc(13px*var(--text-scale,1))] text-ink placeholder:text-faint transition-colors duration-150 hover:border-line-strong focus-visible:border-line-strong"
                     />
                   </div>
                 )}
@@ -623,7 +623,7 @@ function FocusModal({
                   {/* Picked boards always render, even when filtered out, so a
                       search never hides what you've already chosen. */}
                   {shownProjects.length === 0 && (
-                    <span className="text-[12px] text-faint">
+                    <span className="text-[calc(12px*var(--text-scale,1))] text-faint">
                       No boards match.
                     </span>
                   )}
@@ -641,7 +641,7 @@ function FocusModal({
 
               {/* The two opposite instructions this board ever gives. */}
               <div>
-                <p className="mb-2 text-[11px] font-medium uppercase tracking-wide text-faint">
+                <p className="mb-2 text-[calc(11px*var(--text-scale,1))] font-medium uppercase tracking-wide text-faint">
                   Asking the team to
                 </p>
                 <div className="flex flex-wrap gap-1.5">
@@ -662,7 +662,7 @@ function FocusModal({
 
               {draft.mode === "find" ? (
                 <div>
-                  <p className="mb-2 text-[11px] font-medium uppercase tracking-wide text-faint">
+                  <p className="mb-2 text-[calc(11px*var(--text-scale,1))] font-medium uppercase tracking-wide text-faint">
                     Looking for{" "}
                     <span className="normal-case tracking-normal text-faint/70">
                       · optional
@@ -682,7 +682,7 @@ function FocusModal({
                 </div>
               ) : (
                 <div>
-                  <p className="mb-2 text-[11px] font-medium uppercase tracking-wide text-faint">
+                  <p className="mb-2 text-[calc(11px*var(--text-scale,1))] font-medium uppercase tracking-wide text-faint">
                     Narrow it{" "}
                     <span className="normal-case tracking-normal text-faint/70">
                       · optional
@@ -737,7 +737,7 @@ function FocusModal({
 
               {/* The sentence, editable in place — no "use this wording" step. */}
               <div>
-                <p className="mb-2 text-[11px] font-medium uppercase tracking-wide text-faint">
+                <p className="mb-2 text-[calc(11px*var(--text-scale,1))] font-medium uppercase tracking-wide text-faint">
                   Reads as
                 </p>
                 <Textarea
@@ -757,7 +757,7 @@ function FocusModal({
                     onClick={() =>
                       setDraft((d) => (d ? { ...d, body: "", edited: false } : d))
                     }
-                    className="mt-1 text-[11px] text-faint transition-colors duration-150 hover:text-ink"
+                    className="mt-1 text-[calc(11px*var(--text-scale,1))] text-faint transition-colors duration-150 hover:text-ink"
                   >
                     Back to the built wording
                   </button>
@@ -765,7 +765,7 @@ function FocusModal({
               </div>
 
               <div className="flex flex-wrap items-center gap-1.5">
-                <span className="mr-1 text-[11px] uppercase tracking-wide text-faint">
+                <span className="mr-1 text-[calc(11px*var(--text-scale,1))] uppercase tracking-wide text-faint">
                   Tone
                 </span>
                 {TONE_OPTIONS.map((t) => (
@@ -804,7 +804,7 @@ function FocusModal({
             <button
               type="button"
               onClick={startAdd}
-              className="flex w-full items-center gap-2 rounded-lg border border-dashed border-line px-3 py-2.5 text-[13px] text-faint transition-colors duration-150 hover:border-line-strong hover:text-muted"
+              className="flex w-full items-center gap-2 rounded-lg border border-dashed border-line px-3 py-2.5 text-[calc(13px*var(--text-scale,1))] text-faint transition-colors duration-150 hover:border-line-strong hover:text-muted"
             >
               <Plus className="size-3.5" aria-hidden />
               {order.length === 0
@@ -826,7 +826,7 @@ function FocusModal({
                 onSuccess: onChanged,
               })
             }
-            className="text-[13px] text-faint transition-colors duration-150 hover:text-danger"
+            className="text-[calc(13px*var(--text-scale,1))] text-faint transition-colors duration-150 hover:text-danger"
           >
             Clear all
           </button>

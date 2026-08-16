@@ -41,7 +41,7 @@ export default async function ClientLayout({
     <ToastProvider>
       <a
         href="#main"
-        className="sr-only left-4 top-4 z-50 rounded-md border border-line-strong bg-raised px-3 py-2 text-[13px] text-ink focus-visible:not-sr-only focus-visible:fixed"
+        className="sr-only left-4 top-4 z-50 rounded-md border border-line-strong bg-raised px-3 py-2 text-[calc(13px*var(--text-scale,1))] text-ink focus-visible:not-sr-only focus-visible:fixed"
       >
         Skip to content
       </a>

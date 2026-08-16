@@ -117,7 +117,7 @@ function NavLink({
       </span>
       {!collapsed && item.label}
       {!collapsed && unread !== null && (
-        <span className="ml-auto rounded-full bg-primary px-1.5 font-mono text-[11px] font-medium text-primary-ink">
+        <span className="ml-auto rounded-full bg-primary px-1.5 font-mono text-[calc(11px*var(--text-scale,1))] font-medium text-primary-ink">
           {unread}
         </span>
       )}
@@ -289,12 +289,12 @@ function MobileMenu({
 
         <div className="relative flex items-start justify-between px-5 pb-4 pt-5">
           <div className="min-w-0">
-            <p className="text-[22px] font-semibold tracking-tight text-ink">
+            <p className="text-[calc(22px*var(--text-scale,1))] font-semibold tracking-tight text-ink">
               {greeting}
               {firstName ? `, ${firstName}` : ""}
             </p>
             {/* The one line that's about YOU, not about navigation. */}
-            <p className="mt-0.5 text-[13px] text-muted">
+            <p className="mt-0.5 text-[calc(13px*var(--text-scale,1))] text-muted">
               {overdue > 0 ? (
                 <span className="text-danger">
                   {overdue} overdue {overdue === 1 ? "task" : "tasks"}
@@ -380,7 +380,7 @@ function MobileMenu({
                 <span className="relative mt-3 block">
                   <span
                     className={cn(
-                      "block text-[15px] font-medium",
+                      "block text-[calc(15px*var(--text-scale,1))] font-medium",
                       active ? "text-ink" : "text-muted group-hover:text-ink"
                     )}
                   >
@@ -390,13 +390,13 @@ function MobileMenu({
                     <span className="mt-0.5 flex items-baseline gap-1.5">
                       <span
                         className={cn(
-                          "font-mono text-[19px] font-medium tabular-nums",
+                          "font-mono text-[calc(19px*var(--text-scale,1))] font-medium tabular-nums",
                           loud ? "text-ink" : "text-faint"
                         )}
                       >
                         {stat.value}
                       </span>
-                      <span className="text-[12px] text-faint">
+                      <span className="text-[calc(12px*var(--text-scale,1))] text-faint">
                         {stat.label}
                       </span>
                     </span>
@@ -415,7 +415,7 @@ function MobileMenu({
               close();
               window.dispatchEvent(new Event("open-command-palette"));
             }}
-            className="flex w-full items-center gap-2.5 rounded-xl border border-line bg-raised/60 px-3.5 py-3 text-[14px] text-faint transition-[color,border-color,transform] duration-150 ease-mac hover:border-line-strong hover:text-muted active:scale-[0.99]"
+            className="flex w-full items-center gap-2.5 rounded-xl border border-line bg-raised/60 px-3.5 py-3 text-[calc(14px*var(--text-scale,1))] text-faint transition-[color,border-color,transform] duration-150 ease-mac hover:border-line-strong hover:text-muted active:scale-[0.99]"
           >
             <Search className="size-4" aria-hidden />
             Search anything…
@@ -434,14 +434,14 @@ function MobileMenu({
                   <span
                     key={p.id}
                     style={{ backgroundColor: p.color }}
-                    className="grid size-6 place-items-center rounded-full border-2 border-bg text-[9px] font-semibold text-bg"
+                    className="grid size-6 place-items-center rounded-full border-2 border-bg text-[calc(9px*var(--text-scale,1))] font-semibold text-bg"
                     aria-hidden
                   >
                     {p.name.slice(0, 1).toUpperCase()}
                   </span>
                 ))}
               </span>
-              <span className="min-w-0 flex-1 text-[12px] text-faint">
+              <span className="min-w-0 flex-1 text-[calc(12px*var(--text-scale,1))] text-faint">
                 {online.length > 0
                   ? `${online.length} online now`
                   : "Nobody online"}
@@ -456,14 +456,14 @@ function MobileMenu({
               onClick={close}
               className="flex min-w-0 flex-1 items-center gap-2.5 rounded-xl px-2 py-2 transition-[background-color,transform] duration-150 ease-mac hover:bg-raised/60 active:scale-[0.99]"
             >
-              <span className="grid size-9 shrink-0 place-items-center rounded-full bg-raised text-[11px] font-medium text-muted">
+              <span className="grid size-9 shrink-0 place-items-center rounded-full bg-raised text-[calc(11px*var(--text-scale,1))] font-medium text-muted">
                 {(name || email).slice(0, 2).toUpperCase()}
               </span>
               <span className="min-w-0 flex-1">
-                <span className="block truncate text-[13px] font-medium text-ink">
+                <span className="block truncate text-[calc(13px*var(--text-scale,1))] font-medium text-ink">
                   {name || email}
                 </span>
-                <span className="block truncate text-[11px] text-faint">
+                <span className="block truncate text-[calc(11px*var(--text-scale,1))] text-faint">
                   Account & status
                 </span>
               </span>
@@ -582,7 +582,7 @@ export function Sidebar({
           >
             <Logo size={24} />
             {!collapsed && (
-              <span className="text-[15px] font-semibold tracking-tight">KaguOs</span>
+              <span className="text-[calc(15px*var(--text-scale,1))] font-semibold tracking-tight">KaguOs</span>
             )}
           </Link>
           <div className={cn("flex items-center", collapsed ? "flex-col gap-1" : "gap-0.5")}>
@@ -616,7 +616,7 @@ export function Sidebar({
             aria-label="Search"
             title={collapsed ? "Search  ⌘K" : undefined}
             className={cn(
-              "flex w-full items-center rounded-md border border-line py-1.5 text-[13px] text-faint transition-colors duration-150 hover:border-line-strong hover:text-muted",
+              "flex w-full items-center rounded-md border border-line py-1.5 text-[calc(13px*var(--text-scale,1))] text-faint transition-colors duration-150 hover:border-line-strong hover:text-muted",
               collapsed ? "justify-center px-0" : "gap-2.5 px-2.5"
             )}
           >
@@ -624,7 +624,7 @@ export function Sidebar({
             {!collapsed && (
               <>
                 <span>Search…</span>
-                <kbd className="ml-auto rounded border border-line px-1 font-mono text-[10px]">
+                <kbd className="ml-auto rounded border border-line px-1 font-mono text-[calc(10px*var(--text-scale,1))]">
                   ⌘K
                 </kbd>
               </>
@@ -674,7 +674,7 @@ export function Sidebar({
             className={cn(
               "rounded-md transition-colors duration-150 hover:bg-raised",
               collapsed
-                ? "grid size-9 place-items-center text-[11px] font-medium text-muted"
+                ? "grid size-9 place-items-center text-[calc(11px*var(--text-scale,1))] font-medium text-muted"
                 : "min-w-0 flex-1 px-2 py-1.5"
             )}
           >
@@ -682,7 +682,7 @@ export function Sidebar({
               (name || email).slice(0, 2).toUpperCase()
             ) : (
               <>
-                <p className="truncate text-[13px] font-medium text-ink">
+                <p className="truncate text-[calc(13px*var(--text-scale,1))] font-medium text-ink">
                   {name || email}
                 </p>
                 <p className="truncate text-xs text-faint">{email}</p>
@@ -715,7 +715,7 @@ export function Sidebar({
             className="flex items-center gap-2.5 rounded-md transition-opacity duration-150 hover:opacity-80"
           >
             <Logo size={22} />
-            <span className="text-[15px] font-semibold tracking-tight">KaguOs</span>
+            <span className="text-[calc(15px*var(--text-scale,1))] font-semibold tracking-tight">KaguOs</span>
           </Link>
           <div className="flex items-center gap-1">
             {canStatus && presence && presence.length > 0 && (

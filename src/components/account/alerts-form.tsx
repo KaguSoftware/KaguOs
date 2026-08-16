@@ -27,7 +27,7 @@ export function ChatAlertsForm() {
       <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
         <div className="min-w-0">
           <p className="text-sm text-ink">Desktop notifications</p>
-          <p className="mt-0.5 text-[13px] text-faint">
+          <p className="mt-0.5 text-[calc(13px*var(--text-scale,1))] text-faint">
             {permission === "granted"
               ? "On. New messages show as a banner when KaguOs isn't in front of you."
               : permission === "denied"
@@ -56,7 +56,7 @@ export function ChatAlertsForm() {
             label="Play a sound for new messages"
             className="text-ink"
           />
-          <p className="mt-0.5 text-[13px] text-faint">
+          <p className="mt-0.5 text-[calc(13px*var(--text-scale,1))] text-faint">
             Plays unless you already have that conversation open in front of you.
           </p>
         </div>

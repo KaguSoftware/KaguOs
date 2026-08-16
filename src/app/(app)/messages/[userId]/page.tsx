@@ -133,7 +133,7 @@ export default async function MessageThreadPage({
               <Users className="size-4 text-muted" aria-hidden />
             </span>
             <div className="min-w-0">
-              <h1 className="text-[15px] font-semibold text-ink">
+              <h1 className="text-[calc(15px*var(--text-scale,1))] font-semibold text-ink">
                 {GROUP_LABEL}
               </h1>
               <p className="text-xs text-faint">{GROUP_HINT}</p>

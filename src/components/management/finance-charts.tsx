@@ -19,6 +19,14 @@ import { formatTRY, type MonthPoint } from "@/lib/finance";
 const INCOME = "oklch(0.62 0.13 160)";
 const EXPENSE = "oklch(0.55 0.16 25)";
 
+// The two label sizes the charts use, as multiples of the text-size preference
+// rather than as bare numbers — a chart axis is text, and someone who turned
+// the setting up because 11px was unreadable should not be handed an 11px
+// axis. Strings, not numbers: recharts passes a number straight through as a
+// unitless SVG font-size, and calc() needs to survive that.
+const TICK_SM = "calc(11px * var(--text-scale, 1))";
+const TICK_MD = "calc(12px * var(--text-scale, 1))";
+
 function compact(value: number): string {
   if (Math.abs(value) >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`;
   if (Math.abs(value) >= 1_000) return `${Math.round(value / 1_000)}k`;
@@ -74,18 +82,23 @@ export function CashflowChart({ data }: { data: MonthPoint[] }) {
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={data} barGap={2} barCategoryGap="28%">
             <CartesianGrid vertical={false} stroke="var(--line)" />
+            {/* Axis labels ride the text-size preference like every other
+                word in the app (lib/text-size.ts). Recharts writes fontSize as
+                an SVG presentation attribute, which is parsed as a CSS value —
+                so calc()/var() work here, and a plain `11` would not scale.
+                The gutters below are sized for the largest step. */}
             <XAxis
               dataKey="label"
               tickLine={false}
               axisLine={false}
-              tick={{ fill: "var(--faint)", fontSize: 11 }}
+              tick={{ fill: "var(--faint)", fontSize: TICK_SM }}
             />
             <YAxis
-              width={44}
+              width={52}
               tickLine={false}
               axisLine={false}
               tickFormatter={compact}
-              tick={{ fill: "var(--faint)", fontSize: 11 }}
+              tick={{ fill: "var(--faint)", fontSize: TICK_SM }}
             />
             <Tooltip
               content={<ChartTooltip />}
@@ -115,7 +128,7 @@ export function RecurringBreakdown({ items }: { items: BreakdownItem[] }) {
             width={150}
             tickLine={false}
             axisLine={false}
-            tick={{ fill: "var(--muted)", fontSize: 12 }}
+            tick={{ fill: "var(--muted)", fontSize: TICK_MD }}
           />
           <Bar dataKey="value" radius={[0, 4, 4, 0]} maxBarSize={14} isAnimationActive={false}>
             {items.map((item) => (
@@ -125,7 +138,7 @@ export function RecurringBreakdown({ items }: { items: BreakdownItem[] }) {
               dataKey="value"
               position="right"
               formatter={(value) => formatTRY(Number(value))}
-              style={{ fill: "var(--muted)", fontSize: 11, fontFamily: "var(--font-mono)" }}
+              style={{ fill: "var(--muted)", fontSize: TICK_SM, fontFamily: "var(--font-mono)" }}
             />
           </Bar>
         </BarChart>

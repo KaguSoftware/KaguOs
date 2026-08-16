@@ -116,7 +116,7 @@ export function ImportDebug() {
       {message && (
         <p
           role="status"
-          className={cn("text-[13px]", message.ok ? "text-primary-dim" : "text-danger")}
+          className={cn("text-[calc(13px*var(--text-scale,1))]", message.ok ? "text-primary-dim" : "text-danger")}
         >
           {message.text}
         </p>

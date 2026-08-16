@@ -286,7 +286,7 @@ export default async function SprintPage({
     <div className="[&>*:last-child]:mb-0">
       <Link
         href="/learn"
-        className="mb-4 inline-flex items-center gap-1.5 text-[13px] text-muted hover:text-ink"
+        className="mb-4 inline-flex items-center gap-1.5 text-[calc(13px*var(--text-scale,1))] text-muted hover:text-ink"
       >
         <ArrowLeft className="size-3.5" aria-hidden />
         All sprints

@@ -121,7 +121,7 @@ export function EditContractForm({ contract }: { contract: Contract }) {
           <p
             role="status"
             className={cn(
-              "text-[13px]",
+              "text-[calc(13px*var(--text-scale,1))]",
               result.ok ? "text-primary-dim" : "text-danger"
             )}
           >
@@ -193,7 +193,7 @@ export function ContractFilePanel({ contract }: { contract: Contract }) {
           </ConfirmButton>
         </div>
       ) : (
-        <p className="text-[13px] text-faint">No file attached yet.</p>
+        <p className="text-[calc(13px*var(--text-scale,1))] text-faint">No file attached yet.</p>
       )}
 
       <form onSubmit={handleUpload} className="flex flex-wrap items-center gap-2">
@@ -208,7 +208,7 @@ export function ContractFilePanel({ contract }: { contract: Contract }) {
         </Button>
       </form>
       {error && (
-        <p role="status" className="text-[13px] text-danger">
+        <p role="status" className="text-[calc(13px*var(--text-scale,1))] text-danger">
           {error}
         </p>
       )}
@@ -237,7 +237,7 @@ export function DeleteContractButton({ contractId }: { contractId: string }) {
         Delete contract
       </ConfirmButton>
       {error && (
-        <p role="status" className="text-[13px] text-danger">
+        <p role="status" className="text-[calc(13px*var(--text-scale,1))] text-danger">
           {error}
         </p>
       )}

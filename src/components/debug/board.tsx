@@ -1198,7 +1198,7 @@ export function DebugBoard({
               >
                 {tab.name}
                 {count !== null && count > 0 && (
-                  <span className="rounded-full bg-raised px-1.5 font-mono text-[11px] text-muted">
+                  <span className="rounded-full bg-raised px-1.5 font-mono text-[calc(11px*var(--text-scale,1))] text-muted">
                     {count}
                   </span>
                 )}
@@ -1263,7 +1263,7 @@ export function DebugBoard({
                   setAssignee(target.assignee);
                 }}
                 className={cn(
-                  "rounded-md px-2.5 py-1.5 text-[13px] transition-colors duration-150",
+                  "rounded-md px-2.5 py-1.5 text-[calc(13px*var(--text-scale,1))] transition-colors duration-150",
                   on
                     ? "bg-raised text-ink"
                     : "text-muted hover:bg-raised/60 hover:text-ink"
@@ -1280,7 +1280,7 @@ export function DebugBoard({
               type="button"
               onClick={clearFilters}
               title="Clear search, kind, state, priority and assignee"
-              className="ml-1 inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] text-muted transition-colors duration-150 hover:bg-raised/60 hover:text-ink"
+              className="ml-1 inline-flex items-center gap-1 rounded-md px-2 py-1 text-[calc(11px*var(--text-scale,1))] text-muted transition-colors duration-150 hover:bg-raised/60 hover:text-ink"
             >
               <X className="size-3" aria-hidden />
               Reset <span className="tabular-nums">{activeFilterCount}</span>
@@ -1374,14 +1374,14 @@ export function DebugBoard({
       {!selectMode && !foundBy && sessionIds.size > 0 && (
         <div className="flex flex-wrap items-center gap-2 rounded-lg border border-primary/20 bg-primary/5 px-3 py-1.5">
           <ListPlus className="size-3.5 shrink-0 text-primary-dim" aria-hidden />
-          <p className="text-[13px] text-muted">
+          <p className="text-[calc(13px*var(--text-scale,1))] text-muted">
             <span className="font-medium text-ink">{sessionIds.size}</span>
             {" added this session — set priorities, claim, clear the dupes."}
           </p>
           <button
             type="button"
             onClick={clearTrail}
-            className="ml-auto inline-flex items-center gap-1 text-[11px] text-muted transition-colors duration-150 hover:text-ink"
+            className="ml-auto inline-flex items-center gap-1 text-[calc(11px*var(--text-scale,1))] text-muted transition-colors duration-150 hover:text-ink"
           >
             <X className="size-3" aria-hidden />
             Clear
@@ -1393,7 +1393,7 @@ export function DebugBoard({
           saying why reads as a bug — this makes the narrowing visible and
           removable, the same reasoning as the Filters count badge. */}
       {!selectMode && foundBy && (
-        <div className="flex flex-wrap items-center gap-2 rounded-lg border border-primary/20 bg-primary/5 px-3 py-2 text-[13px]">
+        <div className="flex flex-wrap items-center gap-2 rounded-lg border border-primary/20 bg-primary/5 px-3 py-2 text-[calc(13px*var(--text-scale,1))]">
           <SearchCheck className="size-3.5 shrink-0 text-primary-dim" aria-hidden />
           <span className="min-w-0 text-muted">
             Showing what{" "}
@@ -1405,7 +1405,7 @@ export function DebugBoard({
           <button
             type="button"
             onClick={() => setFoundBy("")}
-            className="ml-auto inline-flex items-center gap-1 text-[11px] text-muted transition-colors duration-150 hover:text-ink"
+            className="ml-auto inline-flex items-center gap-1 text-[calc(11px*var(--text-scale,1))] text-muted transition-colors duration-150 hover:text-ink"
           >
             <X className="size-3" aria-hidden />
             Show everything
@@ -1529,7 +1529,7 @@ export function DebugBoard({
               <button
                 type="button"
                 onClick={() => setPicked(new Set())}
-                className="inline-flex items-center gap-1 text-[11px] text-muted transition-colors duration-150 hover:text-ink"
+                className="inline-flex items-center gap-1 text-[calc(11px*var(--text-scale,1))] text-muted transition-colors duration-150 hover:text-ink"
               >
                 <X className="size-3" aria-hidden />
                 Clear
@@ -1719,7 +1719,7 @@ function FiltersPopover({
         <span
           aria-hidden={count === 0}
           className={cn(
-            "rounded-full bg-primary/15 px-1.5 font-mono text-[11px] text-primary-dim tabular-nums",
+            "rounded-full bg-primary/15 px-1.5 font-mono text-[calc(11px*var(--text-scale,1))] text-primary-dim tabular-nums",
             "transition-opacity duration-150 ease-mac",
             count > 0 ? "opacity-100" : "opacity-0"
           )}
@@ -1733,7 +1733,7 @@ function FiltersPopover({
           <div className="space-y-3">
             {GROUPS.map((group) => (
               <div key={group.label}>
-                <p className="mb-1.5 text-[11px] font-medium uppercase tracking-wide text-faint">
+                <p className="mb-1.5 text-[calc(11px*var(--text-scale,1))] font-medium uppercase tracking-wide text-faint">
                   {group.label}
                 </p>
                 <div className="flex flex-wrap gap-1.5">
@@ -1754,7 +1754,7 @@ function FiltersPopover({
                           )
                         }
                         className={cn(
-                          "inline-flex items-center gap-1.5 rounded-md border px-2 py-0.5 text-[12px]",
+                          "inline-flex items-center gap-1.5 rounded-md border px-2 py-0.5 text-[calc(12px*var(--text-scale,1))]",
                           "transition-[background-color,border-color,transform] duration-150 ease-mac active:scale-[0.97]",
                           on
                             ? "border-primary/50 bg-primary/10 text-ink"
@@ -1765,7 +1765,7 @@ function FiltersPopover({
                         {/* The count is a fact about the board, so it recedes
                             behind the label it qualifies. Mono + tabular keeps
                             the chips from resizing as numbers change width. */}
-                        <span className="font-mono text-[11px] tabular-nums text-faint">
+                        <span className="font-mono text-[calc(11px*var(--text-scale,1))] tabular-nums text-faint">
                           {n}
                         </span>
                       </button>
@@ -1779,7 +1779,7 @@ function FiltersPopover({
                 there's always exactly one on — so no counts, and no part in
                 the filter badge. */}
             <div>
-              <p className="mb-1.5 text-[11px] font-medium uppercase tracking-wide text-faint">
+              <p className="mb-1.5 text-[calc(11px*var(--text-scale,1))] font-medium uppercase tracking-wide text-faint">
                 Sort
               </p>
               <div className="flex flex-wrap gap-1.5">
@@ -1792,7 +1792,7 @@ function FiltersPopover({
                       aria-pressed={on}
                       onClick={() => setSort(o.value)}
                       className={cn(
-                        "inline-flex items-center rounded-md border px-2 py-0.5 text-[12px]",
+                        "inline-flex items-center rounded-md border px-2 py-0.5 text-[calc(12px*var(--text-scale,1))]",
                         "transition-[background-color,border-color,transform] duration-150 ease-mac active:scale-[0.97]",
                         on
                           ? "border-primary/50 bg-primary/10 text-ink"
@@ -1865,7 +1865,7 @@ function BoardMenu({
   }, [open]);
 
   const itemClass =
-    "flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-[13px] text-muted transition-colors duration-150 hover:bg-raised hover:text-ink";
+    "flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-[calc(13px*var(--text-scale,1))] text-muted transition-colors duration-150 hover:bg-raised hover:text-ink";
 
   return (
     <div ref={rootRef} className="relative">
@@ -1967,7 +1967,7 @@ function ShortcutsOverlay({ onClose }: { onClose: () => void }) {
       />
       <div className="relative w-full max-w-sm origin-center animate-pop-in rounded-xl border border-line-strong bg-raised/90 shadow-2xl backdrop-blur-md">
         <div className="flex items-center justify-between px-5 pb-3 pt-5">
-          <h2 className="text-[15px] font-semibold tracking-tight text-ink">
+          <h2 className="text-[calc(15px*var(--text-scale,1))] font-semibold tracking-tight text-ink">
             Keyboard shortcuts
           </h2>
           <button
@@ -1983,14 +1983,14 @@ function ShortcutsOverlay({ onClose }: { onClose: () => void }) {
           {SHORTCUTS.map((s) => (
             <li
               key={s.label}
-              className="flex items-center justify-between gap-4 text-[13px]"
+              className="flex items-center justify-between gap-4 text-[calc(13px*var(--text-scale,1))]"
             >
               <span className="text-muted">{s.label}</span>
               <span className="flex shrink-0 items-center gap-1">
                 {s.keys.map((k) => (
                   <kbd
                     key={k}
-                    className="rounded border border-line-strong bg-surface px-1.5 py-0.5 font-mono text-[11px] text-ink"
+                    className="rounded border border-line-strong bg-surface px-1.5 py-0.5 font-mono text-[calc(11px*var(--text-scale,1))] text-ink"
                   >
                     {k}
                   </kbd>
@@ -2049,7 +2049,7 @@ function ArchivedSection({
         aria-expanded={open}
         className="flex w-full items-center justify-between px-4 py-2.5 text-left"
       >
-        <span className="flex items-center gap-2 text-[13px] text-muted">
+        <span className="flex items-center gap-2 text-[calc(13px*var(--text-scale,1))] text-muted">
           <Archive className="size-3.5 text-faint" aria-hidden />
           Archived ({tasks.length})
           <span className="text-faint">· done 7+ days, admin cleanup</span>

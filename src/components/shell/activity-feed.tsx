@@ -81,7 +81,7 @@ export function ActivityFeed({
       </header>
 
       {visible.length === 0 ? (
-        <p className="px-4 py-6 text-center text-[13px] text-faint">
+        <p className="px-4 py-6 text-center text-[calc(13px*var(--text-scale,1))] text-faint">
           {kind
             ? "Nothing of that kind yet."
             : "Nothing yet — as the team claims tasks, posts ideas, and logs work, it shows up here."}
@@ -103,7 +103,7 @@ export function ActivityFeed({
                       <Icon className="size-3.5" aria-hidden />
                     </span>
                     <span className="min-w-0 flex-1">
-                      <span className="block truncate text-[13px] text-ink">
+                      <span className="block truncate text-[calc(13px*var(--text-scale,1))] text-ink">
                         {item.title}
                       </span>
                       <span className="mt-0.5 block text-xs text-faint">
@@ -124,7 +124,7 @@ export function ActivityFeed({
             <button
               type="button"
               onClick={() => setShown((n) => n + PAGE)}
-              className="w-full border-t border-line px-4 py-2 text-[13px] text-muted transition-colors duration-150 hover:bg-raised/60 hover:text-ink"
+              className="w-full border-t border-line px-4 py-2 text-[calc(13px*var(--text-scale,1))] text-muted transition-colors duration-150 hover:bg-raised/60 hover:text-ink"
             >
               Show more ({filtered.length - visible.length} older)
             </button>
@@ -150,7 +150,7 @@ function FilterChip({
       aria-pressed={on}
       onClick={onClick}
       className={cn(
-        "rounded-md px-2 py-0.5 text-[11px] transition-colors duration-150",
+        "rounded-md px-2 py-0.5 text-[calc(11px*var(--text-scale,1))] transition-colors duration-150",
         on ? "bg-raised text-ink" : "text-faint hover:bg-raised/60 hover:text-muted"
       )}
     >

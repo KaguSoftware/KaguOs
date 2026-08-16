@@ -248,7 +248,7 @@ export function Reminders({
       </form>
 
       {visible.length === 0 ? (
-        <p className="px-4 py-6 text-center text-[13px] text-faint">
+        <p className="px-4 py-6 text-center text-[calc(13px*var(--text-scale,1))] text-faint">
           Nothing to remember yet — jot a note, or Share one with the team.
         </p>
       ) : (
@@ -270,7 +270,7 @@ export function Reminders({
                 <span className="flex min-w-0 flex-1 items-center gap-1.5">
                   <span
                     className={cn(
-                      "min-w-0 flex-1 truncate text-[13px]",
+                      "min-w-0 flex-1 truncate text-[calc(13px*var(--text-scale,1))]",
                       item.done ? "text-faint line-through" : "text-muted"
                     )}
                   >
@@ -282,7 +282,7 @@ export function Reminders({
                     <span
                       title={overdue ? `Was due ${item.due_on}` : `Due ${item.due_on}`}
                       className={cn(
-                        "shrink-0 whitespace-nowrap font-mono text-[10px]",
+                        "shrink-0 whitespace-nowrap font-mono text-[calc(10px*var(--text-scale,1))]",
                         item.done
                           ? "text-faint"
                           : overdue
@@ -306,7 +306,7 @@ export function Reminders({
                           : undefined
                       }
                       className={cn(
-                        "inline-flex shrink-0 items-center gap-1 rounded-full border px-1.5 py-px text-[11px]",
+                        "inline-flex shrink-0 items-center gap-1 rounded-full border px-1.5 py-px text-[calc(11px*var(--text-scale,1))]",
                         !sharer && "border-primary/25 bg-primary/10 text-primary-dim"
                       )}
                     >

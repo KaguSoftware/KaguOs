@@ -43,7 +43,7 @@ export function ResourceRow({
   const title = (
     <span
       className={cn(
-        "min-w-0 flex-1 truncate text-[13px] transition-colors duration-150",
+        "min-w-0 flex-1 truncate text-[calc(13px*var(--text-scale,1))] transition-colors duration-150",
         watched ? "text-muted" : "text-ink"
       )}
     >
@@ -107,7 +107,7 @@ export function ResourceRow({
         <span
           aria-hidden
           className={cn(
-            "w-5 shrink-0 text-right font-mono text-[11px] tabular-nums transition-colors duration-150",
+            "w-5 shrink-0 text-right font-mono text-[calc(11px*var(--text-scale,1))] tabular-nums transition-colors duration-150",
             watched ? "text-primary-dim" : "text-faint"
           )}
         >

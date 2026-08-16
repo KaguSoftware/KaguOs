@@ -36,7 +36,7 @@ export function PortalHeader({
         <form action={signOut}>
           <button
             type="submit"
-            className="inline-flex h-7 shrink-0 items-center rounded-md px-2.5 text-[13px] text-muted transition-colors duration-150 ease-mac hover:bg-raised hover:text-ink active:scale-[0.98]"
+            className="inline-flex h-7 shrink-0 items-center rounded-md px-2.5 text-[calc(13px*var(--text-scale,1))] text-muted transition-colors duration-150 ease-mac hover:bg-raised hover:text-ink active:scale-[0.98]"
           >
             Sign out
           </button>

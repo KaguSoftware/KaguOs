@@ -86,14 +86,14 @@ export default async function CreativePage({
       <div className="mb-5">
         <Link
           href={`/marketing/clients/${row.client_id}`}
-          className="inline-flex items-center gap-1.5 text-[13px] text-muted transition-colors duration-150 hover:text-ink"
+          className="inline-flex items-center gap-1.5 text-[calc(13px*var(--text-scale,1))] text-muted transition-colors duration-150 hover:text-ink"
         >
           <ArrowLeft className="size-3.5" aria-hidden />
           {(client as Pick<Client, "name">)?.name ?? "Client"}
         </Link>
         <div className="mt-2 flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0">
-            <h1 className="text-[22px] font-semibold tracking-tight">{row.title}</h1>
+            <h1 className="text-[calc(22px*var(--text-scale,1))] font-semibold tracking-tight">{row.title}</h1>
             <p className="mt-1 text-sm text-muted">
               {CREATIVE_STATUS_HINTS[row.status]}
             </p>
@@ -126,7 +126,7 @@ export default async function CreativePage({
                       className="flex items-center gap-3"
                     >
                       <span className="min-w-0 flex-1">
-                        <span className="block truncate text-[13px] text-ink">
+                        <span className="block truncate text-[calc(13px*var(--text-scale,1))] text-ink">
                           {sibling.title}
                         </span>
                         {sibling.hook && (

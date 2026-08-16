@@ -82,7 +82,7 @@ export default async function IdeaPage({
     <>
       <Link
         href="/work?tab=ideas"
-        className="mb-4 inline-flex items-center gap-1.5 text-[13px] text-muted hover:text-ink"
+        className="mb-4 inline-flex items-center gap-1.5 text-[calc(13px*var(--text-scale,1))] text-muted hover:text-ink"
       >
         <ArrowLeft className="size-3.5" aria-hidden />
         All ideas
@@ -99,7 +99,7 @@ export default async function IdeaPage({
         <div className="flex items-center gap-3">
           <Badge tone={STATUS_TONE[idea.status as IdeaStatus]}>{idea.status}</Badge>
           {idea.created_by && members[idea.created_by] && (
-            <span className="text-[13px] text-faint">
+            <span className="text-[calc(13px*var(--text-scale,1))] text-faint">
               by{" "}
               <span style={{ color: members[idea.created_by].color }}>
                 {members[idea.created_by].name}
@@ -109,7 +109,7 @@ export default async function IdeaPage({
           {idea.status === "promoted" && idea.promoted_project_id && (
             <Link
               href={`/work/projects/${idea.promoted_project_id}`}
-              className="text-[13px] text-primary-dim underline-offset-2 hover:underline"
+              className="text-[calc(13px*var(--text-scale,1))] text-primary-dim underline-offset-2 hover:underline"
             >
               View the project it became
             </Link>
@@ -142,7 +142,7 @@ export default async function IdeaPage({
           <PanelHeader title={`Discussion (${commentList.length})`} />
           <div className="space-y-4 p-4">
             {commentList.length === 0 && (
-              <p className="text-[13px] text-faint">No comments yet — start the discussion.</p>
+              <p className="text-[calc(13px*var(--text-scale,1))] text-faint">No comments yet — start the discussion.</p>
             )}
             {commentList.map((comment) => (
               <div key={comment.id} className="flex items-start gap-3">

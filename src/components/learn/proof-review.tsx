@@ -43,7 +43,7 @@ export function ProofReview({
 
   if (ordered.length === 0) {
     return (
-      <p className="p-4 text-[13px] text-faint">
+      <p className="p-4 text-[calc(13px*var(--text-scale,1))] text-faint">
         Nothing handed in yet. Proofs land here the moment someone sends one.
       </p>
     );
@@ -97,7 +97,7 @@ function ReviewRow({
         className="flex w-full cursor-pointer items-center gap-2.5 px-3.5 py-2.5 text-left transition-colors duration-150 hover:bg-raised/40 sm:px-4"
       >
         <span className="min-w-0 flex-1">
-          <span className="block truncate text-[13px] text-ink">
+          <span className="block truncate text-[calc(13px*var(--text-scale,1))] text-ink">
             {person} · {stage}
           </span>
           <span className="mt-0.5 block font-mono text-xs text-faint">
@@ -117,7 +117,7 @@ function ReviewRow({
       {open && (
         <div className="grid gap-3 border-t border-line px-3.5 py-3 sm:px-4">
           {submission.body && (
-            <p className="max-w-[70ch] whitespace-pre-wrap text-[13px] leading-relaxed text-ink">
+            <p className="max-w-[70ch] whitespace-pre-wrap text-[calc(13px*var(--text-scale,1))] leading-relaxed text-ink">
               {submission.body}
             </p>
           )}

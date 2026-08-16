@@ -548,7 +548,7 @@ export function MultiDropdown({
                       selection must not shove the number sideways. */}
                   <span className="flex shrink-0 items-center gap-2">
                     {option.count !== undefined && (
-                      <span className="font-mono text-[11px] tabular-nums text-faint">
+                      <span className="font-mono text-[calc(11px*var(--text-scale,1))] tabular-nums text-faint">
                         {option.count}
                       </span>
                     )}

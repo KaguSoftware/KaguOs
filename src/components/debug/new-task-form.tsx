@@ -285,12 +285,12 @@ export function NewTaskForm({
               <button
                 type="button"
                 onClick={() => fileRef.current?.click()}
-                className="inline-flex items-center gap-1.5 text-[13px] text-faint transition-colors duration-150 hover:text-muted"
+                className="inline-flex items-center gap-1.5 text-[calc(13px*var(--text-scale,1))] text-faint transition-colors duration-150 hover:text-muted"
               >
                 <ImagePlus className="size-3.5" aria-hidden />
                 {staged.length > 0 ? "Add another" : "Attach image"}
               </button>
-              <span className="ml-2 text-[11px] text-faint">
+              <span className="ml-2 text-[calc(11px*var(--text-scale,1))] text-faint">
                 or paste a screenshot
               </span>
             </>

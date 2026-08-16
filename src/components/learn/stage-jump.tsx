@@ -93,7 +93,7 @@ export function StageJump({ milestones }: { milestones: Milestone[] }) {
               className="pointer-events-auto flex max-w-full items-center gap-2.5 rounded-full border border-line-strong bg-raised/90 py-2 pl-2 pr-3.5 shadow-lg backdrop-blur-md transition-transform duration-150 ease-mac active:scale-[0.98] motion-safe:animate-[sheet-up_180ms_var(--ease-mac)_both] motion-reduce:transition-none"
             >
               <StageNode milestone={here} index={hereIndex} current />
-              <span className="min-w-0 truncate text-[13px] font-medium text-ink">
+              <span className="min-w-0 truncate text-[calc(13px*var(--text-scale,1))] font-medium text-ink">
                 {here.title}
               </span>
               <span className="shrink-0 font-mono text-xs tabular-nums text-faint">
@@ -154,7 +154,7 @@ function StageNode({
       ) : (
         <span
           className={cn(
-            "font-mono text-[10px] tabular-nums",
+            "font-mono text-[calc(10px*var(--text-scale,1))] tabular-nums",
             milestone.capstone && "-rotate-45"
           )}
         >
@@ -289,7 +289,7 @@ function StageSheet({
           </span>
 
           <div className="flex items-center gap-3 px-4 pb-2 pt-1">
-            <h2 className="text-[15px] font-semibold tracking-tight text-ink">
+            <h2 className="text-[calc(15px*var(--text-scale,1))] font-semibold tracking-tight text-ink">
               Stages
             </h2>
             <span className="ml-auto font-mono text-xs tabular-nums text-faint">
@@ -337,7 +337,7 @@ function StageSheet({
                       )}
                       <span
                         className={cn(
-                          "min-w-0 truncate text-[13px] font-medium",
+                          "min-w-0 truncate text-[calc(13px*var(--text-scale,1))] font-medium",
                           milestone.done ? "text-muted" : "text-ink"
                         )}
                       >
@@ -364,7 +364,7 @@ function StageSheet({
                       </span>
                     )}
                     {milestone.day && (
-                      <span className="mt-0.5 block font-mono text-[11px] tabular-nums text-faint">
+                      <span className="mt-0.5 block font-mono text-[calc(11px*var(--text-scale,1))] tabular-nums text-faint">
                         {milestone.day}
                       </span>
                     )}

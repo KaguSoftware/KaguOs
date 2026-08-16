@@ -532,7 +532,7 @@ export default async function DashboardPage() {
           so the number is actionable and not just informative. */}
       {needsYou && (
         <div className="mb-6 flex flex-wrap items-center gap-2 rounded-lg border border-line bg-surface px-4 py-2.5">
-          <span className="text-[11px] font-medium uppercase tracking-wide text-faint">
+          <span className="text-[calc(11px*var(--text-scale,1))] font-medium uppercase tracking-wide text-faint">
             Needs you
           </span>
           {overdueCount > 0 && (
@@ -544,7 +544,7 @@ export default async function DashboardPage() {
               // nothing. `a` is the assignee filter (an array param, so a single
               // id is valid).
               href={`/debug?a=${ctx.userId}&sort=deadline`}
-              className="inline-flex items-center gap-1.5 rounded-md border border-danger/30 bg-danger/10 px-2 py-1 text-[13px] text-danger transition-colors duration-150 hover:bg-danger/15"
+              className="inline-flex items-center gap-1.5 rounded-md border border-danger/30 bg-danger/10 px-2 py-1 text-[calc(13px*var(--text-scale,1))] text-danger transition-colors duration-150 hover:bg-danger/15"
             >
               <span className="font-mono font-medium">{overdueCount}</span>
               overdue
@@ -553,7 +553,7 @@ export default async function DashboardPage() {
           {suggestedCount > 0 && (
             <Link
               href="/debug"
-              className="inline-flex items-center gap-1.5 rounded-md border border-line px-2 py-1 text-[13px] text-muted transition-colors duration-150 hover:border-line-strong hover:bg-raised hover:text-ink"
+              className="inline-flex items-center gap-1.5 rounded-md border border-line px-2 py-1 text-[calc(13px*var(--text-scale,1))] text-muted transition-colors duration-150 hover:border-line-strong hover:bg-raised hover:text-ink"
             >
               <span className="font-mono font-medium text-ink">
                 {suggestedCount}
@@ -564,7 +564,7 @@ export default async function DashboardPage() {
           {dueReminders > 0 && (
             <Link
               href="/#reminders"
-              className="inline-flex items-center gap-1.5 rounded-md border border-danger/30 bg-danger/10 px-2 py-1 text-[13px] text-danger transition-colors duration-150 hover:bg-danger/15"
+              className="inline-flex items-center gap-1.5 rounded-md border border-danger/30 bg-danger/10 px-2 py-1 text-[calc(13px*var(--text-scale,1))] text-danger transition-colors duration-150 hover:bg-danger/15"
             >
               <span className="font-mono font-medium">{dueReminders}</span>
               reminder{dueReminders === 1 ? "" : "s"} due
@@ -573,7 +573,7 @@ export default async function DashboardPage() {
           {goalsLeft > 0 && learnAttentionRes && (
             <Link
               href={`/learn/${learnAttentionRes.sprintId}`}
-              className="inline-flex items-center gap-1.5 rounded-md border border-line px-2 py-1 text-[13px] text-muted transition-colors duration-150 hover:border-line-strong hover:bg-raised hover:text-ink"
+              className="inline-flex items-center gap-1.5 rounded-md border border-line px-2 py-1 text-[calc(13px*var(--text-scale,1))] text-muted transition-colors duration-150 hover:border-line-strong hover:bg-raised hover:text-ink"
             >
               <span className="font-mono font-medium text-ink">{goalsLeft}</span>
               goal{goalsLeft === 1 ? "" : "s"} to tick
@@ -582,7 +582,7 @@ export default async function DashboardPage() {
           {unvotedIdeas > 0 && (
             <Link
               href="/work?tab=ideas"
-              className="inline-flex items-center gap-1.5 rounded-md border border-line px-2 py-1 text-[13px] text-muted transition-colors duration-150 hover:border-line-strong hover:bg-raised hover:text-ink"
+              className="inline-flex items-center gap-1.5 rounded-md border border-line px-2 py-1 text-[calc(13px*var(--text-scale,1))] text-muted transition-colors duration-150 hover:border-line-strong hover:bg-raised hover:text-ink"
             >
               <span className="font-mono font-medium text-ink">
                 {unvotedIdeas}
@@ -593,7 +593,7 @@ export default async function DashboardPage() {
           {expiringContracts > 0 && (
             <Link
               href="/management/finance?tab=contracts"
-              className="inline-flex items-center gap-1.5 rounded-md border border-amber/30 bg-amber/10 px-2 py-1 text-[13px] text-amber transition-colors duration-150 hover:bg-amber/15"
+              className="inline-flex items-center gap-1.5 rounded-md border border-amber/30 bg-amber/10 px-2 py-1 text-[calc(13px*var(--text-scale,1))] text-amber transition-colors duration-150 hover:bg-amber/15"
             >
               <span className="font-mono font-medium">{expiringContracts}</span>
               contract{expiringContracts === 1 ? "" : "s"} ending
@@ -607,14 +607,14 @@ export default async function DashboardPage() {
           <Link
             key={action.href}
             href={action.href}
-            className="inline-flex items-center gap-1.5 rounded-md border border-line bg-surface px-3 py-1.5 text-[13px] text-muted transition-colors duration-150 hover:border-primary/40 hover:bg-raised hover:text-ink"
+            className="inline-flex items-center gap-1.5 rounded-md border border-line bg-surface px-3 py-1.5 text-[calc(13px*var(--text-scale,1))] text-muted transition-colors duration-150 hover:border-primary/40 hover:bg-raised hover:text-ink"
           >
             <Plus className="size-3.5 text-faint" aria-hidden />
             {action.label}
           </Link>
         ))}
         {actions.length > shownActions.length && (
-          <span className="text-[11px] text-faint">
+          <span className="text-[calc(11px*var(--text-scale,1))] text-faint">
             more with <kbd className="font-mono">⌘K</kbd>
           </span>
         )}
@@ -651,7 +651,7 @@ export default async function DashboardPage() {
                 stats.length % 3 === 2 && i === 0 && "sm:col-span-2 lg:col-span-1"
               )}
             >
-              <span className="flex items-center gap-1 text-[11px] text-faint">
+              <span className="flex items-center gap-1 text-[calc(11px*var(--text-scale,1))] text-faint">
                 {SECTION_LABELS[s.section].replace("Kagu ", "")}
                 <ArrowUpRight
                   className="size-3 opacity-0 transition-opacity duration-150 group-hover:opacity-100"
@@ -661,10 +661,10 @@ export default async function DashboardPage() {
               <span className="mt-1.5 flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
                 {s.figures.map((f) => (
                   <span key={f.label} className="flex items-baseline gap-1">
-                    <span className="font-mono text-[15px] font-medium text-ink tabular-nums">
+                    <span className="font-mono text-[calc(15px*var(--text-scale,1))] font-medium text-ink tabular-nums">
                       {f.value}
                     </span>
-                    <span className="text-[11px] text-muted">{f.label}</span>
+                    <span className="text-[calc(11px*var(--text-scale,1))] text-muted">{f.label}</span>
                   </span>
                 ))}
               </span>

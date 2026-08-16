@@ -92,12 +92,12 @@ export function UserRow({ user, isSelf }: { user: AdminUser; isSelf: boolean }) 
             {isSelf && <span className="text-xs font-normal text-faint">(you)</span>}
             {user.is_admin && <Badge tone="green">admin</Badge>}
           </p>
-          <p className="truncate text-[13px] text-faint">{user.email}</p>
+          <p className="truncate text-[calc(13px*var(--text-scale,1))] text-faint">{user.email}</p>
           <LastSeen at={user.last_seen_at} />
         </div>
 
         {/* Access summary: which sections, compact */}
-        <p className="hidden max-w-[45%] truncate text-[13px] text-muted sm:block">
+        <p className="hidden max-w-[45%] truncate text-[calc(13px*var(--text-scale,1))] text-muted sm:block">
           {granted.length > 0
             ? granted
                 .map((s) =>
@@ -112,7 +112,7 @@ export function UserRow({ user, isSelf }: { user: AdminUser; isSelf: boolean }) 
           type="button"
           onClick={() => setOpen((v) => !v)}
           aria-expanded={open}
-          className="inline-flex shrink-0 items-center gap-1 rounded-md px-2 py-1 text-[13px] text-muted transition-colors duration-150 hover:bg-raised hover:text-ink"
+          className="inline-flex shrink-0 items-center gap-1 rounded-md px-2 py-1 text-[calc(13px*var(--text-scale,1))] text-muted transition-colors duration-150 hover:bg-raised hover:text-ink"
         >
           Manage
           <ChevronDown
@@ -139,7 +139,7 @@ export function UserRow({ user, isSelf }: { user: AdminUser; isSelf: boolean }) 
                   <div key={section} className="flex items-center gap-2">
                     <Checkbox
                       size="sm"
-                      className="min-w-0 flex-1 text-[13px]"
+                      className="min-w-0 flex-1 text-[calc(13px*var(--text-scale,1))]"
                       label={shortLabel(section)}
                       checked={Boolean(tier)}
                       onChange={() => setSection(section, tier ? null : "write")}
@@ -159,7 +159,7 @@ export function UserRow({ user, isSelf }: { user: AdminUser; isSelf: boolean }) 
                             disabled={busy}
                             onClick={() => setSection(section, level)}
                             className={cn(
-                              "px-2 py-0.5 text-[11px] transition-colors duration-150 disabled:opacity-50",
+                              "px-2 py-0.5 text-[calc(11px*var(--text-scale,1))] transition-colors duration-150 disabled:opacity-50",
                               tier === level
                                 ? "bg-raised text-ink"
                                 : "text-faint hover:text-muted"
@@ -177,7 +177,7 @@ export function UserRow({ user, isSelf }: { user: AdminUser; isSelf: boolean }) 
             <div className="mt-2.5 border-t border-line pt-2.5">
               <Checkbox
                 size="sm"
-                className="text-[13px]"
+                className="text-[calc(13px*var(--text-scale,1))]"
                 label="Admin — full write access everywhere, plus this page"
                 checked={user.is_admin}
                 onChange={() => apply(user.access, !user.is_admin)}
@@ -246,7 +246,7 @@ export function UserRow({ user, isSelf }: { user: AdminUser; isSelf: boolean }) 
                 minLength={8}
                 required
                 placeholder="New temp password (min 8 chars)"
-                className="h-8 text-[13px]"
+                className="h-8 text-[calc(13px*var(--text-scale,1))]"
               />
               <Button type="submit" variant="primary" size="sm" disabled={busy}>
                 Set

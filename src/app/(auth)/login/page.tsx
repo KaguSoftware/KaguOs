@@ -15,7 +15,7 @@ export default function LoginPage() {
           Kagu&apos;s internal system. Sign in with your team account.
         </p>
         <LoginForm />
-        <p className="mt-6 text-[13px] text-faint">
+        <p className="mt-6 text-[calc(13px*var(--text-scale,1))] text-faint">
           No account? Accounts are created by an admin — ask Parsa or Majed.
         </p>
       </div>

@@ -60,8 +60,8 @@ export function ClientSettings({
           />
           {client.brand_notes && (
             <div>
-              <p className="text-[13px] font-medium text-muted">Notes</p>
-              <p className="mt-0.5 max-w-[70ch] whitespace-pre-wrap text-[13px] text-ink">
+              <p className="text-[calc(13px*var(--text-scale,1))] font-medium text-muted">Notes</p>
+              <p className="mt-0.5 max-w-[70ch] whitespace-pre-wrap text-[calc(13px*var(--text-scale,1))] text-ink">
                 {client.brand_notes}
               </p>
             </div>
@@ -178,8 +178,8 @@ function engagementLabel(kind: EngagementKind) {
 function Fact({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex items-baseline gap-3">
-      <span className="w-32 shrink-0 text-[13px] text-muted">{label}</span>
-      <span className="text-[13px] text-ink">{value}</span>
+      <span className="w-32 shrink-0 text-[calc(13px*var(--text-scale,1))] text-muted">{label}</span>
+      <span className="text-[calc(13px*var(--text-scale,1))] text-ink">{value}</span>
     </div>
   );
 }

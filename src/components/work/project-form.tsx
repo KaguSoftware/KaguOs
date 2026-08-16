@@ -19,7 +19,7 @@ function ResultNote({ result }: { result: ActionResult }) {
   return (
     <p
       role="status"
-      className={cn("text-[13px]", result.ok ? "text-primary-dim" : "text-danger")}
+      className={cn("text-[calc(13px*var(--text-scale,1))]", result.ok ? "text-primary-dim" : "text-danger")}
     >
       {result.message}
     </p>

@@ -86,7 +86,7 @@ export default async function ProjectPage({
     <>
       <Link
         href="/work"
-        className="mb-4 inline-flex items-center gap-1.5 text-[13px] text-muted hover:text-ink"
+        className="mb-4 inline-flex items-center gap-1.5 text-[calc(13px*var(--text-scale,1))] text-muted hover:text-ink"
       >
         <ArrowLeft className="size-3.5" aria-hidden />
         All projects
@@ -101,7 +101,7 @@ export default async function ProjectPage({
             {/* The count only appears once there's something to see — a "0"
                 next to every project's button is noise, not information. */}
             {ideaCount > 0 && (
-              <span className="font-mono text-[11px] tabular-nums text-faint">
+              <span className="font-mono text-[calc(11px*var(--text-scale,1))] tabular-nums text-faint">
                 {ideaCount}
               </span>
             )}
@@ -110,7 +110,7 @@ export default async function ProjectPage({
       />
 
       {sourceIdea && (
-        <p className="mb-4 flex items-center gap-1.5 text-[13px] text-faint">
+        <p className="mb-4 flex items-center gap-1.5 text-[calc(13px*var(--text-scale,1))] text-faint">
           <Lightbulb className="size-3.5 text-amber" aria-hidden />
           Born from the idea{" "}
           <Link

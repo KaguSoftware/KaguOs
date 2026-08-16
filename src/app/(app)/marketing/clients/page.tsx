@@ -158,7 +158,7 @@ function Figure({
       >
         {value}
       </dd>
-      <dt className="text-[11px] text-faint">{label}</dt>
+      <dt className="text-[calc(11px*var(--text-scale,1))] text-faint">{label}</dt>
     </div>
   );
 }

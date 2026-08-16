@@ -32,7 +32,7 @@ function SectionHeading({ title, hint }: { title: string; hint?: string }) {
   return (
     <div className="border-t border-line pt-6">
       <h2 className="text-base font-semibold text-ink">{title}</h2>
-      {hint && <p className="mt-0.5 text-[13px] text-muted">{hint}</p>}
+      {hint && <p className="mt-0.5 text-[calc(13px*var(--text-scale,1))] text-muted">{hint}</p>}
     </div>
   );
 }
@@ -436,7 +436,7 @@ export function SprintComposer({ members }: { members: Member[] }) {
       <div className="border-t border-line pt-6">
         {warningText ? (
           <div className="flex flex-wrap items-center gap-3 rounded-md border border-amber/30 bg-amber/10 px-3 py-2.5">
-            <p className="text-[13px] text-amber">{warningText}</p>
+            <p className="text-[calc(13px*var(--text-scale,1))] text-amber">{warningText}</p>
             <div className="flex gap-2">
               <Button
                 type="button"

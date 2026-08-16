@@ -32,7 +32,7 @@ export function MyColorForm({
       />
       <div className="flex items-center gap-2">
         {pending && <Loader2 className="size-3.5 animate-spin text-faint" aria-hidden />}
-        <p className={cn("text-[13px]", error ? "text-danger" : "text-faint")}>
+        <p className={cn("text-[calc(13px*var(--text-scale,1))]", error ? "text-danger" : "text-faint")}>
           {error ?? "Your name shows in this color everywhere — tasks you claim, comments, progress."}
         </p>
       </div>
@@ -50,7 +50,7 @@ export function MyColorForm({
                   style={{ backgroundColor: m.css }}
                   aria-hidden
                 />
-                <span className="text-[13px]" style={{ color: m.css }}>
+                <span className="text-[calc(13px*var(--text-scale,1))]" style={{ color: m.css }}>
                   {m.name}
                 </span>
               </li>
@@ -87,7 +87,7 @@ export function AdminColorPicker({
         }}
       />
       {error && (
-        <p role="status" className="text-[13px] text-danger">
+        <p role="status" className="text-[calc(13px*var(--text-scale,1))] text-danger">
           {error}
         </p>
       )}

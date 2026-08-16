@@ -287,7 +287,7 @@ export function ContactLinks({
   return (
     <div className="p-4">
       {links.length === 0 && !adding ? (
-        <p className="py-2 text-[13px] text-faint">
+        <p className="py-2 text-[calc(13px*var(--text-scale,1))] text-faint">
           No linked resources yet — deals, docs, drives, threads.
         </p>
       ) : (
@@ -384,7 +384,7 @@ export function ContactInteractions({
   return (
     <div className="p-4">
       {interactions.length === 0 && !adding ? (
-        <p className="py-2 text-[13px] text-faint">
+        <p className="py-2 text-[calc(13px*var(--text-scale,1))] text-faint">
           No interactions logged yet — record the first call, email, or meeting.
         </p>
       ) : (

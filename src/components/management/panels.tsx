@@ -49,7 +49,7 @@ function StatTile({
 }) {
   return (
     <div className="rounded-lg border border-line bg-surface p-4">
-      <p className="text-[13px] text-muted">{label}</p>
+      <p className="text-[calc(13px*var(--text-scale,1))] text-muted">{label}</p>
       <p
         className={cn(
           "mt-1 font-mono text-xl font-semibold tracking-tight",
@@ -133,7 +133,7 @@ export function FinancePanel({
   return (
     <>
       {skipped.size > 0 && (
-        <p className="mb-4 rounded-md border border-amber/30 bg-amber/10 px-3 py-2 text-[13px] text-amber">
+        <p className="mb-4 rounded-md border border-amber/30 bg-amber/10 px-3 py-2 text-[calc(13px*var(--text-scale,1))] text-amber">
           Some {[...skipped].join(" and ")} amounts are excluded from TL totals —
           set the missing rate below to include them.
         </p>
@@ -161,7 +161,7 @@ export function FinancePanel({
           {hasChartData ? (
             <CashflowChart data={series} />
           ) : (
-            <p className="p-4 text-[13px] text-faint">
+            <p className="p-4 text-[calc(13px*var(--text-scale,1))] text-faint">
               The chart draws itself once transactions come in.
             </p>
           )}
@@ -177,7 +177,7 @@ export function FinancePanel({
             {breakdown.length > 0 ? (
               <RecurringBreakdown items={breakdown} />
             ) : (
-              <p className="p-4 text-[13px] text-faint">
+              <p className="p-4 text-[calc(13px*var(--text-scale,1))] text-faint">
                 Active subscriptions and retainers chart here.
               </p>
             )}

@@ -31,9 +31,47 @@
   --amber: oklch(0.8 0.13 75);
   --danger: oklch(0.7 0.19 25);
   --info: oklch(0.76 0.1 240);
+
+  /* Text size (Account → Text size). The multiplier every font-size in the app
+   * passes through, so one preference moves all of them together. Overwritten
+   * on :root by a <style> the app layout renders from the cookie — see
+   * lib/text-size.ts — which is why the fallback below has to be the default
+   * rather than a missing value: the login page and the client portal never
+   * set it, and text there must still have a size. */
+  --text-scale: 1;
 }
 
 @theme inline {
+  /* THE WHOLE STANDARD RAMP, not just the steps in use today. A step left at
+   * its Tailwind default is a step that silently ignores the preference, and
+   * the failure looks like a bug in the setting rather than a missing line
+   * here — so the ramp is overridden completely and stays that way.
+   *
+   * `inline` is load-bearing: it compiles the calc() into `.text-sm` itself
+   * instead of behind `var(--text-sm)`, so --text-scale resolves against the
+   * element wearing the class. That's what lets a subtree override it — the
+   * preview in the picker renders each option at its own size that way.
+   *
+   * The paired --text-*--line-height defaults are unitless ratios, so they
+   * follow the scaled size on their own and are deliberately left alone.
+   *
+   * Sizes BETWEEN these steps are written as
+   * `text-[calc(13px*var(--text-scale,1))]`, not `text-[13px]`. Same reason:
+   * a raw px size is a piece of text that won't grow. */
+  --text-xs: calc(0.75rem * var(--text-scale, 1));
+  --text-sm: calc(0.875rem * var(--text-scale, 1));
+  --text-base: calc(1rem * var(--text-scale, 1));
+  --text-lg: calc(1.125rem * var(--text-scale, 1));
+  --text-xl: calc(1.25rem * var(--text-scale, 1));
+  --text-2xl: calc(1.5rem * var(--text-scale, 1));
+  --text-3xl: calc(1.875rem * var(--text-scale, 1));
+  --text-4xl: calc(2.25rem * var(--text-scale, 1));
+  --text-5xl: calc(3rem * var(--text-scale, 1));
+  --text-6xl: calc(3.75rem * var(--text-scale, 1));
+  --text-7xl: calc(4.5rem * var(--text-scale, 1));
+  --text-8xl: calc(6rem * var(--text-scale, 1));
+  --text-9xl: calc(8rem * var(--text-scale, 1));
+
   --color-bg: var(--bg);
   --color-surface: var(--surface);
   --color-raised: var(--raised);
@@ -233,7 +271,9 @@ body {
   background-attachment: fixed;
   color: var(--ink);
   font-family: var(--font-sans), system-ui, sans-serif;
-  font-size: 0.9375rem; /* 15px — daily-tool density without squinting */
+  /* 15px — daily-tool density without squinting. Scaled like everything else:
+     this is the size inherited by anything that never names one. */
+  font-size: calc(0.9375rem * var(--text-scale, 1));
   line-height: 1.5;
 }
 

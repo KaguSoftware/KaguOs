@@ -1119,7 +1119,7 @@ export function MessageThread({
 
       {readOnly ? (
         <div className="border-t border-line pt-3">
-          <p className="py-2 text-center text-[13px] text-faint">
+          <p className="py-2 text-center text-[calc(13px*var(--text-scale,1))] text-faint">
             This conversation is closed —{" "}
             {members[otherId ?? ""]?.name ?? "they"} is no longer on the work
             team.

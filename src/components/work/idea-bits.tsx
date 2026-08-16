@@ -112,7 +112,7 @@ export function VoteControl({
       <span
         className={cn(
           "flex w-full items-center justify-center border-y border-line font-mono tabular-nums",
-          size === "sm" ? "py-0.5 text-[11px]" : "py-1 text-xs",
+          size === "sm" ? "py-0.5 text-[calc(11px*var(--text-scale,1))]" : "py-1 text-xs",
           net > 0 ? "text-primary-dim" : net < 0 ? "text-danger" : "text-muted"
         )}
         aria-label={`Net score ${net}`}
@@ -166,7 +166,7 @@ export function PromoteProgress({
 
   return (
     <div className="space-y-1">
-      <div className="flex items-center justify-between text-[11px]">
+      <div className="flex items-center justify-between text-[calc(11px*var(--text-scale,1))]">
         {blocked ? (
           <span className="font-medium text-danger">
             Blocked — {down} {down === 1 ? "veto" : "vetoes"}
@@ -369,7 +369,7 @@ export function CommentForm({ ideaId }: { ideaId: string }) {
       />
       <SubmitButton size="sm">Comment</SubmitButton>
       {result && !result.ok && (
-        <p role="status" className="text-[13px] text-danger">
+        <p role="status" className="text-[calc(13px*var(--text-scale,1))] text-danger">
           {result.message}
         </p>
       )}

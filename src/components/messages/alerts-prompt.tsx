@@ -33,7 +33,7 @@ export function ChatAlertsPrompt() {
     // column — without it the strip is the thing that gets squashed.
     <div className="mb-4 flex shrink-0 flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border border-line bg-surface px-3.5 py-2.5">
       <Bell className="size-4 shrink-0 text-primary-dim" aria-hidden />
-      <p className="min-w-0 flex-1 text-[13px] text-muted">
+      <p className="min-w-0 flex-1 text-[calc(13px*var(--text-scale,1))] text-muted">
         Get a sound and a desktop alert when someone messages you.
       </p>
       <div className="flex shrink-0 items-center gap-1.5">

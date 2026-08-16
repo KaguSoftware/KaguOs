@@ -23,7 +23,7 @@ export function ShowcaseToggle() {
           onSuccess: () => router.refresh(),
         })
       }
-      className="inline-flex items-center gap-1.5 rounded-md border border-line px-3 py-1.5 text-[13px] text-muted transition-colors duration-150 hover:border-primary/40 hover:bg-raised hover:text-ink disabled:opacity-50"
+      className="inline-flex items-center gap-1.5 rounded-md border border-line px-3 py-1.5 text-[calc(13px*var(--text-scale,1))] text-muted transition-colors duration-150 hover:border-primary/40 hover:bg-raised hover:text-ink disabled:opacity-50"
     >
       <Sparkles className="size-3.5 text-faint" aria-hidden />
       Showcase mode
@@ -56,7 +56,7 @@ export function ShowcaseBanner() {
   return (
     <div className="sticky top-0 z-20 border-b border-amber/30 bg-amber/10 backdrop-blur-sm">
       <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-3 gap-y-2 px-4 py-2 md:px-8">
-        <span className="flex items-center gap-1.5 text-[13px] font-medium text-amber">
+        <span className="flex items-center gap-1.5 text-[calc(13px*var(--text-scale,1))] font-medium text-amber">
           <Eye className="size-3.5" aria-hidden />
           Showcase mode — everything you see is demo data.
         </span>
@@ -75,7 +75,7 @@ export function ShowcaseBanner() {
               onChange={(e) => setPassword(e.target.value)}
               placeholder="Your password"
               autoFocus
-              className="h-7 w-40 text-[13px]"
+              className="h-7 w-40 text-[calc(13px*var(--text-scale,1))]"
             />
             <Button type="submit" variant="primary" size="sm" disabled={pending || !password}>
               Exit

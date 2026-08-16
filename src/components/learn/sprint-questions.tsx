@@ -40,7 +40,7 @@ function Author({
   return (
     <span
       style={person ? { color: person.color } : undefined}
-      className={cn("text-[13px] font-medium", !person && "text-muted")}
+      className={cn("text-[calc(13px*var(--text-scale,1))] font-medium", !person && "text-muted")}
     >
       {userId === meId ? "You" : person ? person.name : "Former member"}
     </span>
@@ -137,7 +137,7 @@ export function SprintQuestions({
       </div>
 
       {questions.length === 0 ? (
-        <p className="pt-4 text-[13px] text-faint">
+        <p className="pt-4 text-[calc(13px*var(--text-scale,1))] text-faint">
           No questions yet — ask the first one.
         </p>
       ) : (

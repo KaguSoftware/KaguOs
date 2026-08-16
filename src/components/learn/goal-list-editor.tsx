@@ -88,7 +88,7 @@ export function GoalListEditor({
 
   if (goals.length === 0) {
     return (
-      <p className="text-[13px] text-faint">
+      <p className="text-[calc(13px*var(--text-scale,1))] text-faint">
         No goals yet — the checklist everyone ticks lives here.
       </p>
     );

@@ -62,7 +62,7 @@ export function TaskRefBody({
         <Icon className="size-3" />
       </span>
       <span className="min-w-0">
-        <span className="block truncate text-[13px] font-medium text-ink">
+        <span className="block truncate text-[calc(13px*var(--text-scale,1))] font-medium text-ink">
           {task.title}
         </span>
         <span className="block truncate font-mono text-xs text-faint">
@@ -95,7 +95,7 @@ export function ReplyRefBody({
       >
         {name}
       </span>
-      <span className="flex min-w-0 items-center gap-1 text-[13px] text-faint">
+      <span className="flex min-w-0 items-center gap-1 text-[calc(13px*var(--text-scale,1))] text-faint">
         {hasImage && <ImageIcon className="size-3 shrink-0" aria-hidden />}
         <span className="truncate">{snippet}</span>
       </span>

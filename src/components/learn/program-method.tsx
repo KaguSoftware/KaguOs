@@ -92,15 +92,15 @@ function MethodBody({
                 index === rules.length - 1 && "pb-0"
               )}
             >
-              <dt className="font-mono text-[11px] uppercase tracking-wider text-primary-dim">
+              <dt className="font-mono text-[calc(11px*var(--text-scale,1))] uppercase tracking-wider text-primary-dim">
                 {rule.label}
               </dt>
               <dd className="min-w-0">
                 {rule.title && (
-                  <p className="text-[13px] font-medium text-ink">{rule.title}</p>
+                  <p className="text-[calc(13px*var(--text-scale,1))] font-medium text-ink">{rule.title}</p>
                 )}
                 {rule.body && (
-                  <p className="mt-0.5 max-w-[70ch] text-[13px] leading-relaxed text-muted">
+                  <p className="mt-0.5 max-w-[70ch] text-[calc(13px*var(--text-scale,1))] leading-relaxed text-muted">
                     {rule.body}
                   </p>
                 )}
@@ -113,7 +113,7 @@ function MethodBody({
       {session.length > 0 && totalMinutes > 0 && (
         <section>
           <div className="mb-2 flex flex-wrap items-baseline justify-between gap-x-4">
-            <h3 className="text-[13px] font-medium text-ink">One day, blocked out</h3>
+            <h3 className="text-[calc(13px*var(--text-scale,1))] font-medium text-ink">One day, blocked out</h3>
             <p className="font-mono text-xs text-faint">
               {formatMinutes(totalMinutes)} a day
             </p>
@@ -152,10 +152,10 @@ function MethodBody({
                   )}
                 />
                 <span className="min-w-0">
-                  <span className="font-mono text-[11px] uppercase tracking-wider text-muted">
+                  <span className="font-mono text-[calc(11px*var(--text-scale,1))] uppercase tracking-wider text-muted">
                     {block.label}
                   </span>
-                  <span className="ml-1.5 font-mono text-[11px] tabular-nums text-faint">
+                  <span className="ml-1.5 font-mono text-[calc(11px*var(--text-scale,1))] tabular-nums text-faint">
                     {block.minutes}m
                   </span>
                   {block.body && (

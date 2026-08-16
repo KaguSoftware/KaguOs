@@ -61,7 +61,7 @@ export function StagesEditor({
   return (
     <div className="grid gap-3 p-4">
       {stages.length === 0 && (
-        <p className="text-[13px] text-faint">
+        <p className="text-[calc(13px*var(--text-scale,1))] text-faint">
           No stages yet. Without them the sprint stays one flat checklist, which
           is still fine for a short one.
         </p>
@@ -81,7 +81,7 @@ export function StagesEditor({
                   type="button"
                   onClick={() => setOpenId(isOpen ? null : stage.id)}
                   aria-expanded={isOpen}
-                  className="flex min-w-0 flex-1 items-center gap-2 text-left text-[13px] text-ink"
+                  className="flex min-w-0 flex-1 items-center gap-2 text-left text-[calc(13px*var(--text-scale,1))] text-ink"
                 >
                   {stage.kind === "capstone" && (
                     <Flag className="size-3.5 shrink-0 text-primary-dim" aria-hidden />
@@ -230,7 +230,7 @@ function GoalStageRow({
           aria-expanded={open}
           title={goal.detail ? "Edit the line under this goal" : "Add a line under this goal"}
           className={cn(
-            "min-w-0 flex-1 truncate rounded text-left text-[13px] hover:text-primary-dim",
+            "min-w-0 flex-1 truncate rounded text-left text-[calc(13px*var(--text-scale,1))] hover:text-primary-dim",
             goal.stage_id ? "text-ink" : "text-muted"
           )}
         >

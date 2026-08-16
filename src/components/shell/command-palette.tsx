@@ -278,13 +278,13 @@ export function CommandPalette({
           {loadingContent && (
             <Loader2 className="size-3.5 shrink-0 animate-spin text-faint" aria-hidden />
           )}
-          <kbd className="hidden rounded border border-line px-1.5 py-0.5 font-mono text-[10px] text-faint sm:block">
+          <kbd className="hidden rounded border border-line px-1.5 py-0.5 font-mono text-[calc(10px*var(--text-scale,1))] text-faint sm:block">
             esc
           </kbd>
         </div>
 
         {results.length === 0 ? (
-          <p className="px-4 py-8 text-center text-[13px] text-faint">
+          <p className="px-4 py-8 text-center text-[calc(13px*var(--text-scale,1))] text-faint">
             {q && loadingContent ? "Searching…" : `Nothing matches “${query}”.`}
           </p>
         ) : (
@@ -314,7 +314,7 @@ export function CommandPalette({
                       <span className="truncate text-xs text-faint">· {item.sub}</span>
                     )}
                     {item.typeLabel && (
-                      <span className="ml-auto shrink-0 rounded border border-line px-1.5 py-px text-[10px] uppercase tracking-wide text-faint">
+                      <span className="ml-auto shrink-0 rounded border border-line px-1.5 py-px text-[calc(10px*var(--text-scale,1))] uppercase tracking-wide text-faint">
                         {item.typeLabel}
                       </span>
                     )}

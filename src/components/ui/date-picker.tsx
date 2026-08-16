@@ -175,7 +175,7 @@ export function DatePicker({
 
           <div className="grid grid-cols-7 gap-y-0.5 text-center">
             {WEEKDAYS.map((day) => (
-              <span key={day} className="py-1 text-[11px] font-medium text-faint">
+              <span key={day} className="py-1 text-[calc(11px*var(--text-scale,1))] font-medium text-faint">
                 {day}
               </span>
             ))}
@@ -193,7 +193,7 @@ export function DatePicker({
                   aria-label={cell.iso}
                   aria-pressed={isSelected}
                   className={cn(
-                    "mx-auto flex size-7 items-center justify-center rounded-md text-[13px] transition-colors duration-150",
+                    "mx-auto flex size-7 items-center justify-center rounded-md text-[calc(13px*var(--text-scale,1))] transition-colors duration-150",
                     isSelected
                       ? "bg-primary font-medium text-primary-ink"
                       : cn(
@@ -216,14 +216,14 @@ export function DatePicker({
                 setValue(today);
                 setOpen(false);
               }}
-              className="rounded-md px-2 py-1 text-[13px] text-primary-dim transition-colors duration-150 hover:bg-surface"
+              className="rounded-md px-2 py-1 text-[calc(13px*var(--text-scale,1))] text-primary-dim transition-colors duration-150 hover:bg-surface"
             >
               Today
             </button>
             <button
               type="button"
               onClick={() => setValue("")}
-              className="rounded-md px-2 py-1 text-[13px] text-muted transition-colors duration-150 hover:bg-surface hover:text-ink"
+              className="rounded-md px-2 py-1 text-[calc(13px*var(--text-scale,1))] text-muted transition-colors duration-150 hover:bg-surface hover:text-ink"
             >
               Clear
             </button>

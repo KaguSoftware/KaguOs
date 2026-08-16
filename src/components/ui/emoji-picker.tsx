@@ -91,7 +91,7 @@ export function EmojiPicker({
           "disabled:pointer-events-none disabled:opacity-50"
         )}
       >
-        {value || <span className="text-[13px] text-faint">🙂</span>}
+        {value || <span className="text-[calc(13px*var(--text-scale,1))] text-faint">🙂</span>}
       </button>
 
       {open && (
@@ -104,7 +104,7 @@ export function EmojiPicker({
           <div className="space-y-2">
             {GROUPS.map((group) => (
               <div key={group.label}>
-                <p className="mb-1 px-0.5 text-[10px] font-medium uppercase tracking-wide text-faint">
+                <p className="mb-1 px-0.5 text-[calc(10px*var(--text-scale,1))] font-medium uppercase tracking-wide text-faint">
                   {group.label}
                 </p>
                 <div className="grid grid-cols-10 gap-0.5">
@@ -139,7 +139,7 @@ export function EmojiPicker({
                 onChange("");
                 setOpen(false);
               }}
-              className="mt-2 w-full border-t border-line pt-1.5 text-left text-[11px] text-muted transition-colors duration-150 hover:text-ink"
+              className="mt-2 w-full border-t border-line pt-1.5 text-left text-[calc(11px*var(--text-scale,1))] text-muted transition-colors duration-150 hover:text-ink"
             >
               No emoji
             </button>

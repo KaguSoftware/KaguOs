@@ -211,7 +211,7 @@ function QueueGroup({
         action={<span className="text-xs text-faint">{hint}</span>}
       />
       {rows.length === 0 ? (
-        <p className="px-4 py-5 text-[13px] text-faint">{emptyLine}</p>
+        <p className="px-4 py-5 text-[calc(13px*var(--text-scale,1))] text-faint">{emptyLine}</p>
       ) : (
         <ul className="divide-y divide-line">
           {rows.map((creative) => (

@@ -39,7 +39,7 @@ export function ProgramStatsRow({ stats }: { stats: ProgramStats }) {
           <dd className="font-mono text-lg leading-none tabular-nums text-ink">
             {cell.value}
           </dd>
-          <dt className="mt-1.5 font-mono text-[11px] uppercase tracking-wider text-faint">
+          <dt className="mt-1.5 font-mono text-[calc(11px*var(--text-scale,1))] uppercase tracking-wider text-faint">
             {cell.label}
           </dt>
         </div>

@@ -58,7 +58,7 @@ export default async function AdminPage() {
         action={
           <Link
             href="/admin/import-debug"
-            className="inline-flex h-7 items-center gap-1.5 rounded-md border border-line-strong px-2.5 text-[13px] text-ink transition-colors duration-150 hover:bg-raised"
+            className="inline-flex h-7 items-center gap-1.5 rounded-md border border-line-strong px-2.5 text-[calc(13px*var(--text-scale,1))] text-ink transition-colors duration-150 hover:bg-raised"
           >
             <FileUp className="size-3.5" aria-hidden />
             Import debug sheet

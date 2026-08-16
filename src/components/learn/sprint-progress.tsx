@@ -226,14 +226,14 @@ export function SprintProgress({
           </div>
 
           {finished ? (
-            <p className="flex items-center gap-2 text-[13px] text-primary-dim">
+            <p className="flex items-center gap-2 text-[calc(13px*var(--text-scale,1))] text-primary-dim">
               <Flag className="size-3.5 shrink-0" aria-hidden />
               Every stage cleared. That&apos;s the whole program.
             </p>
           ) : (
             currentView &&
             iParticipate && (
-              <p className="text-[13px] text-muted">
+              <p className="text-[calc(13px*var(--text-scale,1))] text-muted">
                 Next:{" "}
                 <span className="text-ink">
                   {nextGoal?.title ?? currentView.stage?.title ?? "—"}
@@ -301,7 +301,7 @@ export function SprintProgress({
             meId={meId}
           />
         ) : (
-          <p className="p-4 text-[13px] text-faint">
+          <p className="p-4 text-[calc(13px*var(--text-scale,1))] text-faint">
             {isAdmin
               ? "Add goals and participants from the Edit page to start the race."
               : "Goals and participants haven't been set up yet."}

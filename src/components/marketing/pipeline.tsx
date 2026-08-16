@@ -72,7 +72,7 @@ export function PipelineBoard({
               className="flex w-72 shrink-0 flex-col rounded-lg border border-line bg-surface"
             >
               <header className="border-b border-line px-3 py-2.5">
-                <h3 className="flex items-baseline justify-between gap-2 text-[13px] font-semibold text-ink">
+                <h3 className="flex items-baseline justify-between gap-2 text-[calc(13px*var(--text-scale,1))] font-semibold text-ink">
                   {CREATIVE_STATUS_LABELS[status]}
                   <span className="font-mono text-xs font-normal text-faint tabular-nums">
                     {cards.length}
