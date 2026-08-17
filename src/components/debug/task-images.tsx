@@ -6,10 +6,10 @@ import { ImagePlus, Loader2, X } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { addTaskImage, deleteTaskImage } from "@/lib/actions/debug";
 import {
-  ALLOWED_IMAGE_TYPES,
-  MAX_IMAGES_PER_TASK,
-  MAX_IMAGE_BYTES,
-  THUMB_TRANSFORM,
+	ALLOWED_IMAGE_TYPES,
+	MAX_IMAGES_PER_TASK,
+	MAX_IMAGE_BYTES,
+	THUMB_TRANSFORM,
 } from "@/lib/debug-images";
 import { useToast } from "@/components/ui/toast";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -18,22 +18,24 @@ import { cn } from "@/lib/utils";
 import type { DebugTaskImage, DebugTaskImageView } from "@/lib/types";
 
 /** Natural size of a picked file, so a thumbnail can reserve its box. */
-function measure(file: File): Promise<{ width: number; height: number } | null> {
-  return new Promise((resolve) => {
-    const url = URL.createObjectURL(file);
-    const img = new window.Image();
-    img.onload = () => {
-      resolve({ width: img.naturalWidth, height: img.naturalHeight });
-      URL.revokeObjectURL(url);
-    };
-    // A measurement failure must not block the upload — the columns are
-    // nullable precisely so a thumbnail can fall back to a default box.
-    img.onerror = () => {
-      resolve(null);
-      URL.revokeObjectURL(url);
-    };
-    img.src = url;
-  });
+function measure(
+	file: File,
+): Promise<{ width: number; height: number } | null> {
+	return new Promise((resolve) => {
+		const url = URL.createObjectURL(file);
+		const img = new window.Image();
+		img.onload = () => {
+			resolve({ width: img.naturalWidth, height: img.naturalHeight });
+			URL.revokeObjectURL(url);
+		};
+		// A measurement failure must not block the upload — the columns are
+		// nullable precisely so a thumbnail can fall back to a default box.
+		img.onerror = () => {
+			resolve(null);
+			URL.revokeObjectURL(url);
+		};
+		img.src = url;
+	});
 }
 
 /**
@@ -45,316 +47,327 @@ function measure(file: File): Promise<{ width: number; height: number } | null> 
  * signed URLs, minted here in ONE batched call rather than one per image.
  */
 export function TaskImages({
-  taskId,
-  images,
-  canEdit,
-  onChange,
-  className,
+	taskId,
+	images,
+	canEdit,
+	onChange,
+	className,
 }: {
-  taskId: string;
-  images: DebugTaskImage[];
-  canEdit: boolean;
-  onChange: (next: DebugTaskImage[]) => void;
-  /**
-   * Outer spacing, so the caller can own it. Defaults to the `mt-2.5` this
-   * always had — the gap that separates the thumbnails from a description
-   * sitting directly above them. The detail panel's two-column layout puts
-   * them SIDE BY SIDE instead, where a top margin would drop the first
-   * thumbnail below the description's first line.
-   */
-  className?: string;
+	taskId: string;
+	images: DebugTaskImage[];
+	canEdit: boolean;
+	onChange: (next: DebugTaskImage[]) => void;
+	/**
+	 * Outer spacing, so the caller can own it. Defaults to the `mt-2.5` this
+	 * always had — the gap that separates the thumbnails from a description
+	 * sitting directly above them. The detail panel's two-column layout puts
+	 * them SIDE BY SIDE instead, where a top margin would drop the first
+	 * thumbnail below the description's first line.
+	 */
+	className?: string;
 }) {
-  const { success: toastSuccess, error: toastError } = useToast();
-  const fileRef = useRef<HTMLInputElement>(null);
-  const [busy, setBusy] = useState(false);
-  const [views, setViews] = useState<DebugTaskImageView[]>([]);
-  const [lightbox, setLightbox] = useState<DebugTaskImageView | null>(null);
+	const { success: toastSuccess, error: toastError } = useToast();
+	const fileRef = useRef<HTMLInputElement>(null);
+	const [busy, setBusy] = useState(false);
+	const [views, setViews] = useState<DebugTaskImageView[]>([]);
+	const [lightbox, setLightbox] = useState<DebugTaskImageView | null>(null);
 
-  // Mint signed URLs for the current set. Re-runs when the set changes (an
-  // upload or a delete), not on every render.
-  const key = images.map((i) => i.file_path).join("|");
+	// Mint signed URLs for the current set. Re-runs when the set changes (an
+	// upload or a delete), not on every render.
+	const key = images.map((i) => i.file_path).join("|");
 
-  // Drop stale signed URLs DURING RENDER, not in the effect. Clearing them in
-  // the effect would paint the previous task's thumbnails for a frame after a
-  // delete; resetting here lets React discard that pass before it's seen.
-  // Same rule the board follows for prop adoption.
-  const [seenKey, setSeenKey] = useState(key);
-  if (seenKey !== key) {
-    setSeenKey(key);
-    setViews([]);
-  }
+	// Drop stale signed URLs DURING RENDER, not in the effect. Clearing them in
+	// the effect would paint the previous task's thumbnails for a frame after a
+	// delete; resetting here lets React discard that pass before it's seen.
+	// Same rule the board follows for prop adoption.
+	const [seenKey, setSeenKey] = useState(key);
+	if (seenKey !== key) {
+		setSeenKey(key);
+		setViews([]);
+	}
 
-  useEffect(() => {
-    let cancelled = false;
-    if (images.length === 0) return;
-    const supabase = createClient();
-    const paths = images.map((i) => i.file_path);
+	useEffect(() => {
+		let cancelled = false;
+		if (images.length === 0) return;
+		const supabase = createClient();
+		const paths = images.map((i) => i.file_path);
 
-    // ⚠️ The resize is baked into the TOKEN at signing time — the transform is
-    // not a query param you can append to a URL later. (Appending
-    // `&width=320` to a plain signed URL returns 200 and a re-encoded
-    // FULL-SIZE image: a silent failure that looks fine and makes the board
-    // heavier, measured at 202KB vs the 198KB original.) Since the batch
-    // endpoint `createSignedUrls` takes no `transform`, thumbnails have to be
-    // signed one at a time.
-    //
-    // That costs nothing real: the calls run concurrently, and 6 of them
-    // (MAX_IMAGES_PER_TASK) measured 843ms against the batch call's 859ms —
-    // one round-trip either way.
-    Promise.all([
-      supabase.storage.from("debug").createSignedUrls(paths, 60 * 60),
-      Promise.all(
-        paths.map((p) =>
-          supabase.storage
-            .from("debug")
-            .createSignedUrl(p, 60 * 60, { transform: THUMB_TRANSFORM })
-        )
-      ),
-    ]).then(([full, thumbs]) => {
-      if (cancelled || !full.data) return;
-      setViews(
-        images
-          .map((img, idx) => {
-            const url = full.data?.[idx]?.signedUrl ?? "";
-            return {
-              ...img,
-              url,
-              // Degrade to the full-size original if the renderer refuses.
-              // A heavy thumbnail is a slow board; a missing one is a bug
-              // report with no picture in it.
-              thumbUrl: thumbs[idx]?.data?.signedUrl ?? url,
-            };
-          })
-          .filter((v) => v.url)
-      );
-    });
-    return () => {
-      cancelled = true;
-    };
-    // `key` is the content identity of `images`; depending on the array itself
-    // would re-sign on every parent render.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [key]);
+		// ⚠️ The resize is baked into the TOKEN at signing time — the transform is
+		// not a query param you can append to a URL later. (Appending
+		// `&width=320` to a plain signed URL returns 200 and a re-encoded
+		// FULL-SIZE image: a silent failure that looks fine and makes the board
+		// heavier, measured at 202KB vs the 198KB original.) Since the batch
+		// endpoint `createSignedUrls` takes no `transform`, thumbnails have to be
+		// signed one at a time.
+		//
+		// That costs nothing real: the calls run concurrently, and 6 of them
+		// (MAX_IMAGES_PER_TASK) measured 843ms against the batch call's 859ms —
+		// one round-trip either way.
+		Promise.all([
+			supabase.storage.from("debug").createSignedUrls(paths, 60 * 60),
+			Promise.all(
+				paths.map((p) =>
+					supabase.storage
+						.from("debug")
+						.createSignedUrl(p, 60 * 60, {
+							transform: THUMB_TRANSFORM,
+						}),
+				),
+			),
+		]).then(([full, thumbs]) => {
+			if (cancelled || !full.data) return;
+			setViews(
+				images
+					.map((img, idx) => {
+						const url = full.data?.[idx]?.signedUrl ?? "";
+						return {
+							...img,
+							url,
+							// Degrade to the full-size original if the renderer refuses.
+							// A heavy thumbnail is a slow board; a missing one is a bug
+							// report with no picture in it.
+							thumbUrl: thumbs[idx]?.data?.signedUrl ?? url,
+						};
+					})
+					.filter((v) => v.url),
+			);
+		});
+		return () => {
+			cancelled = true;
+		};
+		// `key` is the content identity of `images`; depending on the array itself
+		// would re-sign on every parent render.
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [key]);
 
-  // Escape, the focus trap and focus restoration all live in ui/lightbox.tsx now.
+	// Escape, the focus trap and focus restoration all live in ui/lightbox.tsx now.
 
-  async function upload(files: FileList | null) {
-    if (!files || files.length === 0) return;
-    const room = MAX_IMAGES_PER_TASK - images.length;
-    if (room <= 0) {
-      toastError(`A task can hold ${MAX_IMAGES_PER_TASK} images.`);
-      return;
-    }
-    // Say what was dropped rather than silently truncating — the board already
-    // has one silent cap and it reads as a bug every time someone hits it.
-    const picked = Array.from(files);
-    if (picked.length > room) {
-      toastError(
-        `Only ${room} more image${room === 1 ? "" : "s"} fit — the rest were skipped.`
-      );
-    }
+	async function upload(files: FileList | null) {
+		if (!files || files.length === 0) return;
+		const room = MAX_IMAGES_PER_TASK - images.length;
+		if (room <= 0) {
+			toastError(`A task can hold ${MAX_IMAGES_PER_TASK} images.`);
+			return;
+		}
+		// Say what was dropped rather than silently truncating — the board already
+		// has one silent cap and it reads as a bug every time someone hits it.
+		const picked = Array.from(files);
+		if (picked.length > room) {
+			toastError(
+				`Only ${room} more image${room === 1 ? "" : "s"} fit — the rest were skipped.`,
+			);
+		}
 
-    setBusy(true);
-    const supabase = createClient();
-    const added: DebugTaskImage[] = [];
+		setBusy(true);
+		const supabase = createClient();
+		const added: DebugTaskImage[] = [];
 
-    for (const file of picked.slice(0, room)) {
-      if (!ALLOWED_IMAGE_TYPES.includes(file.type)) {
-        toastError(`${file.name} isn't a PNG, JPEG, WebP or GIF.`);
-        continue;
-      }
-      if (file.size > MAX_IMAGE_BYTES) {
-        toastError(`${file.name} is over 5MB.`);
-        continue;
-      }
+		for (const file of picked.slice(0, room)) {
+			if (!ALLOWED_IMAGE_TYPES.includes(file.type)) {
+				toastError(`${file.name} isn't a PNG, JPEG, WebP or GIF.`);
+				continue;
+			}
+			if (file.size > MAX_IMAGE_BYTES) {
+				toastError(`${file.name} is over 5MB.`);
+				continue;
+			}
 
-      const size = await measure(file);
-      const ext = (file.name.split(".").pop() ?? "png")
-        .toLowerCase()
-        .replace(/[^a-z0-9]/g, "");
-      const path = `${taskId}/${crypto.randomUUID()}.${ext || "png"}`;
+			const size = await measure(file);
+			const ext = (file.name.split(".").pop() ?? "png")
+				.toLowerCase()
+				.replace(/[^a-z0-9]/g, "");
+			const path = `${taskId}/${crypto.randomUUID()}.${ext || "png"}`;
 
-      const { error } = await supabase.storage.from("debug").upload(path, file);
-      if (error) {
-        toastError(`Upload failed: ${error.message}`);
-        continue;
-      }
+			const { error } = await supabase.storage
+				.from("debug")
+				.upload(path, file);
+			if (error) {
+				toastError(`Upload failed: ${error.message}`);
+				continue;
+			}
 
-      const res = await addTaskImage({
-        taskId,
-        filePath: path,
-        width: size?.width ?? null,
-        height: size?.height ?? null,
-      });
-      if (res && !res.ok) {
-        toastError(res.message);
-        continue;
-      }
+			const res = await addTaskImage({
+				taskId,
+				filePath: path,
+				width: size?.width ?? null,
+				height: size?.height ?? null,
+			});
+			if (res && !res.ok) {
+				toastError(res.message);
+				continue;
+			}
 
-      added.push({
-        id: crypto.randomUUID(),
-        task_id: taskId,
-        file_path: path,
-        width: size?.width ?? null,
-        height: size?.height ?? null,
-        is_demo: false,
-        created_by: null,
-        created_at: new Date().toISOString(),
-      });
-    }
+			added.push({
+				id: crypto.randomUUID(),
+				task_id: taskId,
+				file_path: path,
+				width: size?.width ?? null,
+				height: size?.height ?? null,
+				is_demo: false,
+				created_by: null,
+				created_at: new Date().toISOString(),
+			});
+		}
 
-    setBusy(false);
-    if (fileRef.current) fileRef.current.value = "";
-    if (added.length > 0) {
-      onChange([...images, ...added]);
-      toastSuccess(`Attached ${added.length} image${added.length === 1 ? "" : "s"}.`);
-    }
-  }
+		setBusy(false);
+		if (fileRef.current) fileRef.current.value = "";
+		if (added.length > 0) {
+			onChange([...images, ...added]);
+			toastSuccess(
+				`Attached ${added.length} image${added.length === 1 ? "" : "s"}.`,
+			);
+		}
+	}
 
-  function remove(image: DebugTaskImage) {
-    const before = images;
-    onChange(images.filter((i) => i.id !== image.id));
-    deleteTaskImage(image.id).then((res) => {
-      if (res && !res.ok) {
-        onChange(before);
-        toastError(res.message);
-      }
-    });
-  }
+	function remove(image: DebugTaskImage) {
+		const before = images;
+		onChange(images.filter((i) => i.id !== image.id));
+		deleteTaskImage(image.id).then((res) => {
+			if (res && !res.ok) {
+				onChange(before);
+				toastError(res.message);
+			}
+		});
+	}
 
-  if (images.length === 0 && !canEdit) return null;
+	if (images.length === 0 && !canEdit) return null;
 
-  return (
-    <div
-      className={cn("mt-2.5", className)}
-      // Ctrl+V a screenshot straight onto the task. `Win+Shift+S` → paste is
-      // how a screenshot actually reaches a bug report; the alternative is
-      // save-to-disk, browse, pick.
-      //
-      // ⚠️ Scoped to this container, NOT `document`. A global paste listener
-      // would hijack Ctrl+V app-wide — including the board's search box and
-      // every text field — and start uploading when someone meant to paste text.
-      // A paste carrying no files falls through untouched for the same reason.
-      onPaste={
-        canEdit
-          ? (e) => {
-              const files = e.clipboardData?.files;
-              if (!files || files.length === 0) return;
-              e.preventDefault();
-              upload(files);
-            }
-          : undefined
-      }
-    >
-      {/* Signing is a network call, so the thumbnails arrive a beat after the
+	return (
+		<div
+			className={cn("mt-2.5", className)}
+			// Ctrl+V a screenshot straight onto the task. `Win+Shift+S` → paste is
+			// how a screenshot actually reaches a bug report; the alternative is
+			// save-to-disk, browse, pick.
+			//
+			// ⚠️ Scoped to this container, NOT `document`. A global paste listener
+			// would hijack Ctrl+V app-wide — including the board's search box and
+			// every text field — and start uploading when someone meant to paste text.
+			// A paste carrying no files falls through untouched for the same reason.
+			onPaste={
+				canEdit
+					? (e) => {
+							const files = e.clipboardData?.files;
+							if (!files || files.length === 0) return;
+							e.preventDefault();
+							upload(files);
+						}
+					: undefined
+			}
+		>
+			{/* Signing is a network call, so the thumbnails arrive a beat after the
           row. Hold their space with skeletons at the SAME 80px height and the
           image's own aspect ratio (both columns are on the row already), so
           the images fill the boxes instead of shoving the description down.
           Skeletons rather than a spinner: the product register is explicit
           that content loads into its own shape, not behind a throbber. */}
-      {views.length === 0 && images.length > 0 && (
-        <ul className="flex flex-wrap gap-2" aria-hidden>
-          {images.map((image) => (
-            <li key={image.id}>
-              <Skeleton
-                className="h-20 border border-line"
-                style={{
-                  width:
-                    image.width && image.height
-                      ? `${Math.min(160, (image.width / image.height) * 80)}px`
-                      : "112px",
-                }}
-              />
-            </li>
-          ))}
-        </ul>
-      )}
+			{views.length === 0 && images.length > 0 && (
+				<ul className="flex flex-wrap gap-2" aria-hidden>
+					{images.map((image) => (
+						<li key={image.id}>
+							<Skeleton
+								className="h-20 border border-line"
+								style={{
+									width:
+										image.width && image.height
+											? `${Math.min(160, (image.width / image.height) * 80)}px`
+											: "112px",
+								}}
+							/>
+						</li>
+					))}
+				</ul>
+			)}
 
-      {views.length > 0 && (
-        <ul className="flex flex-wrap gap-2">
-          {views.map((image) => (
-            <li key={image.id} className="group relative">
-              <button
-                type="button"
-                onClick={() => setLightbox(image)}
-                className="block overflow-hidden rounded-md border border-line transition-colors duration-150 hover:border-line-strong"
-                aria-label="View image full size"
-              >
-                {/* `thumbUrl`, never `url` — the box is 80px tall and the
+			{views.length > 0 && (
+				<ul className="flex flex-wrap gap-2">
+					{views.map((image) => (
+						<li key={image.id} className="group relative">
+							<button
+								type="button"
+								onClick={() => setLightbox(image)}
+								className="block overflow-hidden rounded-md border border-line transition-colors duration-150 hover:border-line-strong"
+								aria-label="View image full size"
+							>
+								{/* `thumbUrl`, never `url` — the box is 80px tall and the
                     original is ~44x the bytes it can show. The lightbox below
                     is where the full-resolution image lives. */}
-                <Image
-                  src={image.thumbUrl}
-                  alt=""
-                  width={image.width ?? 160}
-                  height={image.height ?? 100}
-                  unoptimized
-                  className="h-20 w-auto max-w-40 object-cover"
-                />
-              </button>
-              {canEdit && (
-                <button
-                  type="button"
-                  onClick={() => remove(image)}
-                  aria-label="Remove image"
-                  className={cn(
-                    "absolute -right-1.5 -top-1.5 grid size-5 place-items-center rounded-full",
-                    "border border-line bg-surface text-faint opacity-0 transition-opacity duration-150",
-                    "hover:text-danger group-hover:opacity-100 focus-visible:opacity-100"
-                  )}
-                >
-                  <X className="size-3" aria-hidden />
-                </button>
-              )}
-            </li>
-          ))}
-        </ul>
-      )}
+								<Image
+									src={image.thumbUrl}
+									alt=""
+									width={image.width ?? 160}
+									height={image.height ?? 100}
+									unoptimized
+									className="h-20 w-auto max-w-40 object-cover"
+								/>
+							</button>
+							{canEdit && (
+								<button
+									type="button"
+									onClick={() => remove(image)}
+									aria-label="Remove image"
+									className={cn(
+										"absolute -right-1.5 -top-1.5 grid size-5 place-items-center rounded-full",
+										"border border-line bg-surface text-faint opacity-0 transition-opacity duration-150",
+										"hover:text-danger group-hover:opacity-100 focus-visible:opacity-100",
+									)}
+								>
+									<X className="size-3" aria-hidden />
+								</button>
+							)}
+						</li>
+					))}
+				</ul>
+			)}
 
-      {canEdit && images.length < MAX_IMAGES_PER_TASK && (
-        <>
-          {/* `form=""` detaches it from any enclosing form. This component now
+			{canEdit && images.length < MAX_IMAGES_PER_TASK && (
+				<>
+					{/* `form=""` detaches it from any enclosing form. This component now
               renders inside the row EDITOR too, and a file input caught by a
               form gets its bytes serialized into that form's action payload. */}
-          <input
-            ref={fileRef}
-            type="file"
-            form=""
-            accept={ALLOWED_IMAGE_TYPES.join(",")}
-            multiple
-            className="hidden"
-            onChange={(e) => upload(e.target.files)}
-          />
-          <button
-            type="button"
-            disabled={busy}
-            onClick={() => fileRef.current?.click()}
-            className={cn(
-              "mt-2 inline-flex items-center gap-1.5 text-[calc(13px*var(--text-scale,1))] text-faint",
-              "transition-colors duration-150 hover:text-muted disabled:opacity-50"
-            )}
-          >
-            {busy ? (
-              <Loader2 className="size-3.5 animate-spin" aria-hidden />
-            ) : (
-              <ImagePlus className="size-3.5" aria-hidden />
-            )}
-            {busy ? "Uploading…" : "Attach image"}
-          </button>
-          {/* Paste is invisible unless it's named. The hint sits on the same
+					<input
+						ref={fileRef}
+						type="file"
+						form=""
+						accept={ALLOWED_IMAGE_TYPES.join(",")}
+						multiple
+						className="hidden"
+						onChange={(e) => upload(e.target.files)}
+					/>
+					<button
+						type="button"
+						disabled={busy}
+						onClick={() => fileRef.current?.click()}
+						className={cn(
+							"mt-2 inline-flex items-center gap-1.5 text-[calc(13px*var(--text-scale,1))] text-faint",
+							"transition-colors duration-150 hover:text-muted disabled:opacity-50",
+						)}
+					>
+						{busy ? (
+							<Loader2
+								className="size-3.5 animate-spin"
+								aria-hidden
+							/>
+						) : (
+							<ImagePlus className="size-3.5" aria-hidden />
+						)}
+						{busy ? "Uploading…" : "Attach image"}
+					</button>
+					{/* Paste is invisible unless it's named. The hint sits on the same
               line as the button so the two read as one affordance. */}
-          <span className="ml-2 text-[calc(11px*var(--text-scale,1))] text-faint">or paste a screenshot</span>
-        </>
-      )}
+					<span className="ml-2 text-[calc(11px*var(--text-scale,1))] text-faint">
+						or paste a screenshot
+					</span>
+				</>
+			)}
 
-      {lightbox && (
-        <Lightbox
-          url={lightbox.url}
-          width={lightbox.width}
-          height={lightbox.height}
-          onClose={() => setLightbox(null)}
-        />
-      )}
-    </div>
-  );
+			{lightbox && (
+				<Lightbox
+					url={lightbox.url}
+					width={lightbox.width}
+					height={lightbox.height}
+					onClose={() => setLightbox(null)}
+				/>
+			)}
+		</div>
+	);
 }
