@@ -56,17 +56,30 @@ export function nextNoteColor(lastUsed: string | null | undefined): string {
 /**
  * Who a note is for — exactly one of four (0066).
  *
- * These four partition the company rather than overlapping it, which is what
- * makes a single choice enough: `work` and `learn_only` are disjoint, and
- * together they are `everyone`. The Learn/Work split is load-bearing — granting
- * Work auto-grants Learn (0026), so every member holds Learn and a plain "Kagu
- * Learn" audience would have been a synonym for "everyone" wearing the name of
- * a narrow group. `learn_only` is the group people mean when they say "the
- * Learn members": the ones whose only panel is Learn.
+ * The four GROUP audiences partition the company rather than overlapping it,
+ * which is what makes a single choice enough: `work` and `learn_only` are
+ * disjoint, and together they are `everyone`. The Learn/Work split is
+ * load-bearing — granting Work auto-grants Learn (0026), so every member holds
+ * Learn and a plain "Kagu Learn" audience would have been a synonym for
+ * "everyone" wearing the name of a narrow group. `learn_only` is the group
+ * people mean when they say "the Learn members": the ones whose only panel is
+ * Learn.
+ *
+ * `people` is the exception to that partition: a hand-picked list for the note
+ * that belongs to two or three colleagues and has no group behind it (0067).
+ * It is the only token that carries ids alongside it.
  */
-export type AudienceToken = "everyone" | "work" | "learn_only" | "admins";
+export type AudienceToken =
+  | "everyone"
+  | "work"
+  | "learn_only"
+  | "admins"
+  | "people";
 
 export const DEFAULT_AUDIENCE: AudienceToken = "everyone";
+
+/** The one audience that carries its own list of ids alongside the token. */
+export const PEOPLE_AUDIENCE: AudienceToken = "people";
 
 export type AudienceOption = {
   token: AudienceToken;
@@ -84,6 +97,11 @@ export const AUDIENCE_OPTIONS: AudienceOption[] = [
   },
   { token: "work", label: "Kagu Work members", hint: "The Work team" },
   { token: "admins", label: "Admins only", hint: "Nobody else sees it" },
+  {
+    token: "people",
+    label: "Specific people",
+    hint: "Pick them by name",
+  },
 ];
 
 const AUDIENCE_LABELS = new Map(
@@ -103,9 +121,16 @@ export function isValidAudience(token: string): token is AudienceToken {
  * How the audience reads on a pinned note. `everyone` returns null — a chip on
  * every note saying "All members" is furniture, and the interesting case is
  * precisely the note that is NOT for everyone.
+ *
+ * A named list reads as a COUNT ("3 people"), not as the names. The names are
+ * in the composer, which only admins open; putting them on the card would tell
+ * each of the three who else got the same note, which is a disclosure the
+ * author never opted into by picking an audience.
  */
-export function audienceChip(token: string): string | null {
+export function audienceChip(token: string, idCount = 0): string | null {
   if (token === "everyone") return null;
+  if (token === PEOPLE_AUDIENCE)
+    return `${idCount} ${idCount === 1 ? "person" : "people"}`;
   return isValidAudience(token) ? audienceLabel(token) : null;
 }
 
@@ -137,7 +162,8 @@ export type RosterPerson = {
  */
 export function audienceReaders(
   roster: RosterPerson[],
-  token: AudienceToken
+  token: AudienceToken,
+  ids: string[] = []
 ): RosterPerson[] {
   switch (token) {
     case "everyone":
@@ -148,5 +174,14 @@ export function audienceReaders(
       return roster.filter((p) => p.hasWork);
     case "learn_only":
       return roster.filter((p) => p.hasLearn && !p.hasWork);
+    case "people": {
+      // Resolved against the roster rather than returned as raw ids, so an id
+      // belonging to nobody (a since-deleted profile — the array has no foreign
+      // key, see 0067) drops out of the preview exactly as it drops out of the
+      // readership. The preview's count then matches reality instead of the
+      // number of chips the author happened to pick.
+      const picked = new Set(ids);
+      return roster.filter((p) => picked.has(p.id));
+    }
   }
 }

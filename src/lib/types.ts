@@ -783,6 +783,12 @@ export type PinboardNote = {
   body: string;
   color: string;
   audience: string;
+  /**
+   * The hand-picked readers, and ONLY when `audience` is 'people' — the check
+   * constraint in 0067 forces this empty for every group audience, so it never
+   * has to be read alongside a token that would ignore it.
+   */
+  audience_ids: string[];
   created_by: string | null;
   created_at: string;
   updated_at: string;

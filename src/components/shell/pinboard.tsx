@@ -6,13 +6,14 @@ import { Check, Pencil, Pin, Plus, X } from "lucide-react";
 import { pinNote, unpinNote, updateNote } from "@/lib/actions/pinboard";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/input";
-import { Dropdown } from "@/components/ui/dropdown";
+import { Dropdown, MultiDropdown } from "@/components/ui/dropdown";
 import { useAction } from "@/lib/use-action";
 import {
   AUDIENCE_OPTIONS,
   DEFAULT_AUDIENCE,
   DEFAULT_NOTE_COLOR,
   NOTE_COLORS,
+  PEOPLE_AUDIENCE,
   audienceChip,
   audienceReaders,
   nextNoteColor,
@@ -72,6 +73,7 @@ export function Pinboard({
   const [body, setBody] = useState("");
   const [color, setColor] = useState(DEFAULT_NOTE_COLOR);
   const [audience, setAudience] = useState<AudienceToken>(DEFAULT_AUDIENCE);
+  const [picked, setPicked] = useState<string[]>([]);
 
   function openComposer(target: PinboardNote | null) {
     setEditingId(target?.id ?? null);
@@ -80,6 +82,7 @@ export function Pinboard({
     // pinned back to back don't come out the same shade.
     setColor(target?.color ?? nextNoteColor(items[0]?.color));
     setAudience((target?.audience as AudienceToken) ?? DEFAULT_AUDIENCE);
+    setPicked(target?.audience_ids ?? []);
     setComposing(true);
   }
 
@@ -95,8 +98,8 @@ export function Pinboard({
     run(
       () =>
         editingId
-          ? updateNote(editingId, text, color, audience)
-          : pinNote(text, color, audience),
+          ? updateNote(editingId, text, color, audience, picked)
+          : pinNote(text, color, audience, picked),
       {
         success: editingId ? "Note updated." : "Note pinned.",
         onSuccess: () => {
@@ -132,10 +135,18 @@ export function Pinboard({
   // every note regardless, so any admin not already in that set is listed
   // separately rather than folded in — merging them would make "Kagu Learn
   // members" preview 11 people when the trainees number 9.
-  const readers = audienceReaders(people, audience);
+  const readers = audienceReaders(people, audience, picked);
   const readerIds = new Set(readers.map((r) => r.id));
   const alsoAdmins = people.filter((p) => p.isAdmin && !readerIds.has(p.id));
   const shownNames = readers.slice(0, PREVIEW_NAMES);
+  const pickingPeople = audience === PEOPLE_AUDIENCE;
+
+  // Everyone the named list can draw from. Ordered by name (getAudienceRoster
+  // sorts), so the menu reads like a roster rather than like insertion order.
+  const peopleOptions = people.map((p) => ({
+    value: p.id,
+    label: p.name,
+  }));
 
   // Each option carries its own size, so the menu answers "how many is that"
   // for all four at once and the choice is informed before it is made.
@@ -144,7 +155,13 @@ export function Pinboard({
   // only rendered by the MultiSelect sibling, so a single-select Dropdown
   // silently drops it. Leading with the number keeps the column scannable.
   const audienceOptions = AUDIENCE_OPTIONS.map((a) => {
-    const n = roster ? audienceReaders(people, a.token).length : null;
+    // "Specific people" is sized by what has been ticked so far, so before any
+    // pick it has no count to show — a "0 people" on a group that hasn't been
+    // chosen yet reads as an empty team rather than an empty selection.
+    const n =
+      !roster || a.token === PEOPLE_AUDIENCE
+        ? null
+        : audienceReaders(people, a.token).length;
     return {
       value: a.token,
       label: a.label,
@@ -238,6 +255,24 @@ export function Pinboard({
                 className="max-w-xs"
               />
 
+              {/* The named list. Rendered only for its own audience, and the
+                  picks are KEPT when you switch away and back — re-ticking six
+                  people because you glanced at another option would be its own
+                  small punishment. The server drops them for group audiences
+                  regardless, so nothing stale can be saved. */}
+              {pickingPeople && roster && (
+                <MultiDropdown
+                  id="pinboard-people"
+                  label="People this note is for"
+                  options={peopleOptions}
+                  values={picked}
+                  onChange={setPicked}
+                  placeholder="Choose people…"
+                  summaryNoun="people"
+                  className="max-w-xs"
+                />
+              )}
+
               {/* The readership, by name. A count alone still leaves "who is
                   actually in Kagu Work?" to memory, and the whole risk of an
                   audience picker is being confidently wrong about that. */}
@@ -302,7 +337,14 @@ export function Pinboard({
                   variant="primary"
                   size="sm"
                   onClick={save}
-                  disabled={!body.trim() || pending}
+                  // A named-list note with nobody named is refused by the
+                  // action and by the 0067 constraint; disabling here means the
+                  // composer says so before the round-trip rather than after.
+                  disabled={
+                    !body.trim() ||
+                    pending ||
+                    (pickingPeople && picked.length === 0)
+                  }
                 >
                   {editingId ? "Save" : "Pin it"}
                 </Button>
@@ -327,7 +369,10 @@ export function Pinboard({
         <ul className="grid gap-2 p-3 sm:grid-cols-2 lg:grid-cols-3">
           {items.map((note) => {
             const css = noteColorCss(note.color);
-            const chip = audienceChip(note.audience);
+            const chip = audienceChip(
+              note.audience,
+              note.audience_ids?.length ?? 0
+            );
             const author = note.created_by ? members[note.created_by] : null;
             return (
               <li
