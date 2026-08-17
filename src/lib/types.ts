@@ -769,6 +769,25 @@ export type Announcement = {
   updated_at: string;
 };
 
+/**
+ * One note on the dashboard pinboard — a standing "keep this in mind", pinned
+ * by an admin and addressed to one or more audiences (0065).
+ *
+ * `audiences` is typed as plain strings rather than AudienceToken: it arrives
+ * from the database, which is free to hold a token this build doesn't know yet
+ * (a migration ahead of a deploy). The rendering helpers in lib/pinboard.ts
+ * narrow it, so an unknown token degrades to "not shown" instead of a crash.
+ */
+export type PinboardNote = {
+  id: string;
+  body: string;
+  color: string;
+  audiences: string[];
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
 /** The structured picks behind a focus item's sentence, so it can be re-edited. */
 export type DebugFocusParts = {
   /** "work" = get through the board · "find" = go look for what's NOT on it yet. */

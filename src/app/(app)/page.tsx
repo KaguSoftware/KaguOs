@@ -10,11 +10,18 @@ import { Reminders } from "@/components/shell/reminders";
 import { LiveRefresh } from "@/components/shell/live-refresh";
 import { ActivityFeed } from "@/components/shell/activity-feed";
 import { AnnouncementHero } from "@/components/shell/announcement-hero";
+import { Pinboard } from "@/components/shell/pinboard";
 import { PrefetchHeavy } from "@/components/shell/prefetch-heavy";
 import { ShowcaseToggle } from "@/components/shell/showcase";
 import { formatTRY, isActiveRecurring, monthlyAmount, toTRY, type FxRates } from "@/lib/finance";
 import { addDays, cn, todayInIstanbul } from "@/lib/utils";
-import { SECTION_LABELS, type Announcement, type Reminder, type Section } from "@/lib/types";
+import {
+  SECTION_LABELS,
+  type Announcement,
+  type PinboardNote,
+  type Reminder,
+  type Section,
+} from "@/lib/types";
 
 /**
  * One section's numbers, as NUMBERS.
@@ -318,6 +325,7 @@ export default async function DashboardPage() {
     members,
     remindersRes,
     annRes,
+    pinsRes,
   ] = await Promise.all([
     attentionStats,
     learnAttention,
@@ -360,6 +368,20 @@ export default async function DashboardPage() {
             .order("created_at", { ascending: false })
             .limit(1),
           "announcements"
+        ),
+    // Pinboard notes — real internal notes with no demo equivalent, so skipped
+    // in showcase for the same reason as the two above. No audience filter
+    // here: RLS (0065) already returns only the notes this person is addressed
+    // by, and restating the rule in the client would mean writing the
+    // work-implies-learn subtlety down twice.
+    ctx.showcase
+      ? null
+      : rowsOrThrow(
+          ctx.supabase
+            .from("pinboard_notes")
+            .select("*")
+            .order("created_at", { ascending: false }),
+          "pinboard notes"
         ),
   ]);
 
@@ -505,16 +527,18 @@ export default async function DashboardPage() {
   // paints.
   if (canAccess(ctx, "chat")) heavyRoutes.push("/messages");
 
-  // Both are null in showcase mode (deliberately skipped), else a real array.
+  // All three are null in showcase mode (deliberately skipped), else a real array.
   const reminders = (remindersRes ?? []) as Reminder[];
   const announcement = ((annRes ?? []) as Announcement[])[0] ?? null;
+  const pins = (pinsRes ?? []) as PinboardNote[];
 
   return (
     <>
-      {/* Live dashboard: team reminders + the announcement banner update in
-          place. Skipped in showcase (both are hidden there). */}
+      {/* Live dashboard: team reminders, the announcement banner, and the
+          pinboard all update in place. Skipped in showcase (all three are
+          hidden there). */}
       {!ctx.showcase && (
-        <LiveRefresh tables={["reminders", "announcements"]} />
+        <LiveRefresh tables={["reminders", "announcements", "pinboard_notes"]} />
       )}
       <PageHeader
         title={`Hey, ${firstName}`}
@@ -622,6 +646,16 @@ export default async function DashboardPage() {
       <div className="mb-6">
         <Reminders reminders={reminders} members={members} meId={ctx.userId} />
       </div>
+      {/* The pinboard sits with the reminders rather than up by the
+          announcement: both are notes-about-work, while the announcement is a
+          banner. Hidden entirely in showcase — its notes are real internal
+          context, and an admin touring the demo would otherwise be offered a
+          "Pin a note" prompt that blockIfShowcase refuses on submit. */}
+      {!ctx.showcase && (
+        <div className="mb-6">
+          <Pinboard notes={pins} members={members} isAdmin={ctx.isAdmin} />
+        </div>
+      )}
       {/* One dense row of numbers, not six cards. Each section is a column of
           figures; the section name is the link. Values are mono and sized up so
           the row scans as data, which is what it always was. */}
