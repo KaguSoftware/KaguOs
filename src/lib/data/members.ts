@@ -1,5 +1,6 @@
 import { cache } from "react";
 import { memberColorCss } from "@/lib/colors";
+import type { RosterPerson } from "@/lib/pinboard";
 import type { MembersMap } from "@/lib/types";
 import { getSessionContext, type SessionContext } from "@/lib/data/session";
 import { rowsOrThrow } from "@/lib/data/query";
@@ -58,3 +59,56 @@ export const getMembersMap = cache(async function getMembersMap(
   }
   return map;
 });
+
+/**
+ * The roster behind the pinboard composer's "who will see this" preview: every
+ * member, plus the two membership facts the audience rules turn on.
+ *
+ * ⚠️ ADMIN-ONLY DATA. This is the one place the app hands a browser a picture
+ * of who belongs to what, so the CALLER must gate it on ctx.isAdmin and pass
+ * null otherwise — props reach the client for every user who renders the
+ * component, not only the ones who can see the composer. Showcase returns empty
+ * for the same reason getMembersMap anonymises there: the pinboard is hidden in
+ * showcase anyway, and a roster is exactly what must not reach a demo guest.
+ */
+export async function getAudienceRoster(
+  ctx: SessionContext
+): Promise<RosterPerson[]> {
+  if (!ctx.isAdmin || ctx.showcase) return [];
+
+  const [people, memberships] = await Promise.all([
+    rowsOrThrow(
+      ctx.supabase
+        .from("profiles")
+        .select("id, full_name, email, color, is_admin")
+        .eq("kind", "member"),
+      "audience roster: profiles"
+    ),
+    rowsOrThrow(
+      // Only the two sections the four audiences are defined in terms of. The
+      // rest would be roster detail the preview never consults.
+      ctx.supabase
+        .from("section_memberships")
+        .select("user_id, section")
+        .in("section", ["work", "learn"]),
+      "audience roster: memberships"
+    ),
+  ]);
+
+  const work = new Set<string>();
+  const learn = new Set<string>();
+  for (const m of memberships) {
+    (m.section === "work" ? work : learn).add(m.user_id);
+  }
+
+  return people
+    .map((p) => ({
+      id: p.id,
+      name: p.full_name || p.email,
+      color: memberColorCss(p.id, p.color),
+      isAdmin: Boolean(p.is_admin),
+      hasWork: work.has(p.id),
+      hasLearn: learn.has(p.id),
+    }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+}

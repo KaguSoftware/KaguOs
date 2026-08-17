@@ -1,9 +1,7 @@
 // The pinboard's two vocabularies: what a note can look like, and who it can be
 // addressed to. Shared by the composer and the server action so the picker and
 // the validator can never drift — the action rejects exactly what the UI cannot
-// offer, and both agree with the check constraint in 0065.
-
-import type { Section } from "@/lib/types";
+// offer, and both agree with the check constraint in 0066.
 
 /**
  * Note colors — the one place in the app where color is DECORATION rather than
@@ -56,51 +54,36 @@ export function nextNoteColor(lastUsed: string | null | undefined): string {
 }
 
 /**
- * Who a note can be addressed to.
+ * Who a note is for — exactly one of four (0066).
  *
- * Three of these are not sections. `everyone` and `admins` are self-evident;
- * `learn_only` exists because granting Work auto-grants Learn (0026), so the
- * plain "Kagu Learn" audience necessarily includes every Work member — nearly
- * the whole company. Without the split there is no way to address the people
- * whose only panel is Learn.
+ * These four partition the company rather than overlapping it, which is what
+ * makes a single choice enough: `work` and `learn_only` are disjoint, and
+ * together they are `everyone`. The Learn/Work split is load-bearing — granting
+ * Work auto-grants Learn (0026), so every member holds Learn and a plain "Kagu
+ * Learn" audience would have been a synonym for "everyone" wearing the name of
+ * a narrow group. `learn_only` is the group people mean when they say "the
+ * Learn members": the ones whose only panel is Learn.
  */
-export type AudienceToken =
-  | "everyone"
-  | "admins"
-  | "learn_only"
-  | Extract<Section, "work" | "learn" | "management" | "debug" | "marketing" | "comms" | "chat">;
+export type AudienceToken = "everyone" | "work" | "learn_only" | "admins";
+
+export const DEFAULT_AUDIENCE: AudienceToken = "everyone";
 
 export type AudienceOption = {
   token: AudienceToken;
   label: string;
-  /** Shown under the label in the picker — who this actually reaches. */
+  /** Second line in the dropdown — who this actually reaches. */
   hint: string;
 };
 
-/**
- * Picker order: the broad strokes first, then the sections. The two Learn rows
- * sit next to each other on purpose — they are the one pair an admin has to
- * choose between deliberately, and separating them would let someone pick
- * "Kagu Learn" believing it means the trainees.
- *
- * `status` is absent by design: it is a feature gate (presence dots, the status
- * editor), not a group of people you would address.
- */
 export const AUDIENCE_OPTIONS: AudienceOption[] = [
-  { token: "everyone", label: "Everyone", hint: "Every member" },
-  { token: "admins", label: "Admins only", hint: "Admins" },
+  { token: "everyone", label: "All members", hint: "Everyone at Kagu" },
   {
     token: "learn_only",
-    label: "Learn only",
+    label: "Kagu Learn members",
     hint: "Learn without Work — the trainees",
   },
-  { token: "learn", label: "Kagu Learn", hint: "Everyone with Learn, Work staff included" },
-  { token: "work", label: "Kagu Work", hint: "Work members" },
-  { token: "debug", label: "Kagu Debug", hint: "Debug members" },
-  { token: "management", label: "Kagu Management", hint: "Management members" },
-  { token: "marketing", label: "Kagu Marketing", hint: "Marketing members" },
-  { token: "comms", label: "Kagu Comms", hint: "Comms members" },
-  { token: "chat", label: "Kagu Chat", hint: "Chat members" },
+  { token: "work", label: "Kagu Work members", hint: "The Work team" },
+  { token: "admins", label: "Admins only", hint: "Nobody else sees it" },
 ];
 
 const AUDIENCE_LABELS = new Map(
@@ -117,17 +100,53 @@ export function isValidAudience(token: string): token is AudienceToken {
 }
 
 /**
- * How the audience reads on a pinned note.
- *
- * `everyone` returns null — a chip on every note saying "Everyone" is furniture
- * that teaches nothing, and the interesting case is precisely the note that is
- * NOT for everyone. Once a note carries `everyone`, the narrower audiences on
- * it are noise too: they cannot subtract anyone.
+ * How the audience reads on a pinned note. `everyone` returns null — a chip on
+ * every note saying "All members" is furniture, and the interesting case is
+ * precisely the note that is NOT for everyone.
  */
-export function audienceSummary(audiences: string[]): string | null {
-  if (audiences.includes("everyone")) return null;
-  const labels = audiences.filter(isValidAudience).map(audienceLabel);
-  if (labels.length === 0) return null;
-  if (labels.length <= 2) return labels.join(" · ");
-  return `${labels[0]} +${labels.length - 1}`;
+export function audienceChip(token: string): string | null {
+  if (token === "everyone") return null;
+  return isValidAudience(token) ? audienceLabel(token) : null;
+}
+
+/**
+ * One person as the composer's readership preview needs them.
+ *
+ * Carries the two membership facts the audience rules turn on rather than the
+ * whole section list: the preview only ever has to answer "Work or trainee",
+ * and shipping every membership to the browser would tell an admin's client
+ * more about the roster than the feature needs.
+ */
+export type RosterPerson = {
+  id: string;
+  name: string;
+  color: string;
+  isAdmin: boolean;
+  hasWork: boolean;
+  hasLearn: boolean;
+};
+
+/**
+ * Exactly who will read a note with this audience — the same rules as
+ * private.sees_pinboard (0066), evaluated here so the composer can show the
+ * list before anything is pinned.
+ *
+ * ⚠️ This MIRRORS the database; it does not enforce anything. RLS is the wall.
+ * If the two ever disagree the database wins and this preview is simply wrong,
+ * which is why both are written from the same four-case shape.
+ */
+export function audienceReaders(
+  roster: RosterPerson[],
+  token: AudienceToken
+): RosterPerson[] {
+  switch (token) {
+    case "everyone":
+      return roster;
+    case "admins":
+      return roster.filter((p) => p.isAdmin);
+    case "work":
+      return roster.filter((p) => p.hasWork);
+    case "learn_only":
+      return roster.filter((p) => p.hasLearn && !p.hasWork);
+  }
 }
