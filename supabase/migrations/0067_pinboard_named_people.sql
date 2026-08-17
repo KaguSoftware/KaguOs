@@ -11,12 +11,18 @@
 -- ("which notes is Ali on?" is not a question the app asks), and bounded by the
 -- size of the company. A join table would add a second read and a second RLS
 -- policy to express the same fact.
+--
+-- IDEMPOTENT, in the same spirit as 0029: every step is guarded so running this
+-- file twice is a no-op rather than `42701 column already exists`. Constraints
+-- are dropped-then-added rather than added-if-absent — this migration WIDENS
+-- pinboard_notes_audience_valid, so "skip if a constraint by that name exists"
+-- would silently leave 0066's narrower version in place and reject 'people'.
 
 alter table public.pinboard_notes
-  add column audience_ids uuid[] not null default '{}';
+  add column if not exists audience_ids uuid[] not null default '{}';
 
 alter table public.pinboard_notes
-  drop constraint pinboard_notes_audience_valid;
+  drop constraint if exists pinboard_notes_audience_valid;
 
 alter table public.pinboard_notes
   add constraint pinboard_notes_audience_valid
@@ -33,6 +39,9 @@ alter table public.pinboard_notes
  * cardinality(), not array_length(), for the reason 0065 records: array_length
  * on an empty array is NULL, and a CHECK passes when its expression is NULL.
  */
+alter table public.pinboard_notes
+  drop constraint if exists pinboard_notes_people_ids;
+
 alter table public.pinboard_notes
   add constraint pinboard_notes_people_ids
   check (
