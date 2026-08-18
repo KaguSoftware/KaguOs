@@ -40,6 +40,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/components/ui/toast";
 import { useAction } from "@/lib/use-action";
 import {
+  BOARD_DEFAULTS,
   hasBoardFilterParams,
   loadStoredBoardFilters,
   readBoardFilters,
@@ -108,6 +109,20 @@ const SORT_OPTIONS = [
   { value: "deadline", label: "Deadline" },
   { value: "newest", label: "Newest" },
 ];
+
+/** Fixed width for that slot, in `em` so it tracks the font rather than fighting
+ *  it. A px width can't work here: the label is sized
+ *  `calc(12px*var(--text-scale,1))`, and at the Largest text setting (1.25)
+ *  "Deadline" measures ~61px — it would truncate to "Deadlin…" under any px
+ *  value chosen to look right at 1x. In em the slot grows with the text, so the
+ *  same class holds all four labels at all four text sizes.
+ *  "Deadline" is the widest at ~4.06em in Geist 400; 4.4em leaves the margin.
+ *
+ *  If you add a sort option, keep its label within that budget — roughly eight
+ *  characters. A longer one doesn't break the layout (the slot is fixed, so the
+ *  toolbar still can't shift); it silently ellipsises instead, which is the
+ *  quieter failure and the reason this note is here rather than in a review. */
+const SORT_SLOT_WIDTH = "w-[4.4em] shrink-0 truncate";
 
 // Multi-select filter options — no "Any …" row, because picking nothing IS
 // "any". The placeholder on each control says so.
@@ -1669,6 +1684,12 @@ function FiltersPopover({
   // read "1 filter active" on a board that isn't filtered at all. Assignee is
   // out too: it has its own trigger in the toolbar, which shows its own state.
   const count = kindFilter.length + stateFilter.length + priority.length;
+  // ALWAYS shown, Smart included. An only-when-non-default label meant the
+  // trigger changed width the moment you left Smart, and with the search box
+  // `flex-1` beside it every such change pushed the search and the task names
+  // that line up under it. A label that is always present can't do that.
+  const sortLabel =
+    SORT_OPTIONS.find((o) => o.value === sort)?.label ?? BOARD_DEFAULTS.sort;
 
   // Same dismissal contract as every other popover in the app: click-away and
   // Escape both close it.
@@ -1705,6 +1726,9 @@ function FiltersPopover({
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
         aria-haspopup="dialog"
+        aria-label={`Filters and sort — ${count} filter${count === 1 ? "" : "s"} active, sorted by ${
+          SORT_OPTIONS.find((o) => o.value === sort)?.label ?? sort
+        }`}
         className={cn(
           "flex h-9 items-center gap-2 rounded-md border px-3 text-sm transition-colors duration-150",
           count > 0
@@ -1713,6 +1737,10 @@ function FiltersPopover({
         )}
       >
         <SlidersHorizontal className="size-3.5" aria-hidden />
+        {/* Back to just "Filters": the sort no longer needs naming in the
+            trigger text because the slot beside it always shows the sort by
+            name. Spending 40px of a flex row on the word "sort" only squeezed
+            the search box that shares the row. */}
         Filters
         {/* Reserved slot, same reasoning as the Clear button: a badge that
             mounts on demand widens the trigger and shifts the row beside it. */}
@@ -1725,6 +1753,22 @@ function FiltersPopover({
           )}
         >
           {count || 0}
+        </span>
+        {/* The current sort, named on the trigger — the one thing in this
+            popover you can't read off the list itself.
+
+            Fixed-width slot, and ALWAYS rendered: the whole point is that the
+            button is exactly as wide with "Deadline" as with "Smart". The
+            search box next to it is `flex-1`, so any width change here is
+            handed straight to the search and to the task titles below it.
+            See SORT_SLOT_WIDTH for why that width is in em and not px. */}
+        <span
+          className={cn(
+            "border-l border-line pl-2 text-left text-[calc(12px*var(--text-scale,1))] text-primary-dim",
+            SORT_SLOT_WIDTH
+          )}
+        >
+          {sortLabel}
         </span>
       </button>
 
@@ -1777,8 +1821,10 @@ function FiltersPopover({
 
             {/* Sort is single-select: picking one deselects the rest, and
                 there's always exactly one on — so no counts, and no part in
-                the filter badge. */}
-            <div>
+                the filter badge. Ruled off from the filter groups above: it
+                ORDERS the list rather than narrowing it, and the divider is
+                what stops it reading as a fourth filter you forgot to set. */}
+            <div className="border-t border-line pt-3">
               <p className="mb-1.5 text-[calc(11px*var(--text-scale,1))] font-medium uppercase tracking-wide text-faint">
                 Sort
               </p>
@@ -1806,17 +1852,21 @@ function FiltersPopover({
               </div>
             </div>
           </div>
-          {count > 0 && (
+          {/* Resets what THIS popover owns — including the sort, which the
+              toolbar's Reset deliberately leaves alone. Without this there was
+              no way back to Smart except recognising it as the default. */}
+          {(count > 0 || sort !== BOARD_DEFAULTS.sort) && (
             <button
               type="button"
               onClick={() => {
                 setKindFilter([]);
                 setStateFilter([]);
                 setPriority([]);
+                setSort(BOARD_DEFAULTS.sort);
               }}
               className="mt-3 w-full border-t border-line pt-2 text-left text-xs text-muted transition-colors duration-150 hover:text-ink"
             >
-              Clear these {count}
+              {count > 0 ? `Clear these ${count}` : "Back to Smart order"}
             </button>
           )}
         </div>
