@@ -18,9 +18,13 @@ import type { FxRate, MarketingCampaign, Transaction } from "@/lib/types";
  * BUDGET — the marketing lens over the company ledger (0069).
  *
  * Every number here is a `transactions` row with category='marketing' — the
- * SAME rows the Finance tab shows, so the two tabs cannot disagree. What this
- * screen adds is the campaign dimension: each campaign's planned budget against
- * what the ledger says actually left the pocket for it.
+ * SAME rows the Finance tab shows, so the two can never disagree. What this
+ * screen adds is the client and campaign dimensions: where the money went,
+ * per client, against what was planned.
+ *
+ * Used twice: the section-wide Budget tab (all clients, with a per-client
+ * breakdown) and inside one client's workspace (`clientId` set — rows arrive
+ * pre-filtered and the per-client panel is skipped as noise).
  *
  * `spend_actual` (the ad-platform import column) is deliberately NOT summed
  * into these totals — that's money on an ad account, a different pocket. When
@@ -30,11 +34,15 @@ export function BudgetPanel({
   transactions,
   campaigns,
   fxRates,
+  clientNames,
+  clientId,
 }: {
-  /** Already filtered to category='marketing'. */
+  /** Already filtered to category='marketing' (and to the client, when clientId is set). */
   transactions: Transaction[];
   campaigns: MarketingCampaign[];
   fxRates: FxRate[];
+  clientNames?: Record<string, string>;
+  clientId?: string;
 }) {
   const rates: FxRates = {};
   for (const r of fxRates) rates[r.currency] = Number(r.rate_to_try);
@@ -47,6 +55,7 @@ export function BudgetPanel({
   let monthSpend = 0;
   let totalSpend = 0;
   const byCampaign = new Map<string, number>();
+  const byClient = new Map<string | null, { month: number; total: number }>();
 
   for (const t of settled) {
     const value = toTRY(Number(t.amount), t.currency, rates);
@@ -56,10 +65,16 @@ export function BudgetPanel({
     }
     const signed = t.type === "expense" ? value : -value;
     totalSpend += signed;
-    if (monthKey(t.occurred_on) === thisMonth) monthSpend += signed;
+    const inMonth = monthKey(t.occurred_on) === thisMonth;
+    if (inMonth) monthSpend += signed;
     if (t.campaign_id) {
       byCampaign.set(t.campaign_id, (byCampaign.get(t.campaign_id) ?? 0) + signed);
     }
+    const clientBucket =
+      byClient.get(t.marketing_client_id) ?? { month: 0, total: 0 };
+    clientBucket.total += signed;
+    if (inMonth) clientBucket.month += signed;
+    byClient.set(t.marketing_client_id, clientBucket);
   }
 
   const { series } = buildCashflowSeries(settled, rates, 6);
@@ -69,6 +84,14 @@ export function BudgetPanel({
   const budgetRows = campaigns
     .filter((c) => c.status !== "idea")
     .sort((a, b) => (a.created_at < b.created_at ? 1 : -1));
+
+  const clientBreakdown = [...byClient.entries()]
+    .map(([id, sums]) => ({
+      id,
+      name: id === null ? "General (no client)" : (clientNames?.[id] ?? "Client"),
+      ...sums,
+    }))
+    .sort((a, b) => b.total - a.total);
 
   return (
     <div className="grid gap-6">
@@ -90,7 +113,7 @@ export function BudgetPanel({
               return sum + (b ?? 0);
             }, 0)
           )}
-          sub="Active + planned + done campaigns"
+          sub="Planned + running + done campaigns"
         />
       </div>
 
@@ -104,6 +127,33 @@ export function BudgetPanel({
           </p>
         )}
       </Panel>
+
+      {!clientId && clientBreakdown.length > 0 && (
+        <Panel>
+          <PanelHeader
+            title="Per client"
+            action={<span className="text-xs text-faint">Where the money went.</span>}
+          />
+          <ul className="divide-y divide-line">
+            {clientBreakdown.map((row) => (
+              <li
+                key={row.id ?? "general"}
+                className="flex flex-wrap items-baseline gap-x-4 gap-y-1 px-4 py-2.5"
+              >
+                <span className="min-w-0 flex-1 truncate text-sm text-ink">
+                  {row.name}
+                </span>
+                <span className="font-mono text-xs text-muted tabular-nums">
+                  {formatTRY(row.month)} this month
+                </span>
+                <span className="font-mono text-sm text-ink tabular-nums">
+                  {formatTRY(row.total)}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </Panel>
+      )}
 
       <Panel>
         <PanelHeader
@@ -137,6 +187,11 @@ export function BudgetPanel({
                     <span className="min-w-0 flex-1 truncate text-sm font-medium text-ink">
                       {campaign.name}
                     </span>
+                    {!clientId && campaign.client_id && (
+                      <span className="text-xs text-muted">
+                        {clientNames?.[campaign.client_id]}
+                      </span>
+                    )}
                     <span className="text-xs text-muted">
                       {optionLabel(CHANNEL_OPTIONS, campaign.channel)}
                     </span>
@@ -203,8 +258,13 @@ export function BudgetPanel({
                   <span className="min-w-0 flex-1 truncate text-sm text-ink">
                     {t.notes ?? campaign?.name ?? "Marketing expense"}
                   </span>
+                  {!clientId && t.marketing_client_id && (
+                    <span className="text-xs text-muted">
+                      {clientNames?.[t.marketing_client_id]}
+                    </span>
+                  )}
                   {campaign && (
-                    <span className="text-xs text-muted">{campaign.name}</span>
+                    <span className="text-xs text-faint">{campaign.name}</span>
                   )}
                   {t.status === "pending" && <Badge tone="amber">pending</Badge>}
                   <span
@@ -226,7 +286,7 @@ export function BudgetPanel({
   );
 }
 
-/** Same tile as the Finance panel's — local for the same reason it is there. */
+/** Same tile as the Finance panel's — local by the same convention. */
 function StatTile({
   label,
   value,

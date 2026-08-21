@@ -12,10 +12,11 @@ import { UrlInput } from "@/components/ui/typed-inputs";
 import {
   createCampaign,
   createClient,
-  createCreative,
+  createPost,
   logMarketingExpense,
 } from "@/lib/actions/marketing";
 import { CAMPAIGN_STATUS_OPTIONS, CHANNEL_OPTIONS } from "@/lib/options";
+import { POST_STATUS_LABELS } from "@/lib/posts";
 
 const CURRENCY_OPTIONS = [
   { value: "TRY", label: "TRY — Turkish lira" },
@@ -24,7 +25,7 @@ const CURRENCY_OPTIONS = [
 ];
 
 const ENGAGEMENT_OPTIONS = [
-  { value: "retainer", label: "Retainer", hint: "A fixed fee for a set number of videos." },
+  { value: "retainer", label: "Retainer", hint: "A fixed fee for a set amount of work." },
   { value: "project", label: "Project", hint: "One-off, priced as a job." },
   { value: "ad_fee", label: "% of ad spend", hint: "A cut of what runs through their ads." },
 ];
@@ -42,7 +43,7 @@ export function NewClientForm() {
       fieldLabels={{ name: "Name", brand_notes: "Brand notes" }}
       submitLabel="Create client"
       onCancel={() => router.back()}
-      onDone={() => router.push("/marketing/clients")}
+      onDone={() => router.push("/marketing")}
     >
       <Field label="Name" htmlFor="client-name">
         <Input id="client-name" name="name" maxLength={120} autoFocus />
@@ -59,7 +60,7 @@ export function NewClientForm() {
           />
         </Field>
         {engagement === "retainer" ? (
-          <Field label="Videos a month" htmlFor="client-deliverables">
+          <Field label="Posts a month" htmlFor="client-deliverables">
             <NumberInput
               id="client-deliverables"
               name="monthly_deliverables"
@@ -92,7 +93,7 @@ export function NewClientForm() {
       <Field
         label="Ad account"
         htmlFor="client-ad-account"
-        hint="Whose card gets charged. Their own, normally — we just manage it."
+        hint="Whose card gets charged for their ads. Their own, normally — we just manage it."
       >
         <Dropdown
           id="client-ad-account"
@@ -116,94 +117,70 @@ export function NewClientForm() {
   );
 }
 
-export function NewCreativeForm({
+export function NewPostForm({
   clients,
   campaigns,
   members,
   defaultClientId,
 }: {
-  clients: { id: string; name: string; is_house?: boolean }[];
+  clients: { id: string; name: string }[];
   campaigns: { id: string; name: string; client_id: string | null }[];
   members: { id: string; name: string }[];
   defaultClientId?: string;
 }) {
   const router = useRouter();
-  // Own-brand mode (0068): while the house client is the only client, asking
-  // "which client is this for?" has one answer — so the picker disappears and
-  // the house id rides a hidden input. The dropdown returns by itself the day
-  // a real client row exists.
-  const house = clients.find((c) => c.is_house);
-  const onlyHouse = Boolean(house) && clients.every((c) => c.is_house);
-  const [clientId, setClientId] = useState(
-    defaultClientId ?? house?.id ?? clients[0]?.id ?? ""
-  );
+  const [clientId, setClientId] = useState(defaultClientId ?? clients[0]?.id ?? "");
 
-  // Only this client's campaigns. Offering another client's would produce a row
-  // the database refuses outright (0063's composite key) — better to never show
-  // the option than to explain the error.
+  // Only this client's campaigns — offering another client's would tie the
+  // post to money that isn't theirs.
   const clientCampaigns = campaigns.filter((c) => c.client_id === clientId);
 
   return (
     <CreateForm
-      action={createCreative}
-      fieldLabels={{ title: "Title", hook: "Hook", script: "Script" }}
-      submitLabel="Add video"
+      action={createPost}
+      fieldLabels={{ title: "Title", notes: "Notes" }}
+      submitLabel="Add post"
       onCancel={() => router.back()}
-      onDone={() => router.push(onlyHouse ? "/marketing" : `/marketing/clients/${clientId}`)}
+      onDone={() => router.push(`/marketing/clients/${clientId}`)}
     >
-      {onlyHouse ? (
-        <input type="hidden" name="client_id" value={clientId} />
-      ) : (
-        <Field label="Client" htmlFor="creative-client">
-          <Dropdown
-            id="creative-client"
-            name="client_id"
-            value={clientId}
-            onChange={setClientId}
-            placeholder="Which client is this for?"
-            options={clients.map((c) => ({
-              value: c.id,
-              label: c.is_house ? `${c.name} (our brand)` : c.name,
-            }))}
-          />
-        </Field>
-      )}
-
-      <Field label="Title" htmlFor="creative-title">
-        <Input id="creative-title" name="title" maxLength={200} autoFocus />
+      <Field label="Client" htmlFor="post-client">
+        <Dropdown
+          id="post-client"
+          name="client_id"
+          value={clientId}
+          onChange={setClientId}
+          placeholder="Which client is this for?"
+          options={clients.map((c) => ({ value: c.id, label: c.name }))}
+        />
       </Field>
 
-      <Field
-        label="Hook"
-        htmlFor="creative-hook"
-        hint="The first two seconds. Leave it for later if the idea isn't there yet."
-      >
-        <Textarea id="creative-hook" name="hook" rows={2} />
+      <Field label="Title" htmlFor="post-title">
+        <Input id="post-title" name="title" maxLength={200} autoFocus />
       </Field>
 
       <div className="grid gap-4 sm:grid-cols-2">
-        <Field label="Channel" htmlFor="creative-channel">
+        <Field label="Channel" htmlFor="post-channel">
           <Dropdown
-            id="creative-channel"
+            id="post-channel"
             name="channel"
             defaultValue="instagram"
             options={CHANNEL_OPTIONS}
           />
         </Field>
-        <Field label="Kind" htmlFor="creative-kind">
+        <Field label="Status" htmlFor="post-status">
           <Dropdown
-            id="creative-kind"
-            name="kind"
-            defaultValue="organic"
-            options={[
-              { value: "organic", label: "Organic" },
-              { value: "ad", label: "Ad" },
-            ]}
+            id="post-status"
+            name="status"
+            defaultValue="idea"
+            options={(["idea", "making", "scheduled"] as const).map((s) => ({
+              value: s,
+              label: POST_STATUS_LABELS[s],
+            }))}
           />
         </Field>
-        <Field label="Producer" htmlFor="creative-owner">
+        <Field label="Owner" htmlFor="post-owner">
           <Dropdown
-            id="creative-owner"
+            id="post-owner"
             name="owner_id"
             defaultValue=""
             options={[
@@ -212,23 +189,12 @@ export function NewCreativeForm({
             ]}
           />
         </Field>
-        <Field label="Editor" htmlFor="creative-editor">
-          <Dropdown
-            id="creative-editor"
-            name="editor_id"
-            defaultValue=""
-            options={[
-              { value: "", label: "Unassigned" },
-              ...members.map((m) => ({ value: m.id, label: m.name })),
-            ]}
-          />
+        <Field label="Publish date" htmlFor="post-publish">
+          <DatePicker id="post-publish" name="publish_on" />
         </Field>
-        <Field label="Shoot date" htmlFor="creative-shoot">
-          <DatePicker id="creative-shoot" name="shoot_date" />
-        </Field>
-        <Field label="Campaign" htmlFor="creative-campaign">
+        <Field label="Campaign" htmlFor="post-campaign">
           <Dropdown
-            id="creative-campaign"
+            id="post-campaign"
             name="campaign_id"
             defaultValue=""
             options={[
@@ -240,15 +206,11 @@ export function NewCreativeForm({
       </div>
 
       <Field
-        label="Script"
-        htmlFor="creative-script"
-        hint="Write it here or paste it in once it exists."
+        label="Notes"
+        htmlFor="post-notes"
+        hint="The idea, the caption draft, whatever the person making it needs."
       >
-        <Textarea id="creative-script" name="script" rows={8} />
-      </Field>
-
-      <Field label="Raw footage" htmlFor="creative-footage">
-        <UrlInput id="creative-footage" name="footage_url" />
+        <Textarea id="post-notes" name="notes" rows={5} />
       </Field>
     </CreateForm>
   );
@@ -260,18 +222,29 @@ export function NewCreativeForm({
  * same row, so there is no second book to reconcile.
  */
 export function NewExpenseForm({
+  clients,
   campaigns,
+  defaultClientId,
 }: {
-  campaigns: { id: string; name: string }[];
+  clients: { id: string; name: string }[];
+  campaigns: { id: string; name: string; client_id: string | null }[];
+  defaultClientId?: string;
 }) {
   const router = useRouter();
+  const [clientId, setClientId] = useState(defaultClientId ?? "");
+
+  // General spend has no client, so campaigns only narrow once one is picked.
+  const clientCampaigns = campaigns.filter((c) => c.client_id === clientId);
+
   return (
     <CreateForm
       action={logMarketingExpense}
       fieldLabels={{ amount: "Amount", occurred_on: "Date", notes: "What it was" }}
       submitLabel="Log expense"
       onCancel={() => router.back()}
-      onDone={() => router.push("/marketing?tab=budget")}
+      onDone={() =>
+        router.push(clientId ? `/marketing/clients/${clientId}?tab=budget` : "/marketing?tab=budget")
+      }
     >
       <div className="grid gap-4 sm:grid-cols-2">
         <Field label="Amount" htmlFor="mexp-amount">
@@ -292,29 +265,45 @@ export function NewExpenseForm({
             defaultValue="expense"
             options={[
               { value: "expense", label: "Money out", hint: "Spent from pocket" },
-              { value: "income", label: "Money in", hint: "A refund or sponsorship" },
+              { value: "income", label: "Money in", hint: "A refund or reimbursement" },
             ]}
           />
         </Field>
         <Field label="Date" htmlFor="mexp-date" hint="Empty = today.">
           <DatePicker id="mexp-date" name="occurred_on" />
         </Field>
+        <Field
+          label="Client"
+          htmlFor="mexp-client"
+          hint="Who the money was spent for."
+        >
+          <Dropdown
+            id="mexp-client"
+            name="marketing_client_id"
+            value={clientId}
+            onChange={setClientId}
+            options={[
+              { value: "", label: "General (no client)" },
+              ...clients.map((c) => ({ value: c.id, label: c.name })),
+            ]}
+          />
+        </Field>
+        <Field
+          label="Campaign"
+          htmlFor="mexp-campaign"
+          hint="Ties the money to the plan it ran against."
+        >
+          <Dropdown
+            id="mexp-campaign"
+            name="campaign_id"
+            defaultValue=""
+            options={[
+              { value: "", label: "No campaign" },
+              ...clientCampaigns.map((c) => ({ value: c.id, label: c.name })),
+            ]}
+          />
+        </Field>
       </div>
-      <Field
-        label="Campaign"
-        htmlFor="mexp-campaign"
-        hint="Ties the money to what it was for — the Budget tab compares it to the plan."
-      >
-        <Dropdown
-          id="mexp-campaign"
-          name="campaign_id"
-          defaultValue=""
-          options={[
-            { value: "", label: "No campaign" },
-            ...campaigns.map((c) => ({ value: c.id, label: c.name })),
-          ]}
-        />
-      </Field>
       <Field label="What it was" htmlFor="mexp-notes">
         <Textarea
           id="mexp-notes"
@@ -331,16 +320,11 @@ export function NewCampaignForm({
   clients,
   defaultClientId,
 }: {
-  clients: { id: string; name: string; is_house?: boolean }[];
+  clients: { id: string; name: string }[];
   defaultClientId?: string;
 }) {
   const router = useRouter();
-  // Same house rule as NewCreativeForm: one client means no question to ask.
-  const house = clients.find((c) => c.is_house);
-  const onlyHouse = Boolean(house) && clients.every((c) => c.is_house);
-  const [clientId, setClientId] = useState(
-    defaultClientId ?? house?.id ?? clients[0]?.id ?? ""
-  );
+  const [clientId, setClientId] = useState(defaultClientId ?? clients[0]?.id ?? "");
 
   return (
     <CreateForm
@@ -354,28 +338,17 @@ export function NewCampaignForm({
       }}
       submitLabel="Create campaign"
       onCancel={() => router.back()}
-      onDone={() =>
-        router.push(
-          onlyHouse ? "/marketing?tab=budget" : `/marketing/clients/${clientId}?tab=campaigns`
-        )
-      }
+      onDone={() => router.push(`/marketing/clients/${clientId}?tab=campaigns`)}
     >
-      {onlyHouse ? (
-        <input type="hidden" name="client_id" value={clientId} />
-      ) : (
-        <Field label="Client" htmlFor="campaign-client">
-          <Dropdown
-            id="campaign-client"
-            name="client_id"
-            value={clientId}
-            onChange={setClientId}
-            options={clients.map((c) => ({
-              value: c.id,
-              label: c.is_house ? `${c.name} (our brand)` : c.name,
-            }))}
-          />
-        </Field>
-      )}
+      <Field label="Client" htmlFor="campaign-client">
+        <Dropdown
+          id="campaign-client"
+          name="client_id"
+          value={clientId}
+          onChange={setClientId}
+          options={clients.map((c) => ({ value: c.id, label: c.name }))}
+        />
+      </Field>
 
       <Field label="Name" htmlFor="campaign-name">
         <Input id="campaign-name" name="name" maxLength={160} autoFocus />

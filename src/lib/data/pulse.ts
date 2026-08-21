@@ -80,11 +80,11 @@ export const getPulse = cache(async function getPulse(
     learn: canAccess(ctx, "learn")
       ? count("sprints", (q) => q.lte("starts_on", today).gte("ends_on", today))
       : null,
-    // Videos in flight, not running campaigns: since 0063 the unit of work in
-    // this section is the video, and "2 campaigns" on the tile says nothing
-    // about whether anyone owes anything this week.
+    // Posts in flight, not running campaigns: the unit of work in this section
+    // is the post (0068), and "2 campaigns" on the tile says nothing about
+    // whether anyone owes anything this week.
     marketing: canAccess(ctx, "marketing")
-      ? count("creatives", (q) => q.neq("status", "live"))
+      ? count("marketing_posts", (q) => q.neq("status", "posted"))
       : null,
     comms: canAccess(ctx, "comms")
       ? count("contacts", (q) => q.eq("kind", "lead"))

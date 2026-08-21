@@ -442,10 +442,12 @@ export type Transaction = {
   project_id: string | null;
   /**
    * The section lens (0069). 'marketing' rows also render in the marketing
-   * Budget tab; null is the ordinary company ledger row. Same table either
+   * Budget views; null is the ordinary company ledger row. Same table either
    * way — one source of truth, two lenses.
    */
   category: "marketing" | null;
+  /** Which client the money was spent for. Null = general marketing spend. */
+  marketing_client_id: string | null;
   /** The campaign this money served, when it served one. */
   campaign_id: string | null;
   notes: string | null;
@@ -582,11 +584,12 @@ export type DebugTaskImageView = DebugTaskImage & {
 
 /* ── Marketing: the agency arm ──────────────────────────────────────────────
  *
- * This section is not a content calendar for Kagu's own brand. It is a
- * client-services delivery system: Kagu films video for paying clients, runs
- * paid media against it, and reports results. Client is the root object — every
- * row below belongs to exactly one — and the unit of work is a video with a
- * long production life and a client approval gate in the middle of it.
+ * Kagu's marketing team working for other companies. Client is the root
+ * object — every row below belongs to exactly one. The unit of work is a POST
+ * (0068, second pass): four states, a date, a link. The old ten-rung creative
+ * ladder, review threads and client login accounts were dropped in the same
+ * migration — approvals happen off-app, and the section tracks schedule,
+ * budget and what went out.
  */
 
 export type ClientStatus = "active" | "paused" | "ended";
@@ -611,98 +614,35 @@ export type Client = {
   monthly_deliverables: number | null;
   ad_account_owner: AdAccountOwner;
   brand_notes: string | null;
-  /**
-   * The house client — Kagu itself (0068). Exactly one per demo flag. The
-   * own-brand pivot hangs all internal marketing work on this row so the
-   * tenant machinery from 0062–0064 never needed relaxing.
-   */
-  is_house: boolean;
   is_demo: boolean;
   created_by: string | null;
   created_at: string;
   updated_at: string;
 };
 
-/** `approver` may decide on a cut; `viewer` may only look. */
-export type ClientRole = "approver" | "viewer";
-
-export type ClientUser = {
-  user_id: string;
-  client_id: string;
-  role: ClientRole;
-  created_at: string;
-};
-
 /**
- * The production life of one video, in order.
- *
- * `changes_requested` is off the main line: it is where a video lands when a
- * client asks for something, and it goes back to `editing`. Everything else
- * advances one step at a time — see CREATIVE_LADDER in lib/creatives.ts, which
- * owns the transitions so the ladder is defined once rather than re-derived by
- * every button that moves it.
+ * A post's life, in order: an idea, being made, dated and queued, out. The
+ * transitions live in lib/posts.ts so the ladder is defined once.
  */
-export type CreativeStatus =
-  | "idea"
-  | "scripted"
-  | "shot"
-  | "editing"
-  | "internal_review"
-  | "client_review"
-  | "changes_requested"
-  | "approved"
-  | "scheduled"
-  | "live";
+export type PostStatus = "idea" | "making" | "scheduled" | "posted";
 
-/** Organic post or paid creative. Decides whether ad numbers are expected. */
-export type CreativeKind = "organic" | "ad";
-
-export type Creative = {
+/** One thing that goes out for a client (0068, second pass). */
+export type MarketingPost = {
   id: string;
   client_id: string;
   campaign_id: string | null;
   title: string;
-  /** The first two seconds, written down — what variants differ on. */
-  hook: string | null;
-  script: string | null;
-  /** The producer: responsible end to end. */
-  owner_id: string | null;
-  /** Who has it during the edit. */
-  editor_id: string | null;
-  shoot_date: string | null;
-  footage_url: string | null;
-  cut_url: string | null;
   channel: string;
-  kind: CreativeKind;
+  status: PostStatus;
   publish_on: string | null;
-  published_url: string | null;
-  status: CreativeStatus;
-  /** The concept this is a variant of. Null for the concept itself. */
-  parent_creative_id: string | null;
+  /** The live link once it's out. */
+  url: string | null;
+  owner_id: string | null;
+  notes: string | null;
   is_demo: boolean;
   created_by: string | null;
   created_at: string;
   updated_at: string;
-};
-
-export type ReviewDecision = "approved" | "changes";
-
-/**
- * One decision on one cut. Append-only (0064): never updated, never deleted —
- * the sequence of these is the documentation of why a video changed.
- */
-export type CreativeReview = {
-  id: string;
-  creative_id: string;
-  client_id: string;
-  /** Null once that account is gone — the decision outlives the reviewer (0064). */
-  reviewer_id: string | null;
-  decision: ReviewDecision;
-  comment: string | null;
-  /** Whole seconds into the cut. Null = a note about the whole video. */
-  timecode: number | null;
-  is_demo: boolean;
-  created_at: string;
 };
 
 export type CampaignStatus = "idea" | "planned" | "running" | "done";
@@ -737,9 +677,13 @@ export type MarketingCampaign = {
   updated_at: string;
 };
 
-/** A shelf link — the Drive folder, the brand kit (0070). House-level, not per-client. */
+/**
+ * A shelf link — the Drive folder, the brand kit (0070). `client_id` carries
+ * the scope: null = the team's own shelf, set = that client's shelf.
+ */
 export type MarketingLink = {
   id: string;
+  client_id: string | null;
   title: string;
   url: string;
   note: string | null;

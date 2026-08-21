@@ -1,28 +1,15 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import {
-  blockIfReadOnly,
-  getSessionContext,
-  isClient,
-  requireSection,
-} from "@/lib/data/session";
+import { blockIfReadOnly, requireSection } from "@/lib/data/session";
 import { notifyUser } from "@/lib/actions/notify";
-import { nextStatus, parseTimecode } from "@/lib/creatives";
+import { nextPostStatus } from "@/lib/posts";
 import { todayInIstanbul } from "@/lib/utils";
 import type { ActionResult } from "@/lib/actions/account";
-import type {
-  CampaignStatus,
-  CreativeKind,
-  CreativeStatus,
-  ReviewDecision,
-} from "@/lib/types";
+import type { CampaignStatus, PostStatus } from "@/lib/types";
 
 const CAMPAIGN_STATUSES: CampaignStatus[] = ["idea", "planned", "running", "done"];
-const CREATIVE_STATUSES: CreativeStatus[] = [
-  "idea", "scripted", "shot", "editing", "internal_review",
-  "client_review", "changes_requested", "approved", "scheduled", "live",
-];
+const POST_STATUSES: PostStatus[] = ["idea", "making", "scheduled", "posted"];
 const CHANNELS = [
   "instagram", "linkedin", "x", "tiktok", "youtube",
   "google-ads", "meta-ads", "email", "seo", "website", "other",
@@ -57,7 +44,7 @@ export async function createClient(
   const deliverablesRaw = String(formData.get("monthly_deliverables") ?? "").trim();
   const deliverables = deliverablesRaw ? Number(deliverablesRaw) : null;
   if (deliverables !== null && (!Number.isFinite(deliverables) || deliverables < 0)) {
-    return { ok: false, message: "Videos per month must be a whole number." };
+    return { ok: false, message: "Posts per month must be a whole number." };
   }
   const currency = String(formData.get("currency") ?? "TRY");
 
@@ -79,7 +66,7 @@ export async function createClient(
     .single();
   if (error) return { ok: false, message: error.message };
 
-  revalidatePath("/marketing/clients");
+  revalidatePath("/marketing");
   // The id rides back so the create surface can send them straight into the
   // workspace they just made, rather than to a list they have to find it in.
   return { ok: true, message: "Client created.", id: data.id };
@@ -102,13 +89,13 @@ export async function updateClient(
   if (error) return { ok: false, message: error.message };
 
   revalidatePath(`/marketing/clients/${clientId}`);
-  revalidatePath("/marketing/clients");
+  revalidatePath("/marketing");
   return { ok: true, message: "Saved." };
 }
 
-/* ── Creatives ──────────────────────────────────────────────────────────── */
+/* ── Posts ──────────────────────────────────────────────────────────────── */
 
-export async function createCreative(
+export async function createPost(
   _prev: ActionResult,
   formData: FormData
 ): Promise<ActionResult> {
@@ -117,26 +104,22 @@ export async function createCreative(
   const ctx = await requireSection("marketing");
 
   const clientId = String(formData.get("client_id") ?? "").trim();
-  if (!clientId) return { ok: false, message: "Pick a client — every video belongs to one." };
+  if (!clientId) return { ok: false, message: "Pick a client — every post belongs to one." };
 
-  const kind = String(formData.get("kind") ?? "organic") as CreativeKind;
-  const parentId = String(formData.get("parent_creative_id") ?? "").trim() || null;
+  const status = String(formData.get("status") ?? "idea") as PostStatus;
 
   const { data, error } = await ctx.supabase
-    .from("creatives")
+    .from("marketing_posts")
     .insert({
       client_id: clientId,
       campaign_id: String(formData.get("campaign_id") ?? "").trim() || null,
-      title: text(formData.get("title"), 200) ?? "Untitled video",
-      hook: text(formData.get("hook"), 500),
-      script: text(formData.get("script"), 20000),
-      owner_id: String(formData.get("owner_id") ?? "").trim() || null,
-      editor_id: String(formData.get("editor_id") ?? "").trim() || null,
-      shoot_date: String(formData.get("shoot_date") ?? "") || null,
-      footage_url: cleanUrl(formData.get("footage_url")),
+      title: text(formData.get("title"), 200) ?? "Untitled post",
       channel: cleanChannel(formData.get("channel"), "instagram"),
-      kind: kind === "ad" ? "ad" : "organic",
-      parent_creative_id: parentId,
+      status: POST_STATUSES.includes(status) ? status : "idea",
+      publish_on: String(formData.get("publish_on") ?? "") || null,
+      url: cleanUrl(formData.get("url")),
+      owner_id: String(formData.get("owner_id") ?? "").trim() || null,
+      notes: text(formData.get("notes"), 8000),
       created_by: ctx.userId,
     })
     .select("id, owner_id, title")
@@ -146,236 +129,101 @@ export async function createCreative(
   if (data.owner_id && data.owner_id !== ctx.userId) {
     notifyUser(ctx, data.owner_id, {
       kind: "creative_assigned",
-      title: `You're producing "${data.title}"`,
-      href: `/marketing/creatives/${data.id}`,
+      title: `On you: "${data.title}"`,
+      href: `/marketing/posts/${data.id}`,
     });
   }
 
   revalidatePath("/marketing");
   revalidatePath(`/marketing/clients/${clientId}`);
-  return { ok: true, message: "Video added.", id: data.id };
+  return { ok: true, message: "Post added.", id: data.id };
 }
 
 /**
- * Move a video one rung. THE one-click primitive of this section (PRODUCT.md),
- * so it takes no arguments beyond the id: the next state is a property of the
- * current one, not something a caller gets to choose. A dropdown here would let
- * a video jump from `idea` to `live` with no footage.
- *
- * `expected` is the status the button was rendered against. Two people share
- * this board and the page is live-refreshed; without it, clicking a stale
- * "Send to client" on a video someone already sent would push it a step further
- * than anyone intended. Mismatch is not an error — the board has simply moved
- * on, and saying so is more useful than a failure.
+ * Move a post one rung — the section's one-click primitive. It takes no target
+ * status: the next state is a property of the current one, not something a
+ * caller chooses. `expected` is the status the button was rendered against, so
+ * a click on a stale card says "the board moved on" instead of double-stepping.
  */
-export async function advanceCreative(
-  creativeId: string,
-  expected: CreativeStatus
+export async function advancePost(
+  postId: string,
+  expected: PostStatus
 ): Promise<ActionResult> {
   const stop = await blockIfReadOnly("marketing");
   if (stop) return stop;
   const ctx = await requireSection("marketing");
 
-  // The house flag decides whether the ladder skips client_review (0068), and
-  // it is read HERE, never taken from the caller — a forged flag would let a
-  // video jump the approval gate.
-  const { data: current, error: readError } = await ctx.supabase
-    .from("creatives")
-    .select("id, clients(is_house)")
-    .eq("id", creativeId)
-    .maybeSingle();
-  if (readError) return { ok: false, message: readError.message };
-  if (!current) return { ok: false, message: "That video no longer exists." };
-  // Supabase types a to-one join as an array; at runtime it is an object.
-  const house = Boolean(
-    (current.clients as unknown as { is_house: boolean } | null)?.is_house
-  );
-
-  const next = nextStatus(expected, { house });
+  const next = nextPostStatus(expected);
   if (!next) return { ok: false, message: "That's the last step." };
 
   const { data, error } = await ctx.supabase
-    .from("creatives")
+    .from("marketing_posts")
     .update({ status: next })
-    .eq("id", creativeId)
+    .eq("id", postId)
     .eq("status", expected)
-    .select("id, title, owner_id, editor_id, client_id")
+    .select("id, client_id")
     .maybeSingle();
   if (error) return { ok: false, message: error.message };
   if (!data) {
     return { ok: false, message: "Someone else moved this one — refreshing." };
   }
 
-  // The hand-offs worth a bell: into the edit (the editor's cue) and back from
-  // the client (the producer's). Everything else is visible on a board the
-  // three of them already have open.
-  if (next === "editing" && data.editor_id && data.editor_id !== ctx.userId) {
-    notifyUser(ctx, data.editor_id, {
-      kind: "creative_status",
-      title: `Ready to edit: ${data.title}`,
-      href: `/marketing/creatives/${data.id}`,
-    });
-  }
-
   revalidatePath("/marketing");
-  revalidatePath(`/marketing/creatives/${creativeId}`);
+  revalidatePath(`/marketing/posts/${postId}`);
   revalidatePath(`/marketing/clients/${data.client_id}`);
-  // No message: the card has already moved under the cursor. A toast saying so
-  // would be the app narrating what the user just watched happen.
+  // No message: the card has already moved under the cursor.
   return { ok: true, message: "" };
 }
 
-export async function updateCreative(
-  creativeId: string,
+export async function updatePost(
+  postId: string,
   patch: Partial<{
     title: string;
-    hook: string | null;
-    script: string | null;
-    owner_id: string | null;
-    editor_id: string | null;
-    shoot_date: string | null;
-    footage_url: string | null;
-    cut_url: string | null;
-    publish_on: string | null;
-    published_url: string | null;
-    campaign_id: string | null;
     channel: string;
-    kind: CreativeKind;
-    status: CreativeStatus;
+    status: PostStatus;
+    publish_on: string | null;
+    url: string | null;
+    owner_id: string | null;
+    campaign_id: string | null;
+    notes: string | null;
   }>
 ): Promise<ActionResult> {
   const stop = await blockIfReadOnly("marketing");
   if (stop) return stop;
   const ctx = await requireSection("marketing");
 
-  if (patch.status && !CREATIVE_STATUSES.includes(patch.status)) {
+  if (patch.status && !POST_STATUSES.includes(patch.status)) {
     return { ok: false, message: "Unknown status." };
+  }
+  if (patch.channel && !CHANNELS.includes(patch.channel)) {
+    return { ok: false, message: "Unknown channel." };
   }
 
   const { data, error } = await ctx.supabase
-    .from("creatives")
+    .from("marketing_posts")
     .update(patch)
-    .eq("id", creativeId)
+    .eq("id", postId)
     .select("client_id")
     .maybeSingle();
   if (error) return { ok: false, message: error.message };
-  if (!data) return { ok: false, message: "That video no longer exists." };
+  if (!data) return { ok: false, message: "That post no longer exists." };
 
   revalidatePath("/marketing");
-  revalidatePath(`/marketing/creatives/${creativeId}`);
+  revalidatePath(`/marketing/posts/${postId}`);
   revalidatePath(`/marketing/clients/${data.client_id}`);
   return { ok: true, message: "" };
 }
 
-export async function deleteCreative(creativeId: string): Promise<ActionResult> {
+export async function deletePost(postId: string): Promise<ActionResult> {
   const stop = await blockIfReadOnly("marketing");
   if (stop) return stop;
   const ctx = await requireSection("marketing");
 
-  const { error } = await ctx.supabase.from("creatives").delete().eq("id", creativeId);
+  const { error } = await ctx.supabase.from("marketing_posts").delete().eq("id", postId);
   if (error) return { ok: false, message: error.message };
 
   revalidatePath("/marketing");
-  return { ok: true, message: "Video deleted." };
-}
-
-/* ── Reviews ────────────────────────────────────────────────────────────── */
-
-/**
- * Record a decision on a cut. Called from BOTH sides of the wall: a Kagu
- * internal review, and a client's approval from the portal.
- *
- * ⚠️ There is deliberately no `blockIfReadOnly("marketing")` at the top. That
- * guard refuses every client outright (0062), which is correct for every other
- * action in this file and would break the one thing a client is here to do.
- * The authorisation for this one lives in RLS — two insert policies, one per
- * kind of reviewer (0064 §3) — because that is the only place it can be
- * expressed without a widened section gate. What this function does instead is
- * refuse the cases RLS would refuse anyway, so the user gets a sentence rather
- * than a database error.
- */
-export async function reviewCreative(
-  creativeId: string,
-  decision: ReviewDecision,
-  comment: string,
-  timecodeRaw: string
-): Promise<ActionResult> {
-  const ctx = await getSessionContext();
-  const client = isClient(ctx);
-
-  // Showcase is a read-only tour and members without write access can't review
-  // either. Clients skip this branch: they are never in showcase and hold no
-  // section tier.
-  if (!client) {
-    const stop = await blockIfReadOnly("marketing");
-    if (stop) return stop;
-  }
-
-  if (!["approved", "changes"].includes(decision)) {
-    return { ok: false, message: "Unknown decision." };
-  }
-  const body = comment.trim().slice(0, 4000);
-  if (decision === "changes" && !body) {
-    return { ok: false, message: "Say what needs changing — otherwise there's nothing to act on." };
-  }
-
-  const timecode = parseTimecode(timecodeRaw);
-  if (timecodeRaw.trim() && timecode === null) {
-    return { ok: false, message: "Timecode should look like 1:07 (or leave it empty)." };
-  }
-
-  // The tenant is read from the creative rather than taken from the caller —
-  // and for a client the row is only visible at all if it is theirs and in
-  // front of them, so this read is itself part of the check.
-  const { data: creative, error: readError } = await ctx.supabase
-    .from("creatives")
-    .select("id, client_id, title, owner_id, status")
-    .eq("id", creativeId)
-    .maybeSingle();
-  if (readError) return { ok: false, message: readError.message };
-  if (!creative) return { ok: false, message: "That video isn't available to review." };
-
-  if (client && creative.status !== "client_review") {
-    return {
-      ok: false,
-      message:
-        creative.status === "changes_requested"
-          ? "Your notes are already with the team."
-          : "This one has already been decided.",
-    };
-  }
-
-  const { error } = await ctx.supabase.from("creative_reviews").insert({
-    creative_id: creative.id,
-    client_id: creative.client_id,
-    reviewer_id: ctx.userId,
-    decision,
-    comment: body || null,
-    timecode,
-  });
-  if (error) return { ok: false, message: error.message };
-
-  // A client's review notifies the producer from inside the database trigger
-  // (0064 §4) — clients cannot write notification rows. A member's review is
-  // notified here, the ordinary way.
-  if (!client && creative.owner_id && creative.owner_id !== ctx.userId) {
-    notifyUser(ctx, creative.owner_id, {
-      kind: "creative_review",
-      title:
-        decision === "approved"
-          ? `Internal sign-off: ${creative.title}`
-          : `Changes noted on ${creative.title}`,
-      href: `/marketing/creatives/${creative.id}`,
-    });
-  }
-
-  revalidatePath("/portal");
-  revalidatePath(`/marketing/creatives/${creative.id}`);
-  revalidatePath("/marketing");
-  return {
-    ok: true,
-    message: decision === "approved" ? "Approved — thank you." : "Sent to the team.",
-  };
+  return { ok: true, message: "Post deleted." };
 }
 
 /* ── Campaigns ──────────────────────────────────────────────────────────── */
@@ -427,6 +275,7 @@ export async function createCampaign(
   if (error) return { ok: false, message: error.message };
 
   revalidatePath(`/marketing/clients/${clientId}`);
+  revalidatePath("/marketing");
   return { ok: true, message: "Campaign created." };
 }
 
@@ -448,6 +297,7 @@ export async function setCampaignStatus(
   if (error) return { ok: false, message: error.message };
 
   if (data?.client_id) revalidatePath(`/marketing/clients/${data.client_id}`);
+  revalidatePath("/marketing");
   return { ok: true, message: "" };
 }
 
@@ -480,12 +330,28 @@ export async function saveCampaignRetro(
   return { ok: true, message: "Retro saved." };
 }
 
+export async function deleteCampaign(campaignId: string): Promise<ActionResult> {
+  const stop = await blockIfReadOnly("marketing");
+  if (stop) return stop;
+  const ctx = await requireSection("marketing");
+
+  const { error } = await ctx.supabase
+    .from("marketing_campaigns")
+    .delete()
+    .eq("id", campaignId);
+  if (error) return { ok: false, message: error.message };
+
+  revalidatePath("/marketing");
+  return { ok: true, message: "Campaign deleted." };
+}
+
 /* ── The ledger's marketing slice (0069) ────────────────────────────────── */
 
 /**
  * A marketing expense (or, rarely, income) — written into THE company ledger
  * with category='marketing', never into a parallel one. The Finance tab and
- * the marketing Budget tab render the same row.
+ * the marketing Budget views render the same row. `marketing_client_id` says
+ * who the money was spent for; null is general team spend.
  */
 export async function logMarketingExpense(
   _prev: ActionResult,
@@ -511,6 +377,7 @@ export async function logMarketingExpense(
     occurred_on: String(formData.get("occurred_on") ?? "") || todayInIstanbul(),
     client: null,
     category: "marketing",
+    marketing_client_id: String(formData.get("marketing_client_id") ?? "").trim() || null,
     campaign_id: String(formData.get("campaign_id") ?? "").trim() || null,
     notes: text(formData.get("notes"), 4000),
     created_by: ctx.userId,
@@ -523,7 +390,7 @@ export async function logMarketingExpense(
   return { ok: true, message: "Expense logged." };
 }
 
-/* ── The link shelf (0071) ──────────────────────────────────────────────── */
+/* ── The link shelf (0070) ──────────────────────────────────────────────── */
 
 export async function createMarketingLink(
   _prev: ActionResult,
@@ -536,7 +403,10 @@ export async function createMarketingLink(
   const url = cleanUrl(formData.get("url"));
   if (!url) return { ok: false, message: "A link needs a URL." };
 
+  const clientId = String(formData.get("client_id") ?? "").trim() || null;
+
   const { error } = await ctx.supabase.from("marketing_links").insert({
+    client_id: clientId,
     title: text(formData.get("title"), 160) ?? "Untitled link",
     url,
     note: text(formData.get("note"), 500),
@@ -545,6 +415,7 @@ export async function createMarketingLink(
   if (error) return { ok: false, message: error.message };
 
   revalidatePath("/marketing");
+  if (clientId) revalidatePath(`/marketing/clients/${clientId}`);
   return { ok: true, message: "Link added." };
 }
 
@@ -553,27 +424,15 @@ export async function deleteMarketingLink(linkId: string): Promise<ActionResult>
   if (stop) return stop;
   const ctx = await requireSection("marketing");
 
-  const { error } = await ctx.supabase
+  const { data, error } = await ctx.supabase
     .from("marketing_links")
     .delete()
-    .eq("id", linkId);
+    .eq("id", linkId)
+    .select("client_id")
+    .maybeSingle();
   if (error) return { ok: false, message: error.message };
 
   revalidatePath("/marketing");
+  if (data?.client_id) revalidatePath(`/marketing/clients/${data.client_id}`);
   return { ok: true, message: "Link removed." };
-}
-
-export async function deleteCampaign(campaignId: string): Promise<ActionResult> {
-  const stop = await blockIfReadOnly("marketing");
-  if (stop) return stop;
-  const ctx = await requireSection("marketing");
-
-  const { error } = await ctx.supabase
-    .from("marketing_campaigns")
-    .delete()
-    .eq("id", campaignId);
-  if (error) return { ok: false, message: error.message };
-
-  revalidatePath("/marketing/clients");
-  return { ok: true, message: "Campaign deleted." };
 }

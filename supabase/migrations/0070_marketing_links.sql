@@ -1,14 +1,13 @@
 -- 0070: the marketing link shelf.
 --
 -- The Drive folder, the brand kit, the content ideas doc — the handful of URLs
--- the team keeps re-asking each other for. A small list on the General tab,
--- nothing more: per-video links stay on the creative (footage_url / cut_url /
--- published_url) and this table deliberately has no client dimension — it is
--- the HOUSE shelf. If per-client asset management ever matters it arrives as
--- the `assets` bucket phase from MARKETING.md, not by widening this.
+-- the team keeps re-asking each other for. `client_id` is nullable and carries
+-- the scope: null = the team's own shelf on the General tab, set = that
+-- client's shelf inside their workspace (their Drive folder, their brand kit).
 
 create table public.marketing_links (
   id uuid primary key default gen_random_uuid(),
+  client_id uuid references public.clients (id) on delete cascade,
   title text not null,
   url text not null,
   note text,
@@ -19,7 +18,7 @@ create table public.marketing_links (
 );
 
 create index marketing_links_list_idx
-  on public.marketing_links (is_demo, sort, created_at);
+  on public.marketing_links (is_demo, client_id, sort, created_at);
 
 alter table public.marketing_links enable row level security;
 

@@ -1,19 +1,23 @@
 # Marketing — Execution Plan
 
-> ⚠️ **PIVOT (2026-08-21): the section now runs KAGU'S OWN BRAND, not client work.**
-> Parsa's call. The client machinery below (client principal, portal, reviews — phases 0–2)
-> is BUILT and stays in place as dormant infrastructure, but all current work hangs on a
-> single **house client** row (`clients.is_house`, migration 0068). What changed:
-> - `/marketing` is now a tabbed dashboard: **General · Schedule · Pipeline · My queue · Budget**.
+> ⚠️ **REBUILT (2026-08-21): most of this document no longer describes the app.**
+> Two decisions that day, in order: first an "own brand" pivot, then Parsa corrected it —
+> the section IS the agency ("us as a marketing team working with other companies") but the
+> production machinery this doc designed was scrapped, not kept. What exists now:
+> - **Client is still the root object.** `clients` and `marketing_campaigns` survive.
+> - **The unit of work is a simple POST** (`marketing_posts`, migration 0068): title,
+>   channel, owner, publish date, live link, notes, four states (idea → making →
+>   scheduled → posted). The ten-rung creative ladder, `creatives`, `creative_reviews`,
+>   `client_users`, the client login portal and shoot week were DROPPED — approvals
+>   happen off-app. (0062's principal plumbing stays in the DB unused, per 0053 §6.)
+> - `/marketing` is a tabbed dashboard — **General · Clients · Schedule · Budget** — and
+>   each client has a workspace: **Posts · Schedule · Campaigns · Budget · Links · Notes**.
 > - Money: marketing expenses live in the company `transactions` ledger with
->   `category='marketing'` + optional `campaign_id` (0069) — one ledger, two lenses.
->   The Budget tab is the marketing lens; marketing-scoped RLS policies grant exactly
->   that slice.
-> - The status ladder skips `client_review` for house videos (`nextStatus(status, {house})`).
-> - A `marketing_links` shelf (0070) holds the Drive folder / brand kit links.
-> - Phases 3–5 below (ad_results, tracked_links, leads, recap) are **suspended** — they
->   were designed for paying clients. Post-analytics was considered and dropped (Parsa:
->   not worth the space). Revisit this doc only if client work returns.
+>   `category='marketing'` + `marketing_client_id` + `campaign_id` (0069); the Budget
+>   views are lenses over the same rows, with marketing-scoped RLS granting the slice.
+> - `marketing_links` (0070): a team shelf plus a per-client shelf (Drive folder, brand kit).
+> - Phases 3–5 below (ad_results, tracked_links, leads, recap) are **suspended**; post
+>   analytics was considered and dropped. The rest of this doc is kept as design history.
 
 > The build plan for the Marketing section. Companions: PRODUCT.md · DESIGN.md · HANDOFF.md.
 > Status: **phases 0–2 built, not yet applied.** Phases 3–5 are unstarted by design — each is

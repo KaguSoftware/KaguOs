@@ -136,18 +136,18 @@ export async function getActivity(
       (async () => {
         const data = await rowsOrThrow(
           sb
-            .from("creatives")
+            .from("marketing_posts")
             .select("id, title, created_at, created_by")
             .eq("is_demo", ctx.showcase)
             .order("created_at", { ascending: false })
             .limit(PER_SOURCE),
-          "activity: creatives"
+          "activity: marketing_posts"
         );
         return data.map((r) => ({
-          id: `creative:${r.id}`,
+          id: `post:${r.id}`,
           kind: "creative" as const,
           title: r.title,
-          href: `/marketing/creatives/${r.id}`,
+          href: `/marketing/posts/${r.id}`,
           at: r.created_at,
           actorId: r.created_by,
         }));

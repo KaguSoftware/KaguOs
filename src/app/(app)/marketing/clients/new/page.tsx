@@ -11,7 +11,7 @@ export default async function NewClientPage() {
   return (
     <CreatePage
       title="New client"
-      hint="Everything in this section hangs off a client — their videos, campaigns, ad numbers and the login their approver signs off cuts with."
+      hint="Everything in this section hangs off a client — their posts, their campaigns, their budget."
     >
       <NewClientForm />
     </CreatePage>

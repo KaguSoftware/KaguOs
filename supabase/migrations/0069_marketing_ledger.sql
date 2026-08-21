@@ -15,6 +15,10 @@
 alter table public.transactions
   add column category text
     check (category is null or category in ('marketing')),
+  -- Which client the money was spent for, and under which campaign. Both
+  -- nullable: general marketing spend (gear, tools) serves no one client.
+  add column marketing_client_id uuid
+    references public.clients (id) on delete set null,
   add column campaign_id uuid
     references public.marketing_campaigns (id) on delete set null;
 

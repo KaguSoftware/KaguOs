@@ -1,9 +1,9 @@
 import { CalendarDays } from "lucide-react";
 import { Panel, PanelHeader } from "@/components/ui/panel";
 import { EmptyState } from "@/components/ui/empty-state";
-import { CreativeCard } from "@/components/marketing/creative-card";
+import { PostCard } from "@/components/marketing/post-card";
 import { addDays, todayInIstanbul } from "@/lib/utils";
-import type { Creative, MembersMap } from "@/lib/types";
+import type { MarketingPost, MembersMap } from "@/lib/types";
 
 /** Four weeks: far enough to plan a content calendar, short enough to scroll. */
 const HORIZON_DAYS = 28;
@@ -17,45 +17,44 @@ const dayFmt = new Intl.DateTimeFormat("en-GB", {
 
 /**
  * SCHEDULE — the publishing calendar, derived from `publish_on` + the status
- * ladder, never stored (same rule as shoot week, MARKETING.md D6). There is
- * deliberately NO separate task/checklist object for publishes: the creative's
- * own advance button is the check-off ("Mark live" is the tick), so the
- * calendar can never disagree with the pipeline.
+ * ladder, never stored. There is deliberately NO separate task/checklist
+ * object: the post's own advance button is the check-off ("Mark posted" is the
+ * tick), so the calendar can never disagree with the boards.
  *
- * Three bands, in the order they need attention:
- * overdue (dated, not live, date passed) → the next four weeks grouped by day
- * → approved-but-undated, which is the silent leak a calendar view exists to
- * catch: a finished video nobody gave a date to isn't late yet, but it will be
- * nothing at all unless someone sees it here.
+ * Three bands, in the order they need attention: past-their-date, the next
+ * four weeks grouped by day, and ready-but-undated — the silent leak a
+ * calendar view exists to catch: a finished post nobody dated isn't late yet,
+ * but it will be nothing at all unless someone sees it here.
  */
 export function Schedule({
-  creatives,
+  posts,
   members,
   canWrite,
-  house,
+  /** Supplied on the cross-client view; omitted inside one client. */
+  clientNames,
 }: {
-  creatives: Creative[];
+  posts: MarketingPost[];
   members: MembersMap;
   canWrite: boolean;
-  house: boolean;
+  clientNames?: Record<string, string>;
 }) {
   const today = todayInIstanbul();
   const horizon = addDays(today, HORIZON_DAYS);
 
-  const notLive = creatives.filter((c) => c.status !== "live");
+  const open = posts.filter((p) => p.status !== "posted");
 
-  const overdue = notLive
-    .filter((c) => c.publish_on !== null && c.publish_on < today)
+  const overdue = open
+    .filter((p) => p.publish_on !== null && p.publish_on < today)
     .sort((a, b) => (a.publish_on! < b.publish_on! ? -1 : 1));
 
-  const upcoming = notLive
+  const upcoming = open
     .filter(
-      (c) => c.publish_on !== null && c.publish_on >= today && c.publish_on <= horizon
+      (p) => p.publish_on !== null && p.publish_on >= today && p.publish_on <= horizon
     )
     .sort((a, b) => (a.publish_on! < b.publish_on! ? -1 : 1));
 
-  const undated = notLive.filter(
-    (c) => c.publish_on === null && (c.status === "approved" || c.status === "scheduled")
+  const undated = open.filter(
+    (p) => p.publish_on === null && p.status === "scheduled"
   );
 
   if (overdue.length === 0 && upcoming.length === 0 && undated.length === 0) {
@@ -64,17 +63,17 @@ export function Schedule({
         <EmptyState
           icon={CalendarDays}
           title="Nothing on the calendar"
-          hint="Give a video a publish date and it appears here, grouped by day. Marking it live is the check-off — there's no separate to-do to keep in sync."
+          hint="Give a post a publish date and it appears here, grouped by day. Marking it posted is the check-off — there's no separate to-do to keep in sync."
         />
       </Panel>
     );
   }
 
-  const byDay = new Map<string, Creative[]>();
-  for (const creative of upcoming) {
-    const list = byDay.get(creative.publish_on!) ?? [];
-    list.push(creative);
-    byDay.set(creative.publish_on!, list);
+  const byDay = new Map<string, MarketingPost[]>();
+  for (const post of upcoming) {
+    const list = byDay.get(post.publish_on!) ?? [];
+    list.push(post);
+    byDay.set(post.publish_on!, list);
   }
 
   return (
@@ -91,19 +90,17 @@ export function Schedule({
               </span>
             }
             action={
-              <span className="text-xs text-faint">
-                Publish them or move the date.
-              </span>
+              <span className="text-xs text-faint">Post them or move the date.</span>
             }
           />
           <ul className="divide-y divide-line">
-            {overdue.map((creative) => (
-              <li key={creative.id}>
-                <CreativeCard
-                  creative={creative}
+            {overdue.map((post) => (
+              <li key={post.id}>
+                <PostCard
+                  post={post}
                   members={members}
+                  clientName={clientNames?.[post.client_id]}
                   canWrite={canWrite}
-                  house={house}
                 />
               </li>
             ))}
@@ -133,13 +130,13 @@ export function Schedule({
               }
             />
             <ul className="divide-y divide-line">
-              {rows.map((creative) => (
-                <li key={creative.id}>
-                  <CreativeCard
-                    creative={creative}
+              {rows.map((post) => (
+                <li key={post.id}>
+                  <PostCard
+                    post={post}
                     members={members}
+                    clientName={clientNames?.[post.client_id]}
                     canWrite={canWrite}
-                    house={house}
                   />
                 </li>
               ))}
@@ -154,18 +151,18 @@ export function Schedule({
             title="Ready but not dated"
             action={
               <span className="text-xs text-faint">
-                Finished videos with no publish date — the calendar can&apos;t see them.
+                Marked scheduled with no date — the calendar can&apos;t see them.
               </span>
             }
           />
           <ul className="divide-y divide-line">
-            {undated.map((creative) => (
-              <li key={creative.id}>
-                <CreativeCard
-                  creative={creative}
+            {undated.map((post) => (
+              <li key={post.id}>
+                <PostCard
+                  post={post}
                   members={members}
+                  clientName={clientNames?.[post.client_id]}
                   canWrite={canWrite}
-                  house={house}
                 />
               </li>
             ))}

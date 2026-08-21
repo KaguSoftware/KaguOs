@@ -14,15 +14,19 @@ import type { MarketingLink } from "@/lib/types";
 
 /**
  * The link shelf (0070): the Drive folder, the brand kit, the ideas doc — the
- * URLs the team keeps re-asking each other for. Sits on the General tab.
- * Adding one goes through a CreateOverlay, per the create-flow house rule.
+ * URLs the team keeps re-asking each other for. Two homes, one component: the
+ * General tab (team shelf, no clientId) and a client workspace (their Drive
+ * folder — clientId rides a hidden input on the add form). Adding one goes
+ * through a CreateOverlay, per the create-flow house rule.
  */
 export function LinksPanel({
   links,
   canWrite,
+  clientId,
 }: {
   links: MarketingLink[];
   canWrite: boolean;
+  clientId?: string;
 }) {
   const [adding, setAdding] = useState(false);
 
@@ -41,8 +45,9 @@ export function LinksPanel({
       />
       {links.length === 0 ? (
         <p className="px-4 py-5 text-[calc(13px*var(--text-scale,1))] text-faint">
-          The Drive folder, the brand kit, the content ideas doc — pin them here
-          so nobody asks for them twice.
+          {clientId
+            ? "This client's Drive folder, brand kit, report docs — pin them here so nobody asks for them twice."
+            : "The team's own Drive folder, templates, the ideas doc — pin them here so nobody asks for them twice."}
         </p>
       ) : (
         <ul className="divide-y divide-line">
@@ -65,6 +70,7 @@ export function LinksPanel({
           onCancel={() => setAdding(false)}
           onDone={() => setAdding(false)}
         >
+          {clientId && <input type="hidden" name="client_id" value={clientId} />}
           <Field label="Name" htmlFor="mlink-title">
             <Input id="mlink-title" name="title" maxLength={160} autoFocus />
           </Field>

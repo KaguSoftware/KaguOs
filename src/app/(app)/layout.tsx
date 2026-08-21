@@ -72,7 +72,10 @@ export default async function AppLayout({
   // rows, and getMembersMap is filtered to members (0062). Neither leaks. It is
   // placed here rather than higher because `ctx` is what decides, and ctx
   // arrives with that wave.
-  if (isClient(ctx)) redirect("/portal");
+  // Client login accounts were retired with the portal (0068, second pass).
+  // No such account should exist any more; if one somehow signs in, there is
+  // no surface for it — send it back to the door rather than 404ing.
+  if (isClient(ctx)) redirect("/login");
 
   // Presence for the always-open sidebar panel + the mobile menu's live tile
   // counts. Both need ctx (access/showcase gating), both are cache()-deduped,

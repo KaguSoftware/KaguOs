@@ -3,11 +3,11 @@ import { redirect } from "next/navigation";
 import { requireSectionWrite } from "@/lib/data/session";
 import { rowsOrThrow } from "@/lib/data/query";
 import { CreatePage } from "@/components/ui/create";
-import { NewCreativeForm } from "@/components/marketing/forms";
+import { NewPostForm } from "@/components/marketing/forms";
 
-export const metadata: Metadata = { title: "New video" };
+export const metadata: Metadata = { title: "New post" };
 
-export default async function NewCreativePage({
+export default async function NewPostPage({
   searchParams,
 }: {
   searchParams: Promise<{ client?: string }>;
@@ -19,11 +19,11 @@ export default async function NewCreativePage({
     rowsOrThrow(
       ctx.supabase
         .from("clients")
-        .select("id, name, is_house")
+        .select("id, name")
         .eq("is_demo", ctx.showcase)
         .neq("status", "ended")
         .order("name"),
-      "new video: clients"
+      "new post: clients"
     ),
     rowsOrThrow(
       ctx.supabase
@@ -32,7 +32,7 @@ export default async function NewCreativePage({
         .eq("is_demo", ctx.showcase)
         .neq("status", "done")
         .order("name"),
-      "new video: campaigns"
+      "new post: campaigns"
     ),
     rowsOrThrow(
       ctx.supabase
@@ -40,23 +40,23 @@ export default async function NewCreativePage({
         .select("id, full_name, email")
         .eq("kind", "member")
         .order("full_name"),
-      "new video: profiles"
+      "new post: profiles"
     ),
   ]);
 
-  // A video cannot exist without a client, so there is nothing to put on this
+  // A post cannot exist without a client, so there is nothing to put on this
   // form until one exists. Sending them to make one is more useful than
   // rendering a picker with no options in it.
   if (clients.length === 0) redirect("/marketing/clients/new");
 
   return (
     <CreatePage
-      title="New video"
-      hint="One row per video, from the idea to the post going live. Nothing here is required — fill in what you know."
+      title="New post"
+      hint="One row per thing that goes out: what it is, which client it's for, when it publishes. Nothing here is required — fill in what you know."
       wide
     >
-      <NewCreativeForm
-        clients={clients as { id: string; name: string; is_house: boolean }[]}
+      <NewPostForm
+        clients={clients as { id: string; name: string }[]}
         campaigns={
           campaigns as { id: string; name: string; client_id: string | null }[]
         }
