@@ -9,6 +9,7 @@ import {
 } from "@/lib/data/session";
 import { notifyUser } from "@/lib/actions/notify";
 import { nextStatus, parseTimecode } from "@/lib/creatives";
+import { todayInIstanbul } from "@/lib/utils";
 import type { ActionResult } from "@/lib/actions/account";
 import type {
   CampaignStatus,
@@ -175,7 +176,22 @@ export async function advanceCreative(
   if (stop) return stop;
   const ctx = await requireSection("marketing");
 
-  const next = nextStatus(expected);
+  // The house flag decides whether the ladder skips client_review (0068), and
+  // it is read HERE, never taken from the caller — a forged flag would let a
+  // video jump the approval gate.
+  const { data: current, error: readError } = await ctx.supabase
+    .from("creatives")
+    .select("id, clients(is_house)")
+    .eq("id", creativeId)
+    .maybeSingle();
+  if (readError) return { ok: false, message: readError.message };
+  if (!current) return { ok: false, message: "That video no longer exists." };
+  // Supabase types a to-one join as an array; at runtime it is an object.
+  const house = Boolean(
+    (current.clients as unknown as { is_house: boolean } | null)?.is_house
+  );
+
+  const next = nextStatus(expected, { house });
   if (!next) return { ok: false, message: "That's the last step." };
 
   const { data, error } = await ctx.supabase
@@ -462,6 +478,89 @@ export async function saveCampaignRetro(
 
   if (data?.client_id) revalidatePath(`/marketing/clients/${data.client_id}`);
   return { ok: true, message: "Retro saved." };
+}
+
+/* ── The ledger's marketing slice (0069) ────────────────────────────────── */
+
+/**
+ * A marketing expense (or, rarely, income) — written into THE company ledger
+ * with category='marketing', never into a parallel one. The Finance tab and
+ * the marketing Budget tab render the same row.
+ */
+export async function logMarketingExpense(
+  _prev: ActionResult,
+  formData: FormData
+): Promise<ActionResult> {
+  const stop = await blockIfReadOnly("marketing");
+  if (stop) return stop;
+  const ctx = await requireSection("marketing");
+
+  const type = String(formData.get("type") ?? "expense");
+  const currency = String(formData.get("currency") ?? "TRY");
+  const amountRaw = String(formData.get("amount") ?? "").trim();
+  const amount = amountRaw ? Number(amountRaw) : NaN;
+  if (!Number.isFinite(amount) || amount <= 0) {
+    return { ok: false, message: "Amount must be a positive number." };
+  }
+
+  const { error } = await ctx.supabase.from("transactions").insert({
+    type: type === "income" ? "income" : "expense",
+    amount,
+    currency: ["TRY", "USD", "EUR"].includes(currency) ? currency : "TRY",
+    status: "paid",
+    occurred_on: String(formData.get("occurred_on") ?? "") || todayInIstanbul(),
+    client: null,
+    category: "marketing",
+    campaign_id: String(formData.get("campaign_id") ?? "").trim() || null,
+    notes: text(formData.get("notes"), 4000),
+    created_by: ctx.userId,
+  });
+  if (error) return { ok: false, message: error.message };
+
+  revalidatePath("/marketing");
+  // The row also lives on the Finance tab — same ledger, second lens.
+  revalidatePath("/management/finance");
+  return { ok: true, message: "Expense logged." };
+}
+
+/* ── The link shelf (0071) ──────────────────────────────────────────────── */
+
+export async function createMarketingLink(
+  _prev: ActionResult,
+  formData: FormData
+): Promise<ActionResult> {
+  const stop = await blockIfReadOnly("marketing");
+  if (stop) return stop;
+  const ctx = await requireSection("marketing");
+
+  const url = cleanUrl(formData.get("url"));
+  if (!url) return { ok: false, message: "A link needs a URL." };
+
+  const { error } = await ctx.supabase.from("marketing_links").insert({
+    title: text(formData.get("title"), 160) ?? "Untitled link",
+    url,
+    note: text(formData.get("note"), 500),
+    created_by: ctx.userId,
+  });
+  if (error) return { ok: false, message: error.message };
+
+  revalidatePath("/marketing");
+  return { ok: true, message: "Link added." };
+}
+
+export async function deleteMarketingLink(linkId: string): Promise<ActionResult> {
+  const stop = await blockIfReadOnly("marketing");
+  if (stop) return stop;
+  const ctx = await requireSection("marketing");
+
+  const { error } = await ctx.supabase
+    .from("marketing_links")
+    .delete()
+    .eq("id", linkId);
+  if (error) return { ok: false, message: error.message };
+
+  revalidatePath("/marketing");
+  return { ok: true, message: "Link removed." };
 }
 
 export async function deleteCampaign(campaignId: string): Promise<ActionResult> {

@@ -28,7 +28,7 @@ membership-gated sections: **Work** (4: projects+ideas w/ sector+type, promote i
 **Learn** (all 8: sprints, per-person goals, file resources; Work⊆Learn enforced by DB trigger),
 **Management** (2: Finance in TL w/ manual FX + charts + recurring items + one-time transactions,
 Contracts w/ PDFs), **Debug** (everyone: per-project boards, self-claim-only, realtime),
-**Marketing** (digital: campaigns, content calendar, shared links). Per-member identity colors
+**Marketing** (OWN-BRAND since 2026-08-21: General/Schedule/Pipeline/My queue/Budget dashboard over `creatives` + a house-client row; dormant client machinery underneath — see MARKETING.md pivot note). Per-member identity colors
 (picked from 20 vibrant swatches; admin can override) color-code names app-wide.
 
 ## Stack & environment
@@ -65,6 +65,68 @@ Contracts w/ PDFs), **Debug** (everyone: per-project boards, self-claim-only, re
 - Next 16: `src/proxy.ts` (not middleware); async cookies/params.
 - Chart colors are validated (dataviz skill): income `oklch(0.62 0.13 160)`, expense
   `oklch(0.55 0.16 25)` — L band 0.48–0.67 on dark; re-validate any new chart palette.
+
+## Current status (2026-08-21)
+
+### 🟡 MARKETING TAB REDO — OWN-BRAND PIVOT (2026-08-21) — BUILT + STATICALLY VERIFIED (tsc clean · lint at the 2 known errors + 1 pre-existing check:demo flag, see below · build green), **migrations 0068–0070 WRITTEN BUT NOT APPLIED — Supabase CLI auth is broken (401)**, live-drive PENDING
+Parsa: "the marketing tab right now is pretty useless… we're collaborating on this." Agreed
+direction (AskUserQuestion): the section markets **Kagu's own brand** (not the MARKETING.md agency
+model), post metrics = **dropped mid-build** ("fuck the our-own-analytics thing" — was half-built
+as `creative_metrics` + charts, fully removed), money = **tag in the main ledger**, schedule =
+derived view, Google Drive links = simple URL shelf.
+
+1. **House client (0068).** `clients.is_house` + partial unique index (one per demo flag) + seeded
+   "Kagu" rows (real + demo). `creatives.client_id NOT NULL` and all tenant FKs/RLS untouched —
+   the client machinery is dormant, not deleted. Forms (`NewCreativeForm`/`NewCampaignForm`) hide
+   the client dropdown and ride a hidden input while ONLY house clients exist; the picker returns
+   by itself the day a real client row appears.
+2. **Ladder skips client_review for house videos.** `nextStatus(status, {house})` +
+   `advanceLabel(status, house)` in `lib/creatives.ts` (`internal_review → approved`, button says
+   "Approve it"). ⚠️ `advanceCreative` reads `is_house` server-side via the creatives→clients join
+   (array-typed by supabase-js, cast through `unknown`) — never trust a client-supplied flag.
+   `CreativeCard`/`PipelineBoard`/`CreativeFields` take a `house` prop; the page computes
+   `house = every creative belongs to the house client`, so a returning real client's cards
+   automatically lose the shortcut. Pipeline hides the client_review column when house + empty.
+3. **Budget = ledger lens (0069).** `transactions.category` (`check in ('marketing')`) +
+   `transactions.campaign_id → marketing_campaigns on delete set null` + partial index + FOUR
+   marketing-scoped RLS policies (select/insert/update/delete, all confined to
+   `category='marketing'`, writes via `can_write`). Migration closes with invariants: no
+   is_member write policies anywhere; any transactions policy naming 'marketing' must name
+   `category` too. `logMarketingExpense` action inserts `status:'paid'` + revalidates BOTH
+   /marketing and /management/finance. ⚠️ `spend_actual` stays ads-import-only; the Budget tab
+   shows it as a separate labelled figure, never summed with ledger spend.
+4. **New landing** — `marketing/page.tsx` is now TabbedPanels (finance-page pattern):
+   **General** (`overview.tsx`: 4 stat tiles, this-week strip, live posts with `published_url`
+   links, links shelf) · **Schedule** (`schedule.tsx`: derived from `publish_on` + ladder, bands =
+   past-date / next 28 days by day / approved-but-undated; the advance button IS the check-off,
+   deliberately no separate task object) · **Pipeline** (existing board) · **My queue**
+   (`my-queue.tsx`, the old landing page's strict partition extracted verbatim) · **Budget**
+   (`budget.tsx`: tiles, 6-month CashflowChart reuse, per-campaign budget-vs-ledger bars,
+   expense list). One Promise.all wave of 7 reads; LiveRefresh on creatives/clients/
+   marketing_campaigns/transactions/marketing_links.
+5. **Links shelf (0070).** `marketing_links` table + `links-panel.tsx` (CreateOverlay add flow per
+   the create-flow rule, hover-reveal delete). `/marketing/new-expense` is a dedicated CreatePage.
+6. Creative detail: back-link goes to /marketing (not the client workspace) for house videos;
+   internal-review hint text is house-aware.
+
+**⚠️ MIGRATIONS 0068–0070 ARE NOT APPLIED.** `npx supabase login` succeeds but every project call
+401s (`LegacyDbConfigLoginRoleStatusError`, "Initialising login role… 401 Unauthorized") — tried
+both the CLI login store and the `SUPABASE_ACCESS_TOKEN` from .env.local (both stale/rejected;
+verified 2026-08-21). Fix: mint a fresh token at supabase.com/dashboard/account/tokens, put it in
+.env.local AND the shell, re-link (`npx supabase link --project-ref ibbfptujwtbfwdefllgz`), then
+`npx supabase db push`. Until they run, /marketing THROWS (selects `is_house`,
+`transactions.category`, `marketing_links`) — the code and the schema must land together.
+The SQL-Editor-by-hand route works (0014 precedent) but desyncs CLI migration history again —
+prefer fixing the token.
+
+**Pre-existing, not from this session:** check:demo flags 1 unfiltered read of `debug_tasks` at
+`src/lib/data/messages.ts:170` (arrived with "replying upgrade"/sidebar commits). Decide: scope it
+or whitelist it in the script.
+
+**Not driven by a human yet.** The checks that matter: /marketing renders after db push (General
+tiles + tabs); New video shows NO client picker; advance a video past internal review → it lands
+on `approved`, never `client_review`; log an expense → it appears in BOTH marketing Budget and
+/management/finance; showcase mode shows demo-only everywhere.
 
 ## Current status (2026-07-23)
 

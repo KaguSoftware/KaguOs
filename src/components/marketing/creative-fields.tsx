@@ -12,7 +12,7 @@ import { Field } from "@/components/ui/field";
 import { Dropdown } from "@/components/ui/dropdown";
 import { DatePicker } from "@/components/ui/date-picker";
 import { UrlInput } from "@/components/ui/typed-inputs";
-import { ADVANCE_LABEL, nextStatus } from "@/lib/creatives";
+import { advanceLabel, nextStatus } from "@/lib/creatives";
 import { CHANNEL_OPTIONS } from "@/lib/options";
 import type { Creative, MembersMap } from "@/lib/types";
 
@@ -28,10 +28,13 @@ export function CreativeFields({
   creative,
   members,
   canWrite,
+  /** House-client video (0068): the ladder skips client_review. */
+  house = false,
 }: {
   creative: Creative;
   members: MembersMap;
   canWrite: boolean;
+  house?: boolean;
 }) {
   const router = useRouter();
   const { pending, run } = useAction();
@@ -43,7 +46,7 @@ export function CreativeFields({
     ...Object.entries(members).map(([id, m]) => ({ value: id, label: m.name })),
   ];
 
-  const next = nextStatus(creative.status);
+  const next = nextStatus(creative.status, { house });
 
   function save(patch: Parameters<typeof updateCreative>[1], success?: string) {
     run(() => updateCreative(creative.id, patch), success ? { success } : {});
@@ -63,11 +66,13 @@ export function CreativeFields({
             }
           >
             {pending && <Loader2 className="size-3.5 animate-spin" aria-hidden />}
-            {ADVANCE_LABEL[creative.status]}
+            {advanceLabel(creative.status, house)}
           </Button>
           {creative.status === "internal_review" && (
             <span className="text-xs text-faint">
-              This puts it in front of the client.
+              {house
+                ? "One of us checked it — this signs it off."
+                : "This puts it in front of the client."}
             </span>
           )}
           {creative.status === "client_review" && (

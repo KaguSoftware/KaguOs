@@ -86,8 +86,16 @@ export const CREATIVE_STATUS_TONE: Record<CreativeStatus, BadgeTone> = {
  * next state after "with client". This asymmetry is the reason the ladder is a
  * function rather than an array index at each call site.
  */
-export function nextStatus(status: CreativeStatus): CreativeStatus | null {
+export function nextStatus(
+  status: CreativeStatus,
+  opts?: { house?: boolean }
+): CreativeStatus | null {
   if (status === "changes_requested") return "editing";
+  // A house-client video (Kagu's own brand, 0068) has no client to wait on:
+  // internal review IS the sign-off, so the ladder skips `client_review`.
+  // Server-side advanceCreative recomputes with the real flag — the option
+  // here only shapes labels and optimistic UI.
+  if (opts?.house && status === "internal_review") return "approved";
   const at = CREATIVE_LADDER.indexOf(status);
   if (at === -1 || at === CREATIVE_LADDER.length - 1) return null;
   return CREATIVE_LADDER[at + 1];
@@ -117,6 +125,16 @@ export const ADVANCE_LABEL: Record<CreativeStatus, string> = {
   scheduled: "Mark live",
   live: "Live",
 };
+
+/**
+ * The advance verb, house-aware. For a house video the rung after internal
+ * review is approval, so "Send to client" would promise a hand-off that never
+ * happens. Everything else reads the table.
+ */
+export function advanceLabel(status: CreativeStatus, house: boolean): string {
+  if (house && status === "internal_review") return "Approve it";
+  return ADVANCE_LABEL[status];
+}
 
 /** Statuses a client can see at all (mirrors the RLS policy in 0063). */
 export const CLIENT_VISIBLE_STATUSES: CreativeStatus[] = [

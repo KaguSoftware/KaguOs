@@ -18,7 +18,7 @@ export default async function NewCampaignPage({
   const clients = await rowsOrThrow(
     ctx.supabase
       .from("clients")
-      .select("id, name")
+      .select("id, name, is_house")
       .eq("is_demo", ctx.showcase)
       .neq("status", "ended")
       .order("name"),
@@ -34,7 +34,7 @@ export default async function NewCampaignPage({
       wide
     >
       <NewCampaignForm
-        clients={clients as { id: string; name: string }[]}
+        clients={clients as { id: string; name: string; is_house: boolean }[]}
         defaultClientId={client}
       />
     </CreatePage>

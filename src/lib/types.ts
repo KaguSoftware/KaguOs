@@ -440,6 +440,14 @@ export type Transaction = {
   occurred_on: string;
   client: string | null;
   project_id: string | null;
+  /**
+   * The section lens (0069). 'marketing' rows also render in the marketing
+   * Budget tab; null is the ordinary company ledger row. Same table either
+   * way — one source of truth, two lenses.
+   */
+  category: "marketing" | null;
+  /** The campaign this money served, when it served one. */
+  campaign_id: string | null;
   notes: string | null;
   created_by: string | null;
   created_at: string;
@@ -603,6 +611,12 @@ export type Client = {
   monthly_deliverables: number | null;
   ad_account_owner: AdAccountOwner;
   brand_notes: string | null;
+  /**
+   * The house client — Kagu itself (0068). Exactly one per demo flag. The
+   * own-brand pivot hangs all internal marketing work on this row so the
+   * tenant machinery from 0062–0064 never needed relaxing.
+   */
+  is_house: boolean;
   is_demo: boolean;
   created_by: string | null;
   created_at: string;
@@ -721,6 +735,18 @@ export type MarketingCampaign = {
   created_by: string | null;
   created_at: string;
   updated_at: string;
+};
+
+/** A shelf link — the Drive folder, the brand kit (0070). House-level, not per-client. */
+export type MarketingLink = {
+  id: string;
+  title: string;
+  url: string;
+  note: string | null;
+  sort: number;
+  is_demo: boolean;
+  created_by: string | null;
+  created_at: string;
 };
 
 export type Reminder = {

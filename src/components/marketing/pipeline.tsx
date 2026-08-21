@@ -41,12 +41,18 @@ export function PipelineBoard({
   creatives,
   members,
   canWrite,
+  /** House board (0068): the ladder skips client_review, so hide that column unless something is stranded in it. */
+  house = false,
 }: {
   creatives: Creative[];
   members: MembersMap;
   canWrite: boolean;
+  house?: boolean;
 }) {
-  const columns: CreativeStatus[] = [...CREATIVE_LADDER];
+  let columns: CreativeStatus[] = [...CREATIVE_LADDER];
+  if (house && !creatives.some((c) => c.status === "client_review")) {
+    columns = columns.filter((s) => s !== "client_review");
+  }
   if (creatives.some((c) => c.status === "changes_requested")) {
     // Derived, not hard-coded: if the ladder is ever reordered, the sent-back
     // column follows `editing` instead of landing at a stale index.
@@ -97,6 +103,7 @@ export function PipelineBoard({
                         members={members}
                         canWrite={canWrite}
                         showStatus={false}
+                        house={house}
                       />
                     </li>
                   ))}

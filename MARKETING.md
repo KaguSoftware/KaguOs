@@ -1,5 +1,20 @@
 # Marketing — Execution Plan
 
+> ⚠️ **PIVOT (2026-08-21): the section now runs KAGU'S OWN BRAND, not client work.**
+> Parsa's call. The client machinery below (client principal, portal, reviews — phases 0–2)
+> is BUILT and stays in place as dormant infrastructure, but all current work hangs on a
+> single **house client** row (`clients.is_house`, migration 0068). What changed:
+> - `/marketing` is now a tabbed dashboard: **General · Schedule · Pipeline · My queue · Budget**.
+> - Money: marketing expenses live in the company `transactions` ledger with
+>   `category='marketing'` + optional `campaign_id` (0069) — one ledger, two lenses.
+>   The Budget tab is the marketing lens; marketing-scoped RLS policies grant exactly
+>   that slice.
+> - The status ladder skips `client_review` for house videos (`nextStatus(status, {house})`).
+> - A `marketing_links` shelf (0070) holds the Drive folder / brand kit links.
+> - Phases 3–5 below (ad_results, tracked_links, leads, recap) are **suspended** — they
+>   were designed for paying clients. Post-analytics was considered and dropped (Parsa:
+>   not worth the space). Revisit this doc only if client work returns.
+
 > The build plan for the Marketing section. Companions: PRODUCT.md · DESIGN.md · HANDOFF.md.
 > Status: **phases 0–2 built, not yet applied.** Phases 3–5 are unstarted by design — each is
 > gated on data that only exists once the section is in real use (see the Phases table).

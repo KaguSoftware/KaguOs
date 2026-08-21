@@ -7,7 +7,7 @@ import { advanceCreative } from "@/lib/actions/marketing";
 import { useAction } from "@/lib/use-action";
 import { Badge } from "@/components/ui/badge";
 import {
-  ADVANCE_LABEL,
+  advanceLabel,
   CREATIVE_STATUS_LABELS,
   CREATIVE_STATUS_TONE,
   nextStatus,
@@ -32,16 +32,22 @@ export function CreativeCard({
   canWrite,
   /** The board already groups by status, so repeating it on every card is noise. */
   showStatus = true,
+  /**
+   * A house-client video skips client_review (0068). Only shapes the label
+   * and the optimistic hop — the server recomputes with the real flag.
+   */
+  house = false,
 }: {
   creative: Creative;
   members: MembersMap;
   clientName?: string;
   canWrite: boolean;
   showStatus?: boolean;
+  house?: boolean;
 }) {
   const { pending, run } = useAction();
   const [status, setStatus] = useState<CreativeStatus>(creative.status);
-  const next = nextStatus(status);
+  const next = nextStatus(status, { house });
 
   const owner = creative.owner_id ? members[creative.owner_id] : null;
   const editor = creative.editor_id ? members[creative.editor_id] : null;
@@ -124,7 +130,7 @@ export function CreativeCard({
             )}
           >
             {pending && <Loader2 className="size-3 animate-spin" aria-hidden />}
-            {ADVANCE_LABEL[status]}
+            {advanceLabel(status, house)}
           </button>
         </div>
       )}

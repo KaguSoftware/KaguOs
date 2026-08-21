@@ -61,7 +61,7 @@ export default async function CreativePage({
   // only exist once the creative has come back. Two small by-id reads.
   const [{ data: client }, siblings] = await Promise.all([
     selectOrThrow(
-      ctx.supabase.from("clients").select("id, name").eq("id", row.client_id).maybeSingle(),
+      ctx.supabase.from("clients").select("id, name, is_house").eq("id", row.client_id).maybeSingle(),
       "creative: client"
     ),
     rowsOrThrow(
@@ -79,17 +79,24 @@ export default async function CreativePage({
   const family = (siblings as Pick<Creative, "id" | "title" | "status" | "hook">[])
     .filter((s) => s.id !== row.id);
 
+  const house = Boolean(
+    (client as Pick<Client, "is_house"> | null)?.is_house
+  );
+
   return (
     <>
       <LiveRefresh tables={["creatives", "creative_reviews"]} />
 
       <div className="mb-5">
+        {/* A house video's home is the dashboard, not a client workspace. */}
         <Link
-          href={`/marketing/clients/${row.client_id}`}
+          href={house ? "/marketing" : `/marketing/clients/${row.client_id}`}
           className="inline-flex items-center gap-1.5 text-[calc(13px*var(--text-scale,1))] text-muted transition-colors duration-150 hover:text-ink"
         >
           <ArrowLeft className="size-3.5" aria-hidden />
-          {(client as Pick<Client, "name">)?.name ?? "Client"}
+          {house
+            ? "Marketing"
+            : ((client as Pick<Client, "name">)?.name ?? "Client")}
         </Link>
         <div className="mt-2 flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0">
@@ -106,7 +113,7 @@ export default async function CreativePage({
 
       <div className="grid gap-5 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)] lg:items-start">
         <div className="space-y-5">
-          <CreativeFields creative={row} members={members} canWrite={writable} />
+          <CreativeFields creative={row} members={members} canWrite={writable} house={house} />
 
           {family.length > 0 && (
             <Panel>
