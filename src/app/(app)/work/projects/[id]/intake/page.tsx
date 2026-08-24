@@ -8,6 +8,7 @@ import { getIntakePack } from "@/lib/data/intake";
 import { PageHeader } from "@/components/shell/page-header";
 import { LiveRefresh } from "@/components/shell/live-refresh";
 import { Badge } from "@/components/ui/badge";
+import { IntakeExport } from "@/components/work/intake-export";
 import { IntakeReview } from "@/components/work/intake-review";
 import { formatRelative } from "@/lib/utils";
 
@@ -113,6 +114,14 @@ export default async function ProjectIntakePage({
           <>Filled in by {people.join(", ")}</>
         )}
       </p>
+
+      {/* Above the review, not below it: the reason a producer opens this
+          page late in a build is to get the data OUT, and putting the export
+          behind a page of recipe tables means scrolling past the thing you
+          came to avoid retyping. */}
+      <div className="mb-8">
+        <IntakeExport pack={pack} projectId={id} projectName={project.name} />
+      </div>
 
       <IntakeReview pack={pack} />
     </>

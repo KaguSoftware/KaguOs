@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, ClipboardList, Lightbulb } from "lucide-react";
+import { ArrowLeft, ClipboardList, Lightbulb, MonitorSmartphone } from "lucide-react";
 import { requireSection, canAccess } from "@/lib/data/session";
 import { rowsOrThrow, selectOrThrow } from "@/lib/data/query";
 import { getIntakeSummaries } from "@/lib/data/intake";
@@ -211,6 +211,32 @@ export default async function ProjectPage({
                   </p>
                 </>
               )}
+            </div>
+          </Panel>
+        )}
+        {/* ---- The mirror of the pack: what WE tell THEM. Next to the input
+            panel because the two together are the whole client relationship —
+            what they owe us, and what we owe them — and keeping them apart is
+            how a project ends up with a filled-in pack and a portal that has
+            said nothing since the kickoff call. */}
+        {!ctx.showcase && (
+          <Panel>
+            <PanelHeader
+              title="Client view"
+              action={
+                <LinkButton href={`/work/projects/${id}/client`} variant="outline">
+                  <MonitorSmartphone className="size-3.5" aria-hidden />
+                  Open
+                </LinkButton>
+              }
+            />
+            <div className="px-4 py-3.5">
+              <p className="text-[calc(13px*var(--text-scale,1))] text-muted">
+                The plan and the invoices this project&apos;s client sees in
+                their portal. Milestones stay hidden until you publish them and
+                invoices stay hidden while they are drafts, so nothing reaches
+                them by accident.
+              </p>
             </div>
           </Panel>
         )}

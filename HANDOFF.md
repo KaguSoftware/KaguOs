@@ -66,6 +66,117 @@ Contracts w/ PDFs), **Debug** (everyone: per-project boards, self-claim-only, re
 - Chart colors are validated (dataviz skill): income `oklch(0.62 0.13 160)`, expense
   `oklch(0.55 0.16 25)` — L band 0.48–0.67 on dark; re-validate any new chart palette.
 
+## Current status (2026-08-24, newest)
+
+### 🟡 THE CLIENT PORTAL BECOMES AN APP — sidebar + 4 pages, finance & progress behind them, and the input pack made EXPORTABLE (2026-08-24) — tsc clean · lint clean (the 2 known pre-existing errors only) · build green · check:principals clean, **migration 0074 APPLIED to prod and schema-verified**
+
+Three things, and the third is the one Parsa asked for first.
+
+**1. The pack comes back out.** `/work/projects/[id]/intake` now opens with an
+**Export for import** panel, above the review rather than below it — the reason
+you open that page late in a build is to get the data OUT, and putting the
+export behind a page of recipe tables means scrolling past the thing you came to
+avoid retyping. It gives:
+
+- **one CSV per repeating table** — recipes, sub-recipes, ingredients, menu
+  rows, courts, rate rules, opening hours, staff — whose **header row is the
+  COLUMN KEYS, not the labels**, so a file maps straight onto a target table;
+- **`answers.csv`** — every scalar answer as `key, section, card, question,
+  value, display`. Two readers: an importer takes `key`+`value`, a human checks
+  the mapping against the question;
+- **the whole pack as JSON** — the format to write an import script against. It
+  carries the catalogue's own COLUMN DEFINITIONS (kind, required, the legal
+  tokens of every choice column) alongside the data, so it is enough to generate
+  a schema from rather than guess at.
+
+Empty tables are listed with a dash and a dead button rather than hidden — a
+list that showed only what was filled in could not answer "have they done the
+recipes yet?". Files are UTF-8 **with a BOM** (`String.fromCharCode(0xfeff)`,
+built from the code point because a literal U+FEFF is invisible and a reformat
+would silently delete it): without it Excel on Windows opens the Arabic as
+mojibake, and whoever spots it concludes the client typed rubbish.
+
+Pure builders in `src/lib/intake-export.ts`; the panel is
+`src/components/work/intake-export.tsx`, client-side blob+anchor — the data is
+already on the page, and a download route would be a second place for the export
+format to live.
+
+**2. The portal gets a rail and four pages.** `(client)/layout.tsx` is now a
+sidebar shell (`src/components/portal/portal-sidebar.tsx`), NOT the teammate
+rail with items removed — that component carries presence, ⌘K, the bell and
+section membership, and every future addition to it would be a leak waiting for
+someone to forget the conditional.
+
+- `/portal` — **dashboard**. One true sentence under the greeting ("2 input packs
+  still need finishing and one invoice is past due"), then what needs the client,
+  then one card per business carrying build % + pack % + outstanding money side
+  by side, then what moved recently. A single "progress" number per business
+  would average two different relationships into one that describes neither.
+- `/portal/inputs` — chooser, one card per business; **redirects straight
+  through when there is only one**. `/portal/inputs/[projectId]` is the pack,
+  with a business switcher on top when there are two or more.
+- `/portal/progress` — per business: the build meter AND the pack meter on one
+  row (splitting them lets each side believe the delay belongs to the other),
+  blocked steps hoisted above the timeline, then the timeline itself.
+- `/portal/finance` — outstanding / overdue / paid, then a real table per
+  business. **Totals stack per currency and are never converted**: `toTRY()` runs
+  on rates Kagu types in by hand, and a client billed in dinars shown a lira
+  figure has been handed a number they cannot check against their own bank.
+
+The rail carries two live counts (packs open, invoices overdue). The layout
+fetches them through `loadPortal()`, wrapped in React `cache()` so the page below
+shares the exact same wave — otherwise the number in the rail could disagree with
+the page beside it by one.
+
+⚠️ **`/portal/project/[projectId]` is now a `permanentRedirect` to
+`/portal/inputs/[projectId]`**, not a deletion: that URL is in the bell
+notification every client got, and 404ing the one page they were asked to fill
+in is the worst way to announce a nav change. `revalidatePack()` in
+`actions/intake.ts` was corrected at the same time — it pointed at
+`/portal/${projectId}`, a path that never existed.
+
+**3. Migration 0074 — `project_milestones` + `project_invoices`.** Both READ-ONLY
+to a client; 0072 §7(b)'s "the intake pack is the only client-writable thing" is
+re-run verbatim in 0074 §5(a) to prove nothing here weakened it. New tables
+rather than arms on `transactions` / `debug_tasks` for 0072 §2's reason: an RLS
+arm grants EVERY COLUMN of a row, `transactions` carries Kagu's margins and every
+other client's income keyed by a free-text name, and `debug_tasks` is written in
+the register colleagues use with each other. Two publishing gates, both asserted
+in the migration rather than trusted: a milestone needs `visible_to_client`, an
+invoice must not be `draft`. IQD is added HERE and nowhere else — `transactions`
+keeps its narrower list because it converts through `fx_rates`, and a dinar row
+there would drop silently out of every total.
+
+Member side: `/work/projects/[id]/client` ("Client view") with the two panels,
+plus `new-milestone` / `new-invoice` create pages (Parsa's create-flow rule —
+dedicated surface, empty-field confirm; the row EDITORS stay inline, because
+"mark that one done" should not hide the list). Guarded on `can_write('work') OR
+can_write('management')` — the same pair of arms the RLS policy carries, because
+the person who chases a payment is not necessarily on the build team. A new
+invoice is **always created as a draft**: a milestone worded badly is
+embarrassing, an invoice with a digit missing is a bill.
+
+**✅ 0074 APPLIED to prod 2026-08-24 (by Parsa, by hand)** and schema-verified.
+`scripts/apply-migration.mjs` could NOT do it — the Management API returned
+`401 {"message":"Unauthorized"}` with a token present in `.env.local` (the
+script fails with "token not found" otherwise), so that token is expired or
+revoked. Same wall 0068–0070 hit on 2026-08-21. **Mint a fresh one at
+supabase.com/dashboard/account/tokens before the next migration**, or this
+repeats.
+
+Verified afterwards through the SERVICE key rather than the Management API,
+since that is the credential still working: both relations reachable **through
+PostgREST** (a table RLS protects perfectly but PostgREST cannot see fails as a
+blanket 403 — from the portal, indistinguishable from a broken account), every
+column the app writes named explicitly in the select rather than `*` (which
+passes against a half-applied table), and `session_context()` still runs. The
+policies and the §5 assertions are in the same script and both the SQL Editor
+and the Management API run a script in ONE TRANSACTION — so the tables existing
+is proof the whole file committed, invariants included.
+
+⚠️ Still owed: the CLI migration history does not know about 0074, per the
+standing rule below — repair it before the next `db push`.
+
 ## Current status (2026-08-24, latest)
 
 ### 🔴→🟢 FIXED: `/work/projects/[id]/intake` threw for everyone (PGRST201)

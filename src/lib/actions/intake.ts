@@ -68,7 +68,13 @@ async function guard(projectId: string): Promise<Guarded> {
  * reading a stale pack until it happened to re-render.
  */
 function revalidatePack(projectId: string) {
-  revalidatePath(`/portal/${projectId}`);
+  // The pack's own page, plus every portal route that quotes its percentage:
+  // the dashboard card, the inputs chooser and the progress page's second
+  // meter. Each is a separate route with a separate cache — `/portal` is not a
+  // prefix wildcard, which is why they are listed one by one.
+  revalidatePath(`/portal/inputs/${projectId}`);
+  revalidatePath("/portal/inputs");
+  revalidatePath("/portal/progress");
   revalidatePath("/portal");
   revalidatePath(`/work/projects/${projectId}/intake`);
   revalidatePath(`/work/projects/${projectId}`);

@@ -966,3 +966,78 @@ export type ContactInteraction = {
   created_by: string | null;
   created_at: string;
 };
+
+/* ── The client portal's two published surfaces (0074) ─────────────────────
+ *
+ * Both are things Kagu SAYS to a client, which is why they are their own rows
+ * rather than a lens over `debug_tasks` and `transactions`. See the header of
+ * 0074_client_portal.sql for why that distinction is load-bearing.
+ */
+
+export type MilestoneStatus = "planned" | "in_progress" | "done" | "blocked";
+export const MILESTONE_STATUSES: MilestoneStatus[] = [
+  "planned",
+  "in_progress",
+  "done",
+  "blocked",
+];
+
+export const MILESTONE_STATUS_LABELS: Record<MilestoneStatus, string> = {
+  planned: "Planned",
+  in_progress: "In progress",
+  done: "Done",
+  blocked: "Blocked",
+};
+
+/** One step of the build, written for the client rather than for the board. */
+export type ProjectMilestone = {
+  id: string;
+  project_id: string;
+  title: string;
+  detail: string | null;
+  status: MilestoneStatus;
+  target_on: string | null;
+  done_on: string | null;
+  sort: number;
+  /** False keeps a half-planned step on the member side — see 0074 §1. */
+  visible_to_client: boolean;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+/**
+ * Invoice currencies. A superset of `Currency` by ONE, and deliberately its own
+ * type: `transactions` converts to TRY through `fx_rates`, and a dinar row over
+ * there would drop silently out of every total (0074 §2).
+ */
+export type InvoiceCurrency = Currency | "IQD";
+export const INVOICE_CURRENCIES: InvoiceCurrency[] = ["TRY", "USD", "EUR", "IQD"];
+
+/** 'draft' is the one status a client never sees — the RLS policy hides it. */
+export type InvoiceStatus = "draft" | "sent" | "paid" | "void";
+export const INVOICE_STATUSES: InvoiceStatus[] = ["draft", "sent", "paid", "void"];
+
+export const INVOICE_STATUS_LABELS: Record<InvoiceStatus, string> = {
+  draft: "Draft",
+  sent: "Sent",
+  paid: "Paid",
+  void: "Void",
+};
+
+export type ProjectInvoice = {
+  id: string;
+  project_id: string;
+  number: string;
+  title: string | null;
+  amount: number;
+  currency: InvoiceCurrency;
+  issued_on: string;
+  due_on: string | null;
+  status: InvoiceStatus;
+  paid_on: string | null;
+  note: string | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+};
