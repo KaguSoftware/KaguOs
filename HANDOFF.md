@@ -4,9 +4,12 @@
 > plan at `C:\Users\p.mansouri\.claude\plans\we-are-kagu-this-precious-teacup.md`.
 
 ## Working style
-- **Git authorship — ABSOLUTE RULE**: Parsa is the SOLE author of every commit. NEVER add Claude as
-  co-author (`Co-Authored-By` trailers banned), never mention Claude/AI in commit messages or PR
-  bodies. He deleted and recreated the repo on 2026-07-16 to purge one such trailer.
+- **Git authorship — ABSOLUTE RULE**: **no AI attribution, ever.** Never add Claude as co-author,
+  never mention Claude/AI in commit messages or PR bodies. Parsa deleted and recreated the repo on
+  2026-07-16 to purge one such trailer.
+  **Updated 2026-08-24:** commits may now carry HUMAN collaborators. Parsa authors; add
+  `Co-Authored-By: AMEEN <ameenoday900@gmail.com>` when Ameen worked on it (he owns the client
+  input pack). The ban is on AI trailers, not on co-authorship as such.
 - **Collaborate**: agree with Parsa before locking significant decisions; propose with a
   recommendation. No subagents/orchestration unless he asks.
 - **Create flows (Parsa rule)**: every "add new X" is a spacious dedicated surface (`/…/new` page
@@ -177,6 +180,93 @@ is proof the whole file committed, invariants included.
 ⚠️ Still owed: the CLI migration history does not know about 0074, per the
 standing rule below — repair it before the next `db push`.
 
+### 🟢 CLIENT PORTAL: i18n WITH A TOGGLE + STEP-THROUGH WIZARD · ADMIN REVIEW REBUILT (2026-08-24) — built, tsc clean, lint at the 2 known errors, build green, **driven in a real browser** (both principals, desktop + 390px + 320px, both languages)
+
+**Parsa's brief:** the pack was English and Arabic at the same time (use i18n with a toggle
+instead); the client UI was messy, small and unintuitive; `/work/projects/<id>/intake` was messy
+and counterintuitive; screenshot it while working; commit with Parsa + AMEEN, no AI.
+
+**1. i18n — a per-viewer toggle, not two languages at once.** The original design stacked English
+over Arabic everywhere, reasoning that the filler and the reader don't share a language. They
+don't — but they are two different PEOPLE, so the fix is a preference per viewer.
+- `lib/locale.ts` — `kagu-locale` cookie (`en`|`ar`), `pick(locale, en, ar)` with a fall back to
+  English so the `general` pack (which has NO Arabic) still renders.
+- `lib/i18n.ts` — the portal's own chrome in both languages. `Dict` is derived from the English
+  object, so a missing Arabic key is a **compile error**. ⚠️ `en` must NOT be `as const`: literal
+  types would demand the Arabic for "Saved" be the word "Saved".
+- `lib/intake-lang.ts` — a SEPARATE `kagu-intake-lang` cookie (`en`|`ar`|`both`) for the team's
+  view. Deliberately not the same cookie: the client's flips `dir` on the document, and an admin
+  reading an Arabic menu must not flip the whole internal tool into RTL.
+- `app/layout.tsx` now sets `<html lang dir>` from the cookie. It must live on `<html>`: toasts,
+  the date picker and the lightbox `createPortal` into `document.body`, outside every wrapper.
+
+⚠️ **MEASURED, and load-bearing: `router.refresh()` does NOT patch attributes on `<html>`.** The
+refreshed RSC payload delivers the Arabic text while `dir`/`lang` keep whatever the last full
+document load set. So `LanguageToggle` writes them from the client — but keyed to the `current`
+PROP in an effect, not in the click handler. Writing on click flips the layout a round-trip before
+the words arrive, and the page sits mirrored-but-English in between; keying it to `current` (the
+server's locale) turns the page exactly when the new text commits. Verified by sampling
+`{dir, lang, arabicPresent}` at +150/400/900/2000/6000/12000ms — no mismatch at any sample.
+
+**2. The client pack is a wizard.** `components/portal/intake-form.tsx`: one section per step plus
+a review step, a rail with per-section `done/total`, a sticky header carrying the meter and the
+save state, Back/Next, and the review checklist's lines jump to their section.
+⚠️ The real "elements are small" bug: every question label was `font-mono text-[10px] uppercase
+text-faint` — the smallest, lowest-contrast text on a form, in a colour DESIGN.md reserves for
+"meta text, never body copy". Labels are now 15px `ink`; inputs `h-11`; chips `min-h-10`.
+Also: the portal never set `--text-scale` (so clients were pinned at 1.0 while every teammate
+could resize) — the layout now injects it and `/portal/account` gained the existing `TextSizeForm`.
+
+**3. The team's review** (`components/work/intake-review.tsx`, now a client component): a **view
+filter** (Everything / Answered / Gaps), the language toggle, a sticky controls bar with a section
+jump strip, clickable outstanding items, and labels/answers the right way round (small quiet label,
+15px `ink` answer). Plus a **Copy button** → the whole pack as Markdown, respecting the current
+filter AND language, so the "Gaps" view doubles as a chase-list. Copy not download: this is a
+document with prose and a few tables, which CSV mangles and JSON hides.
+
+**4. Eight bilingual `emptyHint` strings** in `lib/intake.ts` were single strings holding both
+languages ("No courts yet · لا ملاعب بعد"). Split into `emptyHint` + `emptyHintAr`.
+
+**Mobile** (Parsa: "the user is most likely to be using phone"): driven at 390px and 320px in both
+languages. The rail collapses into a `<details>` disclosure carrying the current section and step;
+the send row stacks with a full-width button under `sm`. Both verified by screenshot.
+
+**Screenshots:** `node scripts/shots.mjs [baseUrl]`, creds from `KAGU_{ADMIN,CLIENT}_{EMAIL,PASSWORD}`.
+playwright-core drives the installed Chrome (`channel: "chrome"` — no browser download). Writes to
+`.shots/`, which is **gitignored**: it photographs a real client's real answers. The script is
+READ-ONLY on purpose — `.env.local` points at the HOSTED database, so it never types into a field
+or presses Send.
+
+**Known gaps:** the Markdown table branch is unexercised — no table card has rows yet, so no
+`| … |` output has been seen against real data. `TextSizeForm`'s four size labels stay English
+(it's a shared teammate component). Server-action error strings are still English-only.
+
+### 🟢 SUPABASE CLI 401 — ROOT CAUSE FOUND AND FIXED (2026-08-24)
+
+`npx supabase login` reported success while every Management API call 401'd. This had blocked
+`db push` since 2026-08-21 and was misdiagnosed twice as a login problem.
+
+**The CLI prefers `SUPABASE_ACCESS_TOKEN` over its own login store, and it reads `.env.local`.**
+`supabase projects list --debug` says `Using access token from env var...` even though the variable
+is set in NO shell scope. So a stale `sbp_` token in `.env.local` silently overrode every fresh
+`supabase login` — which is exactly why re-logging in never helped. Blanking the env var made it
+fall back to `Using access token for profile: supabase`, which **also** 401'd: both credentials
+were stale, as HANDOFF had recorded on 2026-08-21 without identifying the precedence.
+
+**Fix: replace the token in `.env.local`** (no space, no quotes — `scripts/apply-migration.mjs`
+parses it with a literal `startsWith("SUPABASE_ACCESS_TOKEN=")`). Re-linking is NOT needed;
+`supabase/.temp/linked-project.json` already pins `ibbfptujwtbfwdefllgz` and `projects list` now
+reports `"linked": true`.
+
+⚠️ **Migration history was desynced, and `db push` would have been destructive.**
+`migration list --linked` showed 0068–0073 as local-only (`remote: ""`) even though the schema IS
+applied — `inspect db table-sizes --linked` confirms `marketing_posts`, `marketing_links`,
+`client_projects`, `project_intake{,_answers,_rows}` all live and `creatives`/`creative_reviews`/
+`client_users` all gone. Pushing would have re-run 0068, which DROPs those three tables. The
+correct repair is history-only:
+`npx supabase migration repair --status applied 0068 0069 0070 0071 0072 0073`
+**Status: handed to Parsa to run** — the agent's shell refused it as a DB mutation.
+
 ## Current status (2026-08-24, latest)
 
 ### 🔴→🟢 FIXED: `/work/projects/[id]/intake` threw for everyone (PGRST201)
@@ -252,7 +342,8 @@ active, client "Touch Padel". Created before 0073 existed, so its `intake_pack`
 is null; **0073 contains the idempotent UPDATE that sets it**, so applying the
 migration fixes it. Nothing else was written to the database.
 
-**⚠️ 0073 IS NOT APPLIED, and neither is 0072.** Apply in order. 0073 also DROPs
+**✅ 0072 AND 0073 ARE APPLIED** (schema verified 2026-08-24; history repaired — see top entry).
+Note for anyone re-reading the original: 0073 DROPs
 and recreates `my_client_projects()` (adding a return column is a return-type
 change, which `create or replace` refuses) — the portal can't read `projects`, so
 the pack key has to come out of that function.
@@ -318,8 +409,8 @@ re-adopts them: every save revalidates the route, so adopting would let a save i
 what was being typed in another. Adding a table line is the one write that can't be optimistic (the
 row needs a real id before a cell can be saved against it) and awaits the insert.
 
-**⚠️ MIGRATION 0072 IS NOT APPLIED.** Until it runs: /admin throws (selects `client_projects`), the
-project page throws, /portal throws. Same push path as 0068–0070. Note it also **grants table
+**✅ MIGRATION 0072 IS APPLIED** (verified 2026-08-24). Historical note — until it ran: /admin threw
+(selects `client_projects`), the project page threw, /portal threw. Same push path as 0068–0070. Note it also **grants table
 privileges explicitly**, unlike every earlier migration — `auto_expose_new_tables` is unset in
 config.toml and that now means *not* auto-exposed, and a table PostgREST can't reach 403s in a way
 indistinguishable from a broken account.
@@ -374,15 +465,11 @@ considered mid-session and dropped ("not worth the space").
    commit-on-blur). Create pages: new-post, new-expense (client+campaign dropdowns), new-campaign,
    clients/new. pulse.ts counts `marketing_posts` neq 'posted'; activity.ts feeds from it.
 
-**⚠️ MIGRATIONS 0068–0070 ARE NOT APPLIED.** `npx supabase login` succeeds but every project call
-401s (`LegacyDbConfigLoginRoleStatusError`, "Initialising login role… 401 Unauthorized") — tried
-both the CLI login store and the `SUPABASE_ACCESS_TOKEN` from .env.local (both stale/rejected;
-verified 2026-08-21). Fix: mint a fresh token at supabase.com/dashboard/account/tokens, put it in
-.env.local AND the shell, re-link (`npx supabase link --project-ref ibbfptujwtbfwdefllgz`), then
-`npx supabase db push`. Until they run, /marketing THROWS (selects `marketing_posts`,
-`transactions.category`, `marketing_links`) — the code and the schema must land together.
-The SQL-Editor-by-hand route works (0014 precedent) but desyncs CLI migration history again —
-prefer fixing the token.
+**🟢 RESOLVED 2026-08-24 — the schema is applied and the CLI works again.** See the "SUPABASE CLI
+401" entry at the top of Current status for the root cause. `0068`–`0073` are all live on the
+remote (verified by `supabase inspect db table-sizes --linked`: `marketing_posts`,
+`marketing_links`, `client_projects`, `project_intake{,_answers,_rows}` all present;
+`creatives` / `creative_reviews` / `client_users` all gone as 0068 intends).
 
 **Pre-existing, not from this session:** check:demo flags 1 unfiltered read of `debug_tasks` at
 `src/lib/data/messages.ts:170` (arrived with "replying upgrade"/sidebar commits). Decide: scope it

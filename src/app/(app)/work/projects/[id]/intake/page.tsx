@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { cookies } from "next/headers";
 import { notFound } from "next/navigation";
 import { ArrowLeft, UserRound } from "lucide-react";
 import { requireSection } from "@/lib/data/session";
@@ -10,6 +11,8 @@ import { LiveRefresh } from "@/components/shell/live-refresh";
 import { Badge } from "@/components/ui/badge";
 import { IntakeExport } from "@/components/work/intake-export";
 import { IntakeReview } from "@/components/work/intake-review";
+import { IntakeLangToggle } from "@/components/work/intake-lang-toggle";
+import { INTAKE_LANG_COOKIE, parseIntakeLang } from "@/lib/intake-lang";
 import { formatRelative } from "@/lib/utils";
 
 export const metadata: Metadata = { title: "Input pack" };
@@ -21,6 +24,7 @@ export default async function ProjectIntakePage({
 }) {
   const { id } = await params;
   const ctx = await requireSection("work");
+  const lang = parseIntakeLang((await cookies()).get(INTAKE_LANG_COOKIE)?.value);
 
   const [{ data: project }, holders] = await Promise.all([
     selectOrThrow(
@@ -92,11 +96,16 @@ export default async function ProjectIntakePage({
         title="Input pack"
         description="What the client has told us about their business, in their own words."
         action={
-          sent ? (
-            <Badge tone="green">sent {formatRelative(sent)}</Badge>
-          ) : (
-            <Badge tone="faint">not sent yet</Badge>
-          )
+          <div className="flex items-center gap-3">
+            {/* Content only — this never flips the app into RTL. See
+                lib/intake-lang.ts for why it is not the client's locale cookie. */}
+            <IntakeLangToggle current={lang} />
+            {sent ? (
+              <Badge tone="green">sent {formatRelative(sent)}</Badge>
+            ) : (
+              <Badge tone="faint">not sent yet</Badge>
+            )}
+          </div>
         }
       />
 
@@ -123,7 +132,7 @@ export default async function ProjectIntakePage({
         <IntakeExport pack={pack} projectId={id} projectName={project.name} />
       </div>
 
-      <IntakeReview pack={pack} />
+      <IntakeReview pack={pack} lang={lang} projectName={project.name} />
     </>
   );
 }

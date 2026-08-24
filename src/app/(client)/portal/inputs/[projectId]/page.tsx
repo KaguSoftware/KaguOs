@@ -1,13 +1,18 @@
 import type { Metadata } from "next";
+import { cookies } from "next/headers";
 import { notFound } from "next/navigation";
 import { requireClientProject } from "@/lib/data/session";
 import { getIntakePack } from "@/lib/data/intake";
 import { loadPortal } from "@/lib/data/portal";
-import { PageHeader } from "@/components/shell/page-header";
 import { BusinessTabs } from "@/components/portal/bits";
 import { IntakeForm } from "@/components/portal/intake-form";
+import { LOCALE_COOKIE, parseLocale } from "@/lib/locale";
+import { dict } from "@/lib/i18n";
 
-export const metadata: Metadata = { title: "Your input pack" };
+export async function generateMetadata(): Promise<Metadata> {
+  const locale = parseLocale((await cookies()).get(LOCALE_COOKIE)?.value);
+  return { title: dict(locale).yourInputPack };
+}
 
 /**
  * One business's input pack.
@@ -15,8 +20,13 @@ export const metadata: Metadata = { title: "Your input pack" };
  * The FORM below is untouched by the portal's restructuring — it is the thing
  * the client actually has to fill in, it saves on blur, and its questions come
  * from whichever pack the project is on (0073). Everything this page adds is
- * around it: the heading, and a way to get to the other business's pack without
- * going back to a list.
+ * around it: a way to get to the other business's pack without going back to a
+ * list.
+ *
+ * No PageHeader: the form owns its own sticky header, which carries the project
+ * name, the meter and the save state together, and says the saves-as-you-type
+ * line once on its first step. Two stacked headings competing for the top of a
+ * long form was part of what made this hard to read.
  */
 export default async function PortalInputsPage({
   params,
@@ -28,6 +38,8 @@ export default async function PortalInputsPage({
   // independently (0072 §4) — this is what turns "no rows" into "that isn't
   // yours" instead of an input pack that mysteriously has no answers in it.
   const ctx = await requireClientProject(projectId);
+  const locale = parseLocale((await cookies()).get(LOCALE_COOKIE)?.value);
+  const t = dict(locale);
 
   // The pack key comes from `my_client_projects()` — a client cannot read
   // `projects`, which is where the column lives (0072 §2 / 0073). So the project
@@ -53,11 +65,6 @@ export default async function PortalInputsPage({
         hrefFor={(id) => `/portal/inputs/${id}`}
       />
 
-      <PageHeader
-        title={project.name}
-        description="Everything Kagu needs from you to build this, in one place. It saves as you type — you can leave and come back."
-      />
-
       <IntakeForm
         projectId={projectId}
         projectName={project.name}
@@ -65,6 +72,8 @@ export default async function PortalInputsPage({
         initialAnswers={pack.answers}
         initialRows={pack.rows}
         initialSubmittedAt={pack.header?.submitted_at ?? null}
+        locale={locale}
+        intro={t.packBlurb}
       />
     </>
   );

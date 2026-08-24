@@ -152,6 +152,7 @@ export type IntakeCard = CardBase &
         minRows?: number;
         /** Shown in place of the rows when there are none yet. */
         emptyHint?: string;
+        emptyHintAr?: string;
       }
     /**
      * Prose with nothing to fill in — the "read this before you start" panel
@@ -967,7 +968,8 @@ const PADEL_SECTIONS: IntakeSection[] = [
         addLabel: "Add court",
         addLabelAr: "أضف ملعباً",
         minRows: 1,
-        emptyHint: "No courts yet · لا ملاعب بعد",
+        emptyHint: "No courts yet",
+        emptyHintAr: "لا ملاعب بعد",
         columns: [
           { key: "en", label: "Court name (EN)", labelAr: "اسم الملعب EN", kind: "text", required: true, span: 4, placeholder: "Court 1" },
           { key: "ar", label: "Court name (AR)", labelAr: "اسم الملعب AR", kind: "text", required: true, span: 4, rtl: true, placeholder: "ملعب ١" },
@@ -1020,7 +1022,8 @@ const PADEL_SECTIONS: IntakeSection[] = [
         addLabel: "Add rate rule",
         addLabelAr: "أضف قاعدة سعر",
         minRows: 1,
-        emptyHint: "No rules yet · لا قواعد بعد",
+        emptyHint: "No rules yet",
+        emptyHintAr: "لا قواعد بعد",
         columns: [
           { key: "court", label: "Court — name as above, or “All courts”", labelAr: "الملعب", kind: "text", required: true, span: 3, placeholder: "All courts" },
           {
@@ -1067,7 +1070,8 @@ const PADEL_SECTIONS: IntakeSection[] = [
         addLabel: "Add menu row",
         addLabelAr: "أضف صفاً",
         minRows: 1,
-        emptyHint: "No menu rows yet · لا صفوف بعد",
+        emptyHint: "No menu rows yet",
+        emptyHintAr: "لا صفوف بعد",
         columns: [
           { key: "cat_en", label: "Category (EN)", labelAr: "القسم EN", kind: "text", required: true, span: 3, placeholder: "Hot Drinks" },
           { key: "cat_ar", label: "Category (AR)", labelAr: "القسم AR", kind: "text", required: true, span: 3, rtl: true, placeholder: "مشروبات ساخنة" },
@@ -1118,7 +1122,8 @@ const PADEL_SECTIONS: IntakeSection[] = [
         kind: "table",
         addLabel: "Add recipe line",
         addLabelAr: "أضف سطراً",
-        emptyHint: "No recipe lines yet · لا أسطر بعد",
+        emptyHint: "No recipe lines yet",
+        emptyHintAr: "لا أسطر بعد",
         columns: [
           { key: "item", label: "Item (EN) — as in Menu", labelAr: "المنتج كما في القائمة", kind: "text", required: true, span: 3, placeholder: "Cappuccino" },
           { key: "item_ar", label: "Item (AR)", labelAr: "المنتج AR", kind: "text", span: 2, rtl: true, placeholder: "كابتشينو" },
@@ -1139,7 +1144,8 @@ const PADEL_SECTIONS: IntakeSection[] = [
         kind: "table",
         addLabel: "Add sub-recipe",
         addLabelAr: "أضف وصفة فرعية",
-        emptyHint: "No sub-recipes · لا وصفات فرعية",
+        emptyHint: "No sub-recipes",
+        emptyHintAr: "لا وصفات فرعية",
         columns: [
           { key: "en", label: "Sub-recipe name (EN)", labelAr: "الاسم EN", kind: "text", required: true, span: 4, placeholder: "Garlic sauce" },
           { key: "ar", label: "Sub-recipe name (AR)", labelAr: "الاسم AR", kind: "text", required: true, span: 4, rtl: true, placeholder: "صلصة الثوم" },
@@ -1158,7 +1164,8 @@ const PADEL_SECTIONS: IntakeSection[] = [
         kind: "table",
         addLabel: "Add ingredient line",
         addLabelAr: "أضف مكوناً",
-        emptyHint: "Nothing yet · لا شيء بعد",
+        emptyHint: "Nothing yet",
+        emptyHintAr: "لا شيء بعد",
         columns: [
           { key: "sub", label: "Sub-recipe (EN) — as above", labelAr: "الوصفة الفرعية", kind: "text", required: true, span: 4, placeholder: "Garlic sauce" },
           { key: "ing", label: "Ingredient", labelAr: "المكون", kind: "text", required: true, span: 4, placeholder: "Garlic" },
@@ -1177,7 +1184,8 @@ const PADEL_SECTIONS: IntakeSection[] = [
         kind: "table",
         addLabel: "Add ingredient",
         addLabelAr: "أضف مكوناً",
-        emptyHint: "No ingredients yet · لا مكونات بعد",
+        emptyHint: "No ingredients yet",
+        emptyHintAr: "لا مكونات بعد",
         columns: [
           { key: "en", label: "Ingredient (EN)", labelAr: "المكون EN", kind: "text", required: true, span: 4, placeholder: "Espresso beans" },
           { key: "ar", label: "Ingredient (AR)", labelAr: "المكون AR", kind: "text", required: true, span: 4, rtl: true, placeholder: "حبوب إسبريسو" },
@@ -1208,7 +1216,8 @@ const PADEL_SECTIONS: IntakeSection[] = [
         addLabel: "Add staff member",
         addLabelAr: "أضف موظفاً",
         minRows: 1,
-        emptyHint: "No staff yet · لا موظفين بعد",
+        emptyHint: "No staff yet",
+        emptyHintAr: "لا موظفين بعد",
         columns: [
           { key: "name", label: "Name", labelAr: "الاسم", kind: "text", required: true, span: 5 },
           {

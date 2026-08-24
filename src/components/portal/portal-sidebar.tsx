@@ -45,6 +45,34 @@ import { cn } from "@/lib/utils";
  * should be able to see that from any page without navigating.
  */
 
+/**
+ * The rail's own words, already resolved to one language by the layout.
+ *
+ * A bundle of plain strings rather than the `PortalDict` itself: this is a
+ * client component, and half of that dictionary is FUNCTIONS — which do not
+ * cross the server/client boundary. Resolving them in the layout (where the
+ * cookie is read) and sending strings keeps the boundary serialisable and the
+ * rail ignorant of locales.
+ */
+export type PortalNavLabels = {
+  dashboardAria: string;
+  portalNav: string;
+  menu: string;
+  openMenu: string;
+  closeMenu: string;
+  yourAccount: string;
+  accountAria: string;
+  signOut: string;
+  navDashboard: string;
+  navDashboardHint: string;
+  navInputs: string;
+  navInputsHint: string;
+  navProgress: string;
+  navProgressHint: string;
+  navFinance: string;
+  navFinanceHint: string;
+};
+
 type PortalNavItem = {
   href: string;
   label: string;
@@ -56,33 +84,37 @@ type PortalNavItem = {
   tone?: "attention" | "urgent";
 };
 
-function useNav(packsOpen: number, overdue: number): PortalNavItem[] {
+function useNav(
+  labels: PortalNavLabels,
+  packsOpen: number,
+  overdue: number
+): PortalNavItem[] {
   return [
     {
       href: "/portal",
-      label: "Dashboard",
+      label: labels.navDashboard,
       icon: LayoutDashboard,
-      hint: "Everything at a glance",
+      hint: labels.navDashboardHint,
     },
     {
       href: "/portal/inputs",
-      label: "Inputs",
+      label: labels.navInputs,
       icon: ClipboardList,
-      hint: "What we need from you",
+      hint: labels.navInputsHint,
       badge: packsOpen,
       tone: "attention",
     },
     {
       href: "/portal/progress",
-      label: "Progress",
+      label: labels.navProgress,
       icon: Route,
-      hint: "Where the build is",
+      hint: labels.navProgressHint,
     },
     {
       href: "/portal/finance",
-      label: "Finance",
+      label: labels.navFinance,
       icon: Receipt,
-      hint: "Invoices and payments",
+      hint: labels.navFinanceHint,
       badge: overdue,
       tone: "urgent",
     },
@@ -169,12 +201,14 @@ const EXIT_MS = 180;
 
 function MobileSheet({
   items,
+  labels,
   pathname,
   name,
   email,
   onClose,
 }: {
   items: PortalNavItem[];
+  labels: PortalNavLabels;
   pathname: string;
   name: string | null;
   email: string;
@@ -209,12 +243,12 @@ function MobileSheet({
     <div
       role="dialog"
       aria-modal="true"
-      aria-label="Menu"
+      aria-label={labels.menu}
       className="fixed inset-0 z-50 md:hidden"
     >
       <button
         type="button"
-        aria-label="Close menu"
+        aria-label={labels.closeMenu}
         onClick={close}
         className={cn(
           "absolute inset-0 cursor-default bg-bg/70 backdrop-blur-sm",
@@ -242,14 +276,14 @@ function MobileSheet({
           <button
             type="button"
             onClick={close}
-            aria-label="Close menu"
+            aria-label={labels.closeMenu}
             className="rounded-md p-2 text-muted transition-colors duration-150 hover:bg-raised hover:text-ink"
           >
             <X className="size-5" aria-hidden />
           </button>
         </div>
 
-        <nav className="grid gap-1 px-3" aria-label="Portal">
+        <nav className="grid gap-1 px-3" aria-label={labels.portalNav}>
           {items.map((item) => (
             <NavRow
               key={item.href}
@@ -275,14 +309,14 @@ function MobileSheet({
                 {name || email}
               </span>
               <span className="block truncate text-[calc(11px*var(--text-scale,1))] text-faint">
-                Your account
+                {labels.yourAccount}
               </span>
             </span>
           </Link>
           <form action={signOut}>
             <button
               type="submit"
-              aria-label="Sign out"
+              aria-label={labels.signOut}
               className="rounded-md border border-line p-3 text-muted transition-[color,border-color,transform] duration-150 ease-mac hover:border-danger/40 hover:text-danger active:scale-95"
             >
               <LogOut className="size-4" aria-hidden />
@@ -296,11 +330,13 @@ function MobileSheet({
 }
 
 export function PortalSidebar({
+  labels,
   name,
   email,
   packsOpen,
   overdue,
 }: {
+  labels: PortalNavLabels;
   name: string | null;
   email: string;
   /** Packs not yet sent, across every business. */
@@ -309,7 +345,7 @@ export function PortalSidebar({
   overdue: number;
 }) {
   const pathname = usePathname();
-  const items = useNav(packsOpen, overdue);
+  const items = useNav(labels, packsOpen, overdue);
   const [menuOpen, setMenuOpen] = useState(false);
 
   // Navigating closes the sheet. Reset DURING RENDER against the previous
@@ -327,7 +363,7 @@ export function PortalSidebar({
         <div className="px-4 pb-5 pt-5">
           <Link
             href="/portal"
-            aria-label="KaguOs — your dashboard"
+            aria-label={labels.dashboardAria}
             className="flex items-center gap-2.5 rounded-md transition-opacity duration-150 hover:opacity-80"
           >
             <Logo size={24} />
@@ -337,7 +373,7 @@ export function PortalSidebar({
           </Link>
         </div>
 
-        <nav className="flex-1 space-y-0.5 px-2" aria-label="Portal">
+        <nav className="flex-1 space-y-0.5 px-2" aria-label={labels.portalNav}>
           {items.map((item) => (
             <NavRow key={item.href} item={item} pathname={pathname} />
           ))}
@@ -346,7 +382,7 @@ export function PortalSidebar({
         <div className="flex items-center gap-2 border-t border-line p-3">
           <Link
             href="/portal/account"
-            aria-label={`Account — ${name || email}`}
+            aria-label={labels.accountAria}
             className="min-w-0 flex-1 rounded-md px-2 py-1.5 transition-colors duration-150 hover:bg-raised"
           >
             <p className="truncate text-[calc(13px*var(--text-scale,1))] font-medium text-ink">
@@ -357,8 +393,8 @@ export function PortalSidebar({
           <form action={signOut}>
             <button
               type="submit"
-              title="Sign out"
-              aria-label="Sign out"
+              title={labels.signOut}
+              aria-label={labels.signOut}
               className="rounded-md p-2 text-muted transition-colors duration-150 hover:bg-raised hover:text-ink"
             >
               <LogOut className="size-4" aria-hidden />
@@ -371,7 +407,7 @@ export function PortalSidebar({
         <div className="flex items-center justify-between px-4 py-3">
           <Link
             href="/portal"
-            aria-label="KaguOs — your dashboard"
+            aria-label={labels.dashboardAria}
             className="flex items-center gap-2.5 rounded-md transition-opacity duration-150 hover:opacity-80"
           >
             <Logo size={22} />
@@ -382,7 +418,7 @@ export function PortalSidebar({
           <div className="flex items-center gap-1">
             <Link
               href="/portal/account"
-              aria-label="Your account"
+              aria-label={labels.yourAccount}
               className="rounded-md p-2 text-muted transition-colors duration-150 hover:bg-raised hover:text-ink"
             >
               <UserRound className="size-4" aria-hidden />
@@ -390,7 +426,7 @@ export function PortalSidebar({
             <button
               type="button"
               onClick={() => setMenuOpen(true)}
-              aria-label="Open menu"
+              aria-label={labels.openMenu}
               aria-expanded={menuOpen}
               className="rounded-md p-1.5 text-muted transition-colors duration-150 hover:bg-raised hover:text-ink"
             >
@@ -403,6 +439,7 @@ export function PortalSidebar({
       {menuOpen && (
         <MobileSheet
           items={items}
+          labels={labels}
           pathname={pathname}
           name={name}
           email={email}

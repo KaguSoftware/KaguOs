@@ -1,5 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import { cookies } from "next/headers";
+import { LOCALE_COOKIE, dirFor, parseLocale } from "@/lib/locale";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -39,14 +41,32 @@ export const viewport: Viewport = {
   interactiveWidget: "resizes-content",
 };
 
-export default function RootLayout({
+/**
+ * `lang` and `dir` are decided HERE, on `<html>`, rather than on a wrapper
+ * inside the client portal.
+ *
+ * The portal's transient surfaces — toasts, the date picker's popover, the
+ * lightbox — `createPortal` into `document.body`, which is outside every
+ * wrapper this app has. Setting the direction on a div inside the portal layout
+ * would leave a right-to-left page whose menus and toasts still opened
+ * left-to-right, which is a worse bug than not translating them at all.
+ *
+ * Only the client portal ever writes `kagu-locale` (the toggle exists nowhere
+ * else), so a teammate's app is English and LTR regardless of what this reads.
+ * The team's own view of a client's pack uses a separate content-only
+ * preference — see lib/intake-lang.ts.
+ */
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const locale = parseLocale((await cookies()).get(LOCALE_COOKIE)?.value);
+
   return (
     <html
-      lang="en"
+      lang={locale}
+      dir={dirFor(locale)}
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">{children}</body>

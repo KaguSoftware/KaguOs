@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { cookies } from "next/headers";
 import {
   ArrowRight,
   Building2,
@@ -15,9 +16,19 @@ import { LiveRefresh } from "@/components/shell/live-refresh";
 import { Panel } from "@/components/ui/panel";
 import { ProgressMeter } from "@/components/portal/progress-meter";
 import { Money, MilestoneBadge } from "@/components/portal/bits";
+import { LOCALE_COOKIE, parseLocale } from "@/lib/locale";
+import { dict } from "@/lib/i18n";
 import { cn, formatDate, formatRelative, todayInIstanbul } from "@/lib/utils";
 
-export const metadata: Metadata = { title: "Your dashboard" };
+/**
+ * `generateMetadata` rather than a static `metadata`, because the tab title is
+ * chrome like everything else here and a client reading Arabic should not be
+ * left with an English tab. It reads the same cookie the layout does.
+ */
+export async function generateMetadata(): Promise<Metadata> {
+  const locale = parseLocale((await cookies()).get(LOCALE_COOKIE)?.value);
+  return { title: dict(locale).yourDashboard };
+}
 
 /**
  * The client's front page.
@@ -40,10 +51,22 @@ export const metadata: Metadata = { title: "Your dashboard" };
  * would average those into a number that describes neither. So each card shows
  * the build, the pack and the money side by side, and the card is a link into
  * whichever of them the reader was actually worried about.
+ *
+ * ── Language ─────────────────────────────────────────────────
+ *
+ * Every word comes from `dict(locale)` — the headline sentence included, which
+ * is a function IN the dictionary rather than assembled here. English wants a
+ * comma-and list with a leading capital and Arabic wants neither, so a join
+ * written in this file would have to know both.
+ *
+ * The arrows carry `rtl:rotate-180`: a "keep going" arrow that points left on
+ * a right-to-left page reads as "back".
  */
 export default async function PortalDashboardPage() {
   const portal = await loadPortal();
   const today = todayInIstanbul();
+  const locale = parseLocale((await cookies()).get(LOCALE_COOKIE)?.value);
+  const t = dict(locale);
   const firstName = (portal.ctx.profile.full_name || "").trim().split(" ")[0];
 
   const businesses = portal.projects.map((project) => {
@@ -93,16 +116,16 @@ export default async function PortalDashboardPage() {
       />
 
       <PageHeader
-        title={firstName ? `Hello, ${firstName}` : "Your dashboard"}
-        description={headline(packsOpen.length, overdueCount, blockedCount)}
+        title={firstName ? t.hello(firstName) : t.yourDashboard}
+        description={t.headline(packsOpen.length, overdueCount, blockedCount)}
       />
 
       {portal.projects.length === 0 ? (
         <div className="rounded-lg border border-line bg-surface">
           <EmptyState
             icon={Building2}
-            title="Nothing shared with you yet"
-            hint="Your account is set up. As soon as Kagu shares a project with it, everything about that build shows up here — you'll be told, so there's no need to keep checking."
+            title={t.nothingSharedTitle}
+            hint={t.dashNothingSharedHint}
           />
         </div>
       ) : (
@@ -124,13 +147,13 @@ export default async function PortalDashboardPage() {
                         <span className="text-muted">{entry.project.name} — </span>
                       )}
                       {entry.packPct === 0
-                        ? "your input pack hasn't been started"
-                        : `your input pack is ${entry.packPct}% filled in`}
+                        ? t.packNotStarted
+                        : t.packFilledIn(entry.packPct)}
                     </span>
                     <span className="flex shrink-0 items-center gap-1.5 font-mono text-xs text-amber">
-                      finish it
+                      {t.finishIt}
                       <ArrowRight
-                        className="size-3.5 -translate-x-1 opacity-0 transition-[opacity,transform] duration-200 ease-mac group-hover:translate-x-0 group-hover:opacity-100"
+                        className="size-3.5 -translate-x-1 opacity-0 transition-[opacity,transform] duration-200 ease-mac group-hover:translate-x-0 group-hover:opacity-100 rtl:rotate-180"
                         aria-hidden
                       />
                     </span>
@@ -146,14 +169,12 @@ export default async function PortalDashboardPage() {
                   >
                     <Receipt className="size-4 shrink-0 text-danger" aria-hidden />
                     <span className="min-w-0 flex-1 text-[calc(13px*var(--text-scale,1))] text-ink">
-                      {overdueCount === 1
-                        ? "One invoice is past its due date"
-                        : `${overdueCount} invoices are past their due date`}
+                      {t.invoicesOverdue(overdueCount)}
                     </span>
                     <span className="flex shrink-0 items-center gap-1.5 font-mono text-xs text-danger">
-                      see finance
+                      {t.seeFinance}
                       <ArrowRight
-                        className="size-3.5 -translate-x-1 opacity-0 transition-[opacity,transform] duration-200 ease-mac group-hover:translate-x-0 group-hover:opacity-100"
+                        className="size-3.5 -translate-x-1 opacity-0 transition-[opacity,transform] duration-200 ease-mac group-hover:translate-x-0 group-hover:opacity-100 rtl:rotate-180"
                         aria-hidden
                       />
                     </span>
@@ -166,7 +187,7 @@ export default async function PortalDashboardPage() {
           {packsOpen.length === 0 && overdueCount === 0 && (
             <p className="flex items-center gap-2 rounded-lg border border-line bg-surface px-4 py-3 text-[calc(13px*var(--text-scale,1))] text-primary-dim">
               <CheckCircle2 className="size-4" aria-hidden />
-              Nothing needs you right now — everything is on our side.
+              {t.nothingNeedsYou}
             </p>
           )}
 
@@ -193,7 +214,7 @@ export default async function PortalDashboardPage() {
                 <dl className="mt-4 grid gap-3">
                   <div>
                     <dt className="flex items-baseline justify-between gap-3 font-mono text-[calc(10px*var(--text-scale,1))] uppercase tracking-wider text-faint">
-                      <span>Build</span>
+                      <span>{t.build}</span>
                       <span className="tabular-nums">{entry.build.pct}%</span>
                     </dt>
                     <dd className="mt-1.5">
@@ -201,14 +222,14 @@ export default async function PortalDashboardPage() {
                         pct={entry.build.pct}
                         done={entry.build.done}
                         total={entry.build.total}
-                        label={`${entry.project.name} build progress`}
+                        label={t.buildProgressAria(entry.project.name)}
                       />
                     </dd>
                   </div>
 
                   <div>
                     <dt className="flex items-baseline justify-between gap-3 font-mono text-[calc(10px*var(--text-scale,1))] uppercase tracking-wider text-faint">
-                      <span>Your input pack</span>
+                      <span>{t.yourInputPack}</span>
                       <span className="tabular-nums">{entry.packPct}%</span>
                     </dt>
                     <dd className="mt-1.5">
@@ -216,14 +237,14 @@ export default async function PortalDashboardPage() {
                         pct={entry.packPct}
                         done={entry.packDone}
                         total={entry.packTotal}
-                        label={`${entry.project.name} input pack completion`}
+                        label={t.packProgressAria(entry.project.name)}
                       />
                     </dd>
                   </div>
 
                   <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
                     <dt className="font-mono text-[calc(10px*var(--text-scale,1))] uppercase tracking-wider text-faint">
-                      Outstanding
+                      {t.outstanding}
                     </dt>
                     <dd>
                       <Money
@@ -236,12 +257,12 @@ export default async function PortalDashboardPage() {
 
                 {entry.build.next && (
                   <p className="mt-4 border-t border-line pt-3 text-[calc(13px*var(--text-scale,1))] text-muted">
-                    <span className="text-faint">Next up · </span>
+                    <span className="text-faint">{t.nextUp} · </span>
                     {entry.build.next.title}
                     {entry.build.next.target_on && (
                       <span className="text-faint">
                         {" "}
-                        · target {formatDate(entry.build.next.target_on)}
+                        · {t.targetOn(formatDate(entry.build.next.target_on))}
                       </span>
                     )}
                   </p>
@@ -252,19 +273,19 @@ export default async function PortalDashboardPage() {
                     href={`/portal/inputs/${entry.project.id}`}
                     className="text-faint transition-colors duration-150 hover:text-ink"
                   >
-                    Inputs
+                    {t.navInputs}
                   </Link>
                   <Link
                     href="/portal/progress"
                     className="text-faint transition-colors duration-150 hover:text-ink"
                   >
-                    Progress
+                    {t.navProgress}
                   </Link>
                   <Link
                     href="/portal/finance"
                     className="text-faint transition-colors duration-150 hover:text-ink"
                   >
-                    Finance
+                    {t.navFinance}
                   </Link>
                 </div>
               </Panel>
@@ -278,7 +299,7 @@ export default async function PortalDashboardPage() {
             <section>
               <h2 className="mb-3 flex items-center gap-2 border-b border-line pb-2.5 text-[calc(16px*var(--text-scale,1))] font-semibold tracking-tight text-ink">
                 <Route className="size-4 text-faint" aria-hidden />
-                Recently
+                {t.recently}
               </h2>
               <ul className="grid gap-2">
                 {recent.map(({ milestone, projectName }) => (
@@ -306,40 +327,4 @@ export default async function PortalDashboardPage() {
       )}
     </>
   );
-}
-
-/**
- * The sentence under the greeting.
- *
- * One line, and it must be the TRUE one — the temptation with a page like this
- * is a cheerful constant, which teaches the reader within two visits that the
- * line means nothing and to skip it.
- */
-function headline(packsOpen: number, overdue: number, blocked: number): string {
-  const parts: string[] = [];
-  if (packsOpen > 0) {
-    parts.push(
-      packsOpen === 1
-        ? "one input pack still needs finishing"
-        : `${packsOpen} input packs still need finishing`
-    );
-  }
-  if (overdue > 0) {
-    parts.push(
-      overdue === 1 ? "one invoice is past due" : `${overdue} invoices are past due`
-    );
-  }
-  if (blocked > 0) {
-    parts.push(
-      blocked === 1 ? "one step is blocked" : `${blocked} steps are blocked`
-    );
-  }
-  if (parts.length === 0) {
-    return "Everything is with us — nothing is waiting on you.";
-  }
-  const sentence =
-    parts.length === 1
-      ? parts[0]
-      : `${parts.slice(0, -1).join(", ")} and ${parts[parts.length - 1]}`;
-  return `${sentence.charAt(0).toUpperCase()}${sentence.slice(1)}.`;
 }
