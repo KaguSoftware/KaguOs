@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { ArrowRight, Building2, CheckCircle2 } from "lucide-react";
 import { requireClient } from "@/lib/data/session";
@@ -7,12 +8,16 @@ import { getIntakeSummaries, getMyClientProjects } from "@/lib/data/intake";
 import { PageHeader } from "@/components/shell/page-header";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ProgressMeter } from "@/components/portal/progress-meter";
+import { LOCALE_COOKIE, parseLocale } from "@/lib/locale";
+import { dict } from "@/lib/i18n";
 import { formatRelative } from "@/lib/utils";
 
 export const metadata: Metadata = { title: "Your projects" };
 
 export default async function PortalIndexPage() {
   const ctx = await requireClient();
+  const locale = parseLocale((await cookies()).get(LOCALE_COOKIE)?.value);
+  const t = dict(locale);
 
   const projects = await getMyClientProjects(ctx);
 
@@ -27,17 +32,14 @@ export default async function PortalIndexPage() {
 
   return (
     <>
-      <PageHeader
-        title="Your projects"
-        description="Everything Kagu is building for you, and what we still need from you to build it."
-      />
+      <PageHeader title={t.yourProjects} description={t.indexBlurb} />
 
       {projects.length === 0 ? (
         <div className="rounded-lg border border-line bg-surface">
           <EmptyState
             icon={Building2}
-            title="Nothing shared with you yet"
-            hint="Your account is set up. As soon as Kagu shares a project with it, it appears here — no need to check back, you'll be told."
+            title={t.nothingSharedTitle}
+            hint={t.nothingSharedHint}
           />
         </div>
       ) : (
@@ -53,18 +55,21 @@ export default async function PortalIndexPage() {
                   className="group block rounded-lg border border-line bg-surface p-4 transition-colors duration-150 hover:border-line-strong hover:bg-raised/30"
                 >
                   <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-                    <p className="min-w-0 text-sm font-medium text-ink">{project.name}</p>
+                    <p className="min-w-0 text-[calc(16px*var(--text-scale,1))] font-medium text-ink">
+                      {project.name}
+                    </p>
                     <p className="flex items-center gap-1.5 font-mono text-xs text-faint">
                       {sent ? (
                         <>
                           <CheckCircle2 className="size-3.5 text-primary-dim" aria-hidden />
-                          sent {formatRelative(sent)}
+                          {t.sentAgo(formatRelative(sent))}
                         </>
                       ) : (
                         <>
-                          {pct}% filled in
+                          {t.filledIn(pct)}
+                          {/* The arrow leans the way the page reads. */}
                           <ArrowRight
-                            className="size-3.5 -translate-x-1 opacity-0 transition-[opacity,transform] duration-200 ease-mac group-hover:translate-x-0 group-hover:opacity-100"
+                            className="size-3.5 -translate-x-1 opacity-0 transition-[opacity,transform] duration-200 ease-mac group-hover:translate-x-0 group-hover:opacity-100 rtl:rotate-180"
                             aria-hidden
                           />
                         </>

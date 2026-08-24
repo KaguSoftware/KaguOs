@@ -1,11 +1,13 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { cookies } from "next/headers";
 import { notFound } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { requireClientProject } from "@/lib/data/session";
 import { getIntakePack, getMyClientProjects } from "@/lib/data/intake";
-import { PageHeader } from "@/components/shell/page-header";
 import { IntakeForm } from "@/components/portal/intake-form";
+import { LOCALE_COOKIE, parseLocale } from "@/lib/locale";
+import { dict } from "@/lib/i18n";
 
 export const metadata: Metadata = { title: "Your input pack" };
 
@@ -19,6 +21,8 @@ export default async function PortalProjectPage({
   // independently (0072 §4) — this is what turns "no rows" into "that isn't
   // yours" instead of an input pack that mysteriously has no answers in it.
   const ctx = await requireClientProject(projectId);
+  const locale = parseLocale((await cookies()).get(LOCALE_COOKIE)?.value);
+  const t = dict(locale);
 
   // The pack key comes from `my_client_projects()` — a client cannot read
   // `projects`, which is where the column lives (0072 §2 / 0073). So the project
@@ -38,18 +42,17 @@ export default async function PortalProjectPage({
       {projects.length > 1 && (
         <Link
           href="/portal"
-          className="mb-4 inline-flex items-center gap-1.5 text-[calc(13px*var(--text-scale,1))] text-muted hover:text-ink"
+          className="mb-4 inline-flex items-center gap-1.5 text-[calc(14px*var(--text-scale,1))] text-muted hover:text-ink"
         >
-          <ArrowLeft className="size-3.5" aria-hidden />
-          Your projects
+          <ArrowLeft className="size-3.5 rtl:rotate-180" aria-hidden />
+          {t.yourProjects}
         </Link>
       )}
 
-      <PageHeader
-        title={project.name}
-        description="Everything Kagu needs from you to build this, in one place. It saves as you type — you can leave and come back."
-      />
-
+      {/* The page header the other portal pages use is deliberately absent: the
+          form owns its own sticky header, which has to carry the project name,
+          the meter and the save state together. Two stacked headers competing
+          for the top of a long form was part of what made this hard to read. */}
       <IntakeForm
         projectId={projectId}
         projectName={project.name}
@@ -57,6 +60,8 @@ export default async function PortalProjectPage({
         initialAnswers={pack.answers}
         initialRows={pack.rows}
         initialSubmittedAt={pack.header?.submitted_at ?? null}
+        locale={locale}
+        intro={t.packBlurb}
       />
     </>
   );

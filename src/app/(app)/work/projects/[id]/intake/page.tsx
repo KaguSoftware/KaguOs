@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { cookies } from "next/headers";
 import { notFound } from "next/navigation";
 import { ArrowLeft, UserRound } from "lucide-react";
 import { requireSection } from "@/lib/data/session";
@@ -9,6 +10,8 @@ import { PageHeader } from "@/components/shell/page-header";
 import { LiveRefresh } from "@/components/shell/live-refresh";
 import { Badge } from "@/components/ui/badge";
 import { IntakeReview } from "@/components/work/intake-review";
+import { IntakeLangToggle } from "@/components/work/intake-lang-toggle";
+import { INTAKE_LANG_COOKIE, parseIntakeLang } from "@/lib/intake-lang";
 import { formatRelative } from "@/lib/utils";
 
 export const metadata: Metadata = { title: "Input pack" };
@@ -20,6 +23,7 @@ export default async function ProjectIntakePage({
 }) {
   const { id } = await params;
   const ctx = await requireSection("work");
+  const lang = parseIntakeLang((await cookies()).get(INTAKE_LANG_COOKIE)?.value);
 
   const [{ data: project }, holders] = await Promise.all([
     selectOrThrow(
@@ -35,10 +39,20 @@ export default async function ProjectIntakePage({
     // `client_projects` — kind = 'client' by construction, since only a client
     // account can hold a row there (0072 §2), and the filter is stated anyway
     // so the query says what it means without the reader having to know that.
+    //
+    // ⚠️ The relationship is named, not inferred. `client_projects` has TWO
+    // foreign keys into `profiles` — `user_id` (whose access this is) and
+    // `created_by` (which admin granted it) — so a bare `profiles!inner(…)`
+    // is ambiguous and PostgREST refuses the whole request with PGRST201.
+    // That failed at RUNTIME only: it typechecks, it builds, and it renders
+    // the section error boundary in production. Any future embed off this
+    // table has to name its FK the same way.
     rowsOrThrow(
       ctx.supabase
         .from("client_projects")
-        .select("user_id, profiles!inner(full_name, email, kind)")
+        .select(
+          "user_id, profiles!client_projects_user_id_fkey!inner(full_name, email, kind)"
+        )
         .eq("project_id", id)
         .eq("profiles.kind", "client"),
       "client_projects"
@@ -81,11 +95,16 @@ export default async function ProjectIntakePage({
         title="Input pack"
         description="What the client has told us about their business, in their own words."
         action={
-          sent ? (
-            <Badge tone="green">sent {formatRelative(sent)}</Badge>
-          ) : (
-            <Badge tone="faint">not sent yet</Badge>
-          )
+          <div className="flex items-center gap-3">
+            {/* Content only — this never flips the app into RTL. See
+                lib/intake-lang.ts for why it is not the client's locale cookie. */}
+            <IntakeLangToggle current={lang} />
+            {sent ? (
+              <Badge tone="green">sent {formatRelative(sent)}</Badge>
+            ) : (
+              <Badge tone="faint">not sent yet</Badge>
+            )}
+          </div>
         }
       />
 
@@ -104,7 +123,7 @@ export default async function ProjectIntakePage({
         )}
       </p>
 
-      <IntakeReview pack={pack} />
+      <IntakeReview pack={pack} lang={lang} projectName={project.name} />
     </>
   );
 }
