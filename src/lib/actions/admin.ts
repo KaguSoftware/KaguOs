@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createServiceClient } from "@/lib/supabase/service";
 import { getSessionContext, type SectionAccess } from "@/lib/data/session";
-import { SECTIONS, type Section } from "@/lib/types";
+import { SECTIONS, type ProfileKind, type Section } from "@/lib/types";
 
 /** What an admin picked per section: absent = no access at all. */
 export type AccessMap = Partial<Record<Section, SectionAccess>>;
@@ -57,8 +57,14 @@ export async function createUser(
   const email = String(formData.get("email") ?? "").trim().toLowerCase();
   const fullName = String(formData.get("full_name") ?? "").trim();
   const password = String(formData.get("password") ?? "");
-  const isAdmin = formData.get("is_admin") === "on";
-  const access = parseAccess(formData);
+  // The role is picked at creation because the two kinds of account are not
+  // variations on each other: a member gets sections, a client gets projects,
+  // and the database refuses to let one hold the other's grants (0062 §1).
+  const kind: ProfileKind = formData.get("kind") === "client" ? "client" : "member";
+  const isAdmin = kind === "member" && formData.get("is_admin") === "on";
+  const access = kind === "member" ? parseAccess(formData) : {};
+  const projectIds =
+    kind === "client" ? formData.getAll("projects").map(String) : [];
 
   if (!/^\S+@\S+\.\S+$/.test(email)) return { ok: false, message: "Enter a valid email." };
   if (fullName.length < 1) return { ok: false, message: "Name is required." };
@@ -77,9 +83,14 @@ export async function createUser(
 
   const userId = created.user.id;
 
+  // `kind` goes in with the name, in one update. The auth trigger that made
+  // this row knows nothing about the column and defaults it to 'member' (0062
+  // §1) — which is the right default and the wrong answer here, so it is
+  // corrected before the account is usable rather than in a second step that
+  // could fail on its own and leave an outsider holding a member profile.
   const { error: profileError } = await service
     .from("profiles")
-    .update({ full_name: fullName, is_admin: isAdmin })
+    .update({ full_name: fullName, is_admin: isAdmin, kind })
     .eq("id", userId);
   if (profileError) return { ok: false, message: profileError.message };
 
@@ -95,8 +106,182 @@ export async function createUser(
     if (memberError) return { ok: false, message: memberError.message };
   }
 
+  if (projectIds.length > 0) {
+    const { error: assignError } = await service.from("client_projects").insert(
+      projectIds.map((project_id) => ({
+        user_id: userId,
+        project_id,
+        created_by: null,
+      }))
+    );
+    if (assignError) return { ok: false, message: assignError.message };
+  }
+
   revalidatePath("/admin");
-  return { ok: true, message: `${email} created — share the temp password with them.` };
+  return {
+    ok: true,
+    message:
+      kind === "client"
+        ? `${email} created as a client — share the temp password with them.`
+        : `${email} created — share the temp password with them.`,
+  };
+}
+
+/**
+ * Switch an existing account between team member and client.
+ *
+ * This is the destructive one, and it is destructive on purpose. A client
+ * cannot hold a section or the admin flag — the database enforces that as a
+ * check constraint AND inside all four gate functions (0062 §1/§4) — so making
+ * someone a client means TAKING THOSE AWAY, not leaving them dormant. A
+ * demotion that quietly kept the rows would restore full access to the company
+ * the moment anyone flipped the switch back, which is not what "make them a
+ * client" means to the person clicking it.
+ *
+ * The reverse is symmetrical: promoting a client to member drops their project
+ * assignments, because a member reads Work in full and a stale row in
+ * `client_projects` would be a grant nothing in the UI could see.
+ */
+export async function setUserRole(
+  userId: string,
+  kind: ProfileKind
+): Promise<ActionResult> {
+  let ctx;
+  try {
+    ctx = await assertAdmin();
+  } catch {
+    return { ok: false, message: "Not an admin." };
+  }
+  if (kind !== "member" && kind !== "client") {
+    return { ok: false, message: "Unknown role." };
+  }
+  // The one guard that matters here: an admin who makes THEMSELVES a client
+  // loses the admin page along with every section, and there is no screen left
+  // from which to undo it.
+  if (userId === ctx.userId && kind === "client") {
+    return { ok: false, message: "You can't turn your own account into a client." };
+  }
+
+  const service = createServiceClient();
+
+  if (kind === "client") {
+    // Order matters. The profiles UPDATE carries `is_admin: false` in the same
+    // statement as `kind`, because the check constraint refuses a client row
+    // with the admin flag still on — two statements would fail on the first.
+    // The section rows go first so that, if the profile update then fails, the
+    // account is a member with no sections (harmless) rather than a client with
+    // sections the constraint should have made impossible.
+    const { error: sectionError } = await service
+      .from("section_memberships")
+      .delete()
+      .eq("user_id", userId);
+    if (sectionError) return { ok: false, message: sectionError.message };
+
+    const { error } = await service
+      .from("profiles")
+      .update({ kind: "client", is_admin: false, showcase_mode: false })
+      .eq("id", userId);
+    if (error) return { ok: false, message: error.message };
+  } else {
+    const { error } = await service
+      .from("profiles")
+      .update({ kind: "member" })
+      .eq("id", userId);
+    if (error) return { ok: false, message: error.message };
+
+    const { error: assignError } = await service
+      .from("client_projects")
+      .delete()
+      .eq("user_id", userId);
+    if (assignError) return { ok: false, message: assignError.message };
+  }
+
+  revalidatePath("/admin");
+  revalidatePath("/", "layout");
+  return {
+    ok: true,
+    message:
+      kind === "client"
+        ? "Now a client — sections removed, assign them a project below."
+        : "Now a team member — project assignments removed.",
+  };
+}
+
+/**
+ * Set exactly which projects a client account can open.
+ *
+ * The client sends the complete desired set, so this diffs rather than patches
+ * — the same shape as updateAccess, and for the same reason: two admins with
+ * the page open shouldn't be able to add a project each and have one of them
+ * silently lose theirs.
+ *
+ * `client_projects` has NO write policy (0072 §1), so this is the only path to
+ * it, and it runs through the service role after the admin check above. That is
+ * deliberate: it means a Work member cannot hand out project access to an
+ * outsider by writing a row, however the UI is later changed.
+ */
+export async function setClientProjects(
+  userId: string,
+  projectIds: string[]
+): Promise<ActionResult> {
+  try {
+    await assertAdmin();
+  } catch {
+    return { ok: false, message: "Not an admin." };
+  }
+
+  const service = createServiceClient();
+
+  // Refuse on a member rather than writing rows nothing will ever read: a
+  // member reads Work in full, so an assignment on one is not a smaller grant,
+  // it is a meaningless one — and a meaningless row here is exactly what makes
+  // a later "why can they see that?" hard to answer.
+  const { data: profile, error: readError } = await service
+    .from("profiles")
+    .select("kind")
+    .eq("id", userId)
+    .maybeSingle();
+  if (readError) return { ok: false, message: readError.message };
+  if (!profile) return { ok: false, message: "No such user." };
+  if (profile.kind !== "client") {
+    return { ok: false, message: "Make them a client first." };
+  }
+
+  const wanted = [...new Set(projectIds.map(String).filter(Boolean))];
+
+  const { data: current, error: currentError } = await service
+    .from("client_projects")
+    .select("project_id")
+    .eq("user_id", userId);
+  if (currentError) return { ok: false, message: currentError.message };
+
+  const have = new Set((current ?? []).map((row) => row.project_id));
+  const toAdd = wanted.filter((id) => !have.has(id));
+  const toRemove = [...have].filter((id) => !wanted.includes(id));
+
+  if (toRemove.length > 0) {
+    const { error } = await service
+      .from("client_projects")
+      .delete()
+      .eq("user_id", userId)
+      .in("project_id", toRemove);
+    if (error) return { ok: false, message: error.message };
+  }
+  if (toAdd.length > 0) {
+    const { error } = await service
+      .from("client_projects")
+      .insert(toAdd.map((project_id) => ({ user_id: userId, project_id })));
+    if (error) return { ok: false, message: error.message };
+  }
+
+  revalidatePath("/admin");
+  return {
+    ok: true,
+    message:
+      wanted.length === 0
+        ? "No projects shared with them."
+        : `Sharing ${wanted.length} ${wanted.length === 1 ? "project" : "projects"}.`,
+  };
 }
 
 /**
@@ -123,6 +308,24 @@ export async function updateAccess(
   const wanted = sanitizeAccess(access);
 
   const service = createServiceClient();
+
+  // Sections and the admin flag are MEMBER grants. `section_memberships` would
+  // accept the rows for a client happily — nothing in that table knows about
+  // `kind` — and `is_member()` would then ignore every one of them (0062 §4).
+  // The result is an admin screen showing access the app does not honour, which
+  // is worse than a refusal: it looks like a permissions bug in the section,
+  // three clicks away from the page that caused it.
+  const { data: profile } = await service
+    .from("profiles")
+    .select("kind")
+    .eq("id", userId)
+    .maybeSingle();
+  if (profile?.kind === "client") {
+    return {
+      ok: false,
+      message: "Clients hold no sections — make them a team member first.",
+    };
+  }
 
   const { error: profileError } = await service
     .from("profiles")

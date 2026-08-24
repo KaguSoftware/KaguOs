@@ -86,13 +86,27 @@ export const STATUS_PRESETS: Record<StatusKind, StatusPreset> = {
 };
 
 /**
- * What kind of person this account is. Until 0062 there was only one answer and
- * it was implicit: every user was one of the 8. A `client` is an outsider with
- * a login — someone at a Marketing client who approves their own video cuts —
- * and is barred from every section gate in the database (0062 §4), not merely
- * hidden from them in the UI.
+ * What kind of person this account is — the app's second role axis, alongside
+ * `is_admin` and section membership. Until 0062 there was only one answer and
+ * it was implicit: every user was one of the 8.
+ *
+ * A `client` is an outsider with a login: someone at a business Kagu is
+ * building for, who fills in their own project's input pack (0072). They are
+ * barred from every section gate in the database (0062 §4), not merely hidden
+ * from them in the UI, and they see only the projects assigned to them.
+ *
+ * The two kinds are exclusive by construction: a client cannot be an admin and
+ * cannot hold a section, enforced as a check constraint AND inside the four
+ * gate functions, so neither one alone can be undone by accident.
  */
 export type ProfileKind = "member" | "client";
+
+export const PROFILE_KINDS: ProfileKind[] = ["member", "client"];
+
+export const PROFILE_KIND_LABELS: Record<ProfileKind, string> = {
+  member: "Team member",
+  client: "Client",
+};
 
 export type Profile = {
   id: string;
@@ -215,6 +229,59 @@ export type Project = {
   notes: string | null;
   /** Optional deadline (date only) — surfaced on active projects. */
   due_on: string | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+/**
+ * One client account's access to one project (0072). Created and destroyed by
+ * an admin through the service role — the table has no write policy at all, so
+ * there is no other path to it.
+ */
+export type ClientProject = {
+  user_id: string;
+  project_id: string;
+  created_by: string | null;
+  created_at: string;
+};
+
+/**
+ * The input pack's header — one row per project, holding the "sent" state.
+ *
+ * The row is created lazily, on the first answer or the first Send, so a
+ * project nobody has been asked about yet has no row rather than an empty one.
+ * `submitted_at` is a milestone, not a lock: the client can reopen the pack and
+ * keep editing (see the note in 0072 §3a).
+ */
+export type ProjectIntake = {
+  project_id: string;
+  submitted_at: string | null;
+  submitted_by: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+/** One scalar answer, keyed `"<card>.<field>"` against the catalogue in lib/intake.ts. */
+export type ProjectIntakeAnswer = {
+  project_id: string;
+  key: string;
+  value: string;
+  updated_by: string | null;
+  updated_at: string;
+};
+
+/**
+ * One line of a repeating table in the pack — a product, a staff member, a
+ * line of opening hours. `data` is column key → cell text; the COLUMNS are the
+ * catalogue's business, which is why this is jsonb and not thirty tables.
+ */
+export type ProjectIntakeRow = {
+  id: string;
+  project_id: string;
+  table_key: string;
+  data: Record<string, string>;
+  sort: number;
   created_by: string | null;
   created_at: string;
   updated_at: string;
@@ -722,7 +789,9 @@ export type Notification = {
     | "learn_review"
     | "status_change"
     | "message"
-    | "debug_note";
+    | "debug_note"
+    /** A client pressed Send on their project's input pack (0072). */
+    | "client_intake";
   title: string;
   href: string | null;
   read_at: string | null;

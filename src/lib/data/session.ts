@@ -45,12 +45,22 @@ export type SessionContext = {
    */
   kind: ProfileKind;
   /**
-   * The tenant this user belongs to, null for members. Every read in the
-   * Marketing section that a client can reach is filtered by it — in the
-   * database first (0062 §6), and here so the UI never asks for rows it will
-   * not get back.
+   * 0062's MARKETING tenant. Retired with the approval portal (0068) and kept
+   * answering null by the database ever since (0071, 0072 §5) — the field
+   * survives because the additive-only rule on session_context() says a key
+   * that shipped never changes shape, not because anything sets it.
    */
   clientId: string | null;
+  /**
+   * The projects a CLIENT account may see — empty for every member, and empty
+   * for a client nobody has assigned anything to yet (0072 §1).
+   *
+   * An array rather than the single scalar 0062 used, because a business can
+   * have two things being built for it. It mirrors private.client_project_ids()
+   * in the database, which is where the rule is actually enforced; this copy
+   * exists so the UI never asks for rows it will not get back.
+   */
+  clientProjectIds: string[];
 };
 
 /**
@@ -96,6 +106,10 @@ export const getSessionContext = cache(async function getSessionContext(): Promi
     // is the client. Both defaults describe the world before 0062.
     kind?: ProfileKind;
     client_id?: string | null;
+    // Added by 0072. Optional for the same deploy-window reason as the two
+    // above, and defaulted to [] — a client whose assignments haven't arrived
+    // yet sees an empty portal, never someone else's project.
+    client_project_ids?: string[] | null;
   } | null;
   if (!ctx?.profile) redirect("/login");
 
@@ -138,6 +152,11 @@ export const getSessionContext = cache(async function getSessionContext(): Promi
     showcase: Boolean(profile.showcase_mode) && !isClient,
     kind,
     clientId: isClient ? (ctx.client_id ?? null) : null,
+    // Gated on `isClient` rather than passed through: a member's assignments
+    // are meaningless (they see Work in full), and an array that's non-empty
+    // for a member would make every `clientProjectIds.length` check in the app
+    // read as "this person is a client" when it isn't.
+    clientProjectIds: isClient ? (ctx.client_project_ids ?? []) : [],
   };
 });
 
@@ -232,22 +251,55 @@ export async function requireSection(section: Section): Promise<SessionContext> 
  * Page guard for the client portal — the mirror of requireSection, and the only
  * door into the `(client)` route group.
  *
- * Returns a narrowed context whose `clientId` is a plain string, so every query
- * behind this guard can filter on the tenant without a null check that would
- * otherwise be tempting to write as `?? ""` (which matches nothing) or skip
- * entirely (which matches everything).
- *
- * A client whose `client_users` row is missing has no tenant and therefore no
- * portal; they land on /login rather than an empty shell, because a signed-in
- * account with nothing to show is a provisioning bug, not a user state.
+ * A client with NO assignments is deliberately let through. 0062's version sent
+ * them to /login on the grounds that an account with nothing to show is a
+ * provisioning bug — true, but the person it punishes is the client, who is
+ * handed a login that appears not to work. The portal says "nothing's been
+ * shared with you yet" instead, which is the same fact stated to the right
+ * audience.
  */
-export async function requireClient(): Promise<
-  SessionContext & { clientId: string }
-> {
+export async function requireClient(): Promise<SessionContext> {
   const ctx = await getSessionContext();
   if (!isClient(ctx)) redirect("/");
-  if (!ctx.clientId) redirect("/login");
-  return ctx as SessionContext & { clientId: string };
+  return ctx;
+}
+
+/**
+ * Guard for one project inside the portal, and the single place the tenant
+ * check is written for a route that names a project in its URL.
+ *
+ * The database refuses the rows either way (0072 §4) — a client asking for
+ * another business's pack gets an empty result, not an error. This turns that
+ * empty result into a redirect, so the failure reads as "that isn't yours"
+ * rather than as a pack that mysteriously has no questions in it.
+ */
+export async function requireClientProject(
+  projectId: string
+): Promise<SessionContext> {
+  const ctx = await requireClient();
+  if (!ctx.clientProjectIds.includes(projectId)) redirect("/portal");
+  return ctx;
+}
+
+/**
+ * The mutating-action guard for the client portal: this person is a client, and
+ * this project is one of theirs.
+ *
+ * Deliberately NOT expressed as a variant of blockIfReadOnly — that function's
+ * whole job is section access, which a client can never have. Two guards that
+ * look alike and answer different questions is exactly how the wrong one gets
+ * called.
+ */
+export async function blockIfNotMyProject(
+  projectId: string
+): Promise<{ ok: false; message: string } | null> {
+  const ctx = await getSessionContext();
+  if (!isClient(ctx)) {
+    return { ok: false, message: "That isn't something your account can do." };
+  }
+  return ctx.clientProjectIds.includes(projectId)
+    ? null
+    : { ok: false, message: "That project isn't shared with your account." };
 }
 
 /**

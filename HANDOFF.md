@@ -66,6 +66,80 @@ Contracts w/ PDFs), **Debug** (everyone: per-project boards, self-claim-only, re
 - Chart colors are validated (dataviz skill): income `oklch(0.62 0.13 160)`, expense
   `oklch(0.55 0.16 25)` — L band 0.48–0.67 on dark; re-validate any new chart palette.
 
+## Current status (2026-08-24)
+
+### 🟡 THE CLIENT ROLE, REBUILT AROUND PROJECTS — plus the input pack that gives it a purpose (2026-08-24) — BUILT + STATICALLY VERIFIED (tsc clean · lint clean · build green · check:principals clean · check:demo at the 1 pre-existing flag), **migration 0072 WRITTEN BUT NOT APPLIED**, live-drive PENDING
+
+**The ask:** a third role — Client — alongside admin and section membership. An admin decides who
+is one, a client sees only the projects assigned to them, and each client fills in a panel of
+questions about their own business. The reference was a standalone `touch-padel-input-pack.html`
+Parsa had written for one padel club; the questions were taken from it, the styling was not (it is
+its own dark theme with a teal accent — everything here is the KaguOs system).
+
+**1. The role.** `profiles.kind` already existed (0062) and had been left as a seam when 0068 tore
+the marketing approval portal out. This reopens it against a different tenant: **a Work project**,
+not a marketing `clients` row. `client_projects (user_id, project_id)` is a SET, not 0062's single
+scalar — a business can have two builds. `private.client_project_ids()` is the new tenant lookup;
+`private.client_id()` deliberately still answers null, because `clients_select` still calls it and
+overloading it would silently re-point that policy at a uuid from another table.
+
+⚠️ **The four gate functions are untouched and still refuse a client** (0062 §4) — that guarantee is
+the whole design and 0072 §7 re-asserts it. What changed is that there is now exactly ONE
+client-writable thing in the database, the three `project_intake_*` tables, and 0068's blanket
+"nothing is client-writable" assertion is replaced by the same query with an explicit allow-list.
+
+⚠️ `projects` SELECT was **not** widened to clients — a policy arm grants every column, and that row
+carries repo_url and internal notes. The portal reads name+id through `my_client_projects()`, a
+security-definer RPC that returns two columns and cannot be talked into a third. 0072 §7(e) fails
+the migration if anyone widens the policy later.
+
+**2. Admin page.** Now lists **both** kinds in two panels (Team / Clients) — the one read of
+`profiles` in the app that isn't `kind = 'member'`, scoped with an explicit `.in()`. Each row's
+Manage panel is role-aware: a Role segmented control at the top, then **sections + admin flag** for
+a member or a **project checklist** for a client. Same shape, different question — which is exactly
+the difference between the two roles. `setUserRole` is deliberately destructive both ways (→client
+drops every section; →member drops every project assignment), because a dormant grant that comes
+back when someone flips the switch is not what "make them a client" means. `updateAccess` refuses a
+client outright. Create-user does both kinds.
+
+**3. The input pack** (`lib/intake.ts` + `project_intake{,_answers,_rows}`). The QUESTIONS live in
+TypeScript, the ANSWERS in the database — a schema migration per reworded hint would be absurd, and
+both sides of the app have to share one completion arithmetic or they disagree by one. Nine
+sections, two card kinds (a grid of fields, or a repeating table), `showWhen` for conditional
+follow-ups, `required` for the meter, `flag` for "answered, but someone should know". Every
+padel-specific question was generalised: courts → "anything booked by time", menu → "products and
+services", recipes → "what goes into what". Optional cards are excluded from BOTH sides of the
+progress fraction, so a business with no bookable rooms can still reach 100%.
+
+**4. Two surfaces.** `(client)/` is a **separate route group with its own shell** — one top bar, no
+sidebar, no presence, no palette, no bell. Not a variant of `(app)/layout.tsx` with conditionals:
+that file is a long list of things a client must never touch, and the ninth addition to it would be
+the leak. `/portal` (index, redirects straight through when there's exactly one project) ·
+`/portal/project/[id]` (the pack) · `/portal/account` (name + password only). On the team side,
+`/work/projects/[id]/intake` renders the same pack as a read-only DOCUMENT, missing answers first,
+with LiveRefresh so a producer watching sees the client type. The project page gained a panel with
+the meter.
+
+**5. Saving.** On blur, not behind a Save button. The pack it replaces autosaved to browser storage
+and produced a zip to email back — every failure mode of that is a lost afternoon. Here a
+half-finished pack is already useful to Kagu. `IntakeForm` seeds its state from props ONCE and never
+re-adopts them: every save revalidates the route, so adopting would let a save in one field clobber
+what was being typed in another. Adding a table line is the one write that can't be optimistic (the
+row needs a real id before a cell can be saved against it) and awaits the insert.
+
+**⚠️ MIGRATION 0072 IS NOT APPLIED.** Until it runs: /admin throws (selects `client_projects`), the
+project page throws, /portal throws. Same push path as 0068–0070. Note it also **grants table
+privileges explicitly**, unlike every earlier migration — `auto_expose_new_tables` is unset in
+config.toml and that now means *not* auto-exposed, and a table PostgREST can't reach 403s in a way
+indistinguishable from a broken account.
+
+**Not driven by a human yet.** The checks that matter: make someone a client in /admin (their
+sections should vanish), tick a project, sign in as them → they land on the pack and can reach
+nothing else; type an answer, watch the meter move, reload and it's still there; a second client
+account on a DIFFERENT project must 404/redirect out of the first one's `/portal/project/<id>`;
+press Send → an admin's bell rings and `/work/projects/<id>/intake` says "sent"; flip them back to
+member and confirm the project assignments are gone.
+
 ## Current status (2026-08-21)
 
 ### 🟡 MARKETING SECTION REBUILT — AGENCY DASHBOARD, PRODUCTION MACHINERY DELETED (2026-08-21) — BUILT + STATICALLY VERIFIED (tsc clean · lint at the 2 known errors + 1 pre-existing check:demo flag, see below · build green), **migrations 0068–0070 WRITTEN BUT NOT APPLIED — Supabase CLI auth is broken (401)**, live-drive PENDING
@@ -1368,6 +1442,24 @@ volume. They're insurance, not a speedup.
   (Next redacts the real message in production).
 - `src/lib/data/session.ts` — cached session context + `requireSection`/`requireAdmin` guards.
   ⚠️ Deliberately does NOT throw on a failed read — that means signed out, and it redirects.
+  ⚠️ Also the client-principal seam: `isClient`, `requireClient`, `requireClientProject`,
+  `blockIfNotMyProject`, and the `if (isClient(ctx)) return false` bars inside canAccess/canWrite.
+  `scripts/check-principals.ts` fails the build if any of those names disappears — remove one and
+  every call site in the app silently reopens to outsiders.
+- `src/lib/intake.ts` — the client input pack's QUESTIONS (0072). Nine sections of cards; a card is
+  either a grid of fields or a repeating table. Also owns `buildChecks`/`progressOf`, which is the
+  single definition of "is this pack done" that the client's meter, the client's checklist and the
+  team's review screen all read. ⚠️ NEVER change an existing `key` — it is the storage key, and
+  renaming one orphans every answer already given under the old name. Adding a question is a line.
+- `src/lib/data/intake.ts` — `getIntakePack` (one wave, both audiences) and `getIntakeSummaries`
+  (many projects, one wave — the portal index and the project panel would otherwise pay a
+  round-trip per project). `getMyClientProjects` goes through the `my_client_projects()` RPC, never
+  `projects`, so repo urls and internal notes stay on the member side.
+- `src/components/portal/intake-form.tsx` — the client's form. One big client component on purpose
+  (conditional questions and the meter both have to be immediate); saves on blur; seeds state from
+  props ONCE. `src/components/work/intake-review.tsx` is the read-only counterpart, deliberately
+  NOT the same component with a flag — a page of greyed-out empty inputs reads as broken when what
+  it means is "they haven't got to section 5 yet".
 - `src/lib/actions/*.ts` — server actions per section (account, admin, debug, work, learn,
   management, marketing).
 - `src/lib/{types,options,colors,finance,utils}.ts` — domain types, dropdown vocabularies,

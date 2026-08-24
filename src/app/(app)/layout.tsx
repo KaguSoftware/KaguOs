@@ -8,6 +8,7 @@ import {
   canWrite,
   getSessionContext,
   getUserId,
+  homeFor,
   isClient,
 } from "@/lib/data/session";
 import { getMembersMap } from "@/lib/data/members";
@@ -72,10 +73,12 @@ export default async function AppLayout({
   // rows, and getMembersMap is filtered to members (0062). Neither leaks. It is
   // placed here rather than higher because `ctx` is what decides, and ctx
   // arrives with that wave.
-  // Client login accounts were retired with the portal (0068, second pass).
-  // No such account should exist any more; if one somehow signs in, there is
-  // no surface for it — send it back to the door rather than 404ing.
-  if (isClient(ctx)) redirect("/login");
+  // A client account has its own shell — see app/(client)/layout.tsx. Sending
+  // them to /login instead (which is what stood here while the portal was
+  // retired) is a redirect LOOP now that clients are real again: the proxy
+  // bounces any signed-in visitor off /login back to /, and / lands here.
+  // homeFor() is the one place that answers "where does this person start".
+  if (isClient(ctx)) redirect(homeFor(ctx));
 
   // Presence for the always-open sidebar panel + the mobile menu's live tile
   // counts. Both need ctx (access/showcase gating), both are cache()-deduped,

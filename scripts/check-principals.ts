@@ -27,13 +27,19 @@ import { join } from "node:path";
  *  - by primary key (`.eq("id", …)`) — one named row, reached deliberately;
  *  - your own row (`auth.uid()` / `userId`) — always yours to read;
  *  - writes;
- *  - a read scoped to `client_users`, which is the one place a client account
- *    is the point (the Access tab lists exactly them).
+ *  - a read joined to `client_projects`, which is the one place a client
+ *    account is the point: that table can only hold client rows (0072 §2), so
+ *    a join through it is already scoped by construction.
+ *
+ * `client_users` was 0062's version of that last one. 0068 dropped the table
+ * and 0072 replaced it with `client_projects`; the old name stays out of this
+ * list deliberately, because an exemption for a table that no longer exists is
+ * an exemption that can only ever be claimed by mistake.
  */
 const SAFE = [
   /\.eq\(\s*["']id["']/,
   /\.(insert|update|delete|upsert)\(/,
-  /client_users/,
+  /client_projects/,
 ];
 
 function walk(dir: string, out: string[] = []): string[] {
@@ -93,6 +99,11 @@ const required: [string, string][] = [
   ["isClient", "the client predicate"],
   ["requireClient", "the portal guard"],
   ["if (isClient(ctx)) return false", "the client bar in canAccess/canWrite"],
+  // 0072. Without this, every route and action in the portal is scoped by a
+  // project id that arrived in the URL from the person it is supposed to be
+  // checking — the one bug that would let a client read another client's pack.
+  ["requireClientProject", "the portal's per-project tenant guard"],
+  ["blockIfNotMyProject", "the tenant guard for the portal's write actions"],
 ];
 for (const [needle, what] of required) {
   if (!session.includes(needle)) {
