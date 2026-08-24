@@ -66,6 +66,32 @@ Contracts w/ PDFs), **Debug** (everyone: per-project boards, self-claim-only, re
 - Chart colors are validated (dataviz skill): income `oklch(0.62 0.13 160)`, expense
   `oklch(0.55 0.16 25)` — L band 0.48–0.67 on dark; re-validate any new chart palette.
 
+## Current status (2026-08-24, latest)
+
+### 🔴→🟢 FIXED: `/work/projects/[id]/intake` threw for everyone (PGRST201)
+
+**Symptom:** the section error boundary ("This section didn't load"), digest
+`1356367668`, on the intake page. 0072 and 0073 were already applied — the cause
+was application code.
+
+**Cause:** `client_projects` has TWO foreign keys into `profiles` — `user_id`
+(whose access the row grants) and `created_by` (which admin granted it). The
+page embedded the holder with a bare `profiles!inner(…)`, PostgREST could not
+tell which relationship was meant, and refused the whole request with
+`PGRST201: Could not embed because more than one relationship was found`.
+`rowsOrThrow` did its job and threw.
+
+**Fix:** name the relationship —
+`profiles!client_projects_user_id_fkey!inner(…)`. One line, in
+`(app)/work/projects/[id]/intake/page.tsx`.
+
+⚠️ **The lesson, for the next person:** this typechecks, lints and builds. It is
+invisible to every static check in the repo and fails only when the request is
+actually made. `check:demo` and `check:principals` catch a missing filter, not a
+malformed embed. **Any embed off `client_projects` must name its FK.** More
+generally: after adding a table with two FKs to the same target, run the queries
+before believing the build.
+
 ## Current status (2026-08-24, later)
 
 ### 🟡 INPUT PACKS ARE PER-PROJECT NOW — plus the real Touch Padel questionnaire, EN + AR (2026-08-24) — tsc clean · lint clean · build green, **migration 0073 WRITTEN BUT NOT APPLIED**

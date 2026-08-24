@@ -35,10 +35,20 @@ export default async function ProjectIntakePage({
     // `client_projects` — kind = 'client' by construction, since only a client
     // account can hold a row there (0072 §2), and the filter is stated anyway
     // so the query says what it means without the reader having to know that.
+    //
+    // ⚠️ The relationship is named, not inferred. `client_projects` has TWO
+    // foreign keys into `profiles` — `user_id` (whose access this is) and
+    // `created_by` (which admin granted it) — so a bare `profiles!inner(…)`
+    // is ambiguous and PostgREST refuses the whole request with PGRST201.
+    // That failed at RUNTIME only: it typechecks, it builds, and it renders
+    // the section error boundary in production. Any future embed off this
+    // table has to name its FK the same way.
     rowsOrThrow(
       ctx.supabase
         .from("client_projects")
-        .select("user_id, profiles!inner(full_name, email, kind)")
+        .select(
+          "user_id, profiles!client_projects_user_id_fkey!inner(full_name, email, kind)"
+        )
         .eq("project_id", id)
         .eq("profiles.kind", "client"),
       "client_projects"
