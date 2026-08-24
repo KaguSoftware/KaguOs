@@ -43,3 +43,8 @@ next-env.d.ts
 # local AI tooling (kept out of the repo)
 /.claude/
 .vercel
+
+# screenshots from scripts/shots.mjs — local dev artefacts, and they are
+# captures of a real client's real answers, so they must never be pushed
+/.shots/
+/.impeccable/
