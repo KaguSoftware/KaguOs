@@ -20,15 +20,18 @@ export default async function PortalProjectPage({
   // yours" instead of an input pack that mysteriously has no answers in it.
   const ctx = await requireClientProject(projectId);
 
-  const [projects, pack] = await Promise.all([
-    getMyClientProjects(ctx),
-    getIntakePack(ctx, projectId),
-  ]);
+  // The pack key comes from `my_client_projects()` — a client cannot read
+  // `projects`, which is where the column lives (0072 §2 / 0073). So the project
+  // lookup has to land BEFORE the pack fetch rather than beside it: one extra
+  // round-trip, and the alternative is rendering the wrong questionnaire.
+  const projects = await getMyClientProjects(ctx);
 
   // Guarded above, so this only fires if the project was deleted between the
   // session context being built and this query running.
   const project = projects.find((p) => p.id === projectId);
   if (!project) notFound();
+
+  const pack = await getIntakePack(ctx, projectId, project.intake_pack);
 
   return (
     <>
@@ -50,6 +53,7 @@ export default async function PortalProjectPage({
       <IntakeForm
         projectId={projectId}
         projectName={project.name}
+        pack={pack.pack}
         initialAnswers={pack.answers}
         initialRows={pack.rows}
         initialSubmittedAt={pack.header?.submitted_at ?? null}

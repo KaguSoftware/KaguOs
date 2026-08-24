@@ -229,6 +229,12 @@ export type Project = {
   notes: string | null;
   /** Optional deadline (date only) — surfaced on active projects. */
   due_on: string | null;
+  /**
+   * Which set of questions this project's client is asked (0073) — a key into
+   * INTAKE_PACKS in lib/intake.ts. Null means the general pack; so does an
+   * unrecognised value, since `packFor()` falls back rather than throwing.
+   */
+  intake_pack: string | null;
   created_by: string | null;
   created_at: string;
   updated_at: string;

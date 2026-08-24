@@ -3,9 +3,11 @@ import { rowsOrThrow, selectOrThrow } from "@/lib/data/query";
 import type { SessionContext } from "@/lib/data/session";
 import {
   buildChecks,
+  packFor,
   progressOf,
   type AnswerMap,
   type IntakeCheck,
+  type IntakePackDef,
   type IntakeProgress,
   type IntakeRow,
 } from "@/lib/intake";
@@ -22,6 +24,8 @@ import type { ProjectIntake, ProjectIntakeRow } from "@/lib/types";
  */
 export type IntakePack = {
   projectId: string;
+  /** WHICH questions this project asks — see projects.intake_pack (0073). */
+  pack: IntakePackDef;
   header: ProjectIntake | null;
   answers: AnswerMap;
   rows: IntakeRow[];
@@ -31,7 +35,14 @@ export type IntakePack = {
 
 export async function getIntakePack(
   ctx: SessionContext,
-  projectId: string
+  projectId: string,
+  /**
+   * The project's pack key. Passed in rather than looked up here because every
+   * caller has already read the project (or, in the portal's case, cannot read
+   * `projects` at all and gets the key from `my_client_projects()`) — fetching
+   * it again would be a round-trip for a column already in hand.
+   */
+  packKey: string | null
 ): Promise<IntakePack> {
   const [{ data: header }, answerRows, rawRows] = await Promise.all([
     selectOrThrow(
@@ -78,10 +89,12 @@ export async function getIntakePack(
     sort: row.sort,
   }));
 
-  const checks = buildChecks(answers, rows);
+  const pack = packFor(packKey);
+  const checks = buildChecks(pack, answers, rows);
 
   return {
     projectId,
+    pack,
     header: (header as ProjectIntake | null) ?? null,
     answers,
     rows,
@@ -104,12 +117,16 @@ export type IntakeSummary = {
   submittedAt: string | null;
 };
 
+/** A project as this function needs it: its id, and which questions it asks. */
+export type IntakeTarget = { id: string; packKey: string | null };
+
 export async function getIntakeSummaries(
   ctx: SessionContext,
-  projectIds: string[]
+  targets: IntakeTarget[]
 ): Promise<Map<string, IntakeSummary>> {
   const summaries = new Map<string, IntakeSummary>();
-  if (projectIds.length === 0) return summaries;
+  if (targets.length === 0) return summaries;
+  const projectIds = targets.map((target) => target.id);
 
   const [headers, answerRows, rawRows] = await Promise.all([
     rowsOrThrow(
@@ -163,8 +180,13 @@ export async function getIntakeSummaries(
     rowsByProject.set(row.project_id, list);
   }
 
-  for (const projectId of projectIds) {
+  for (const target of targets) {
+    const projectId = target.id;
+    // Per project, because two projects on the same screen can be running
+    // different packs — and the denominator of the meter is a property of the
+    // pack, not of the answers.
     const checks = buildChecks(
+      packFor(target.packKey),
       answersByProject.get(projectId) ?? {},
       rowsByProject.get(projectId) ?? []
     );
@@ -186,12 +208,19 @@ export async function getIntakeSummaries(
  * urls and internal build notes, an RLS arm is an all-or-nothing grant on every
  * column, and a client needs exactly two of them (0072 §2).
  */
+export type ClientProjectRef = {
+  id: string;
+  name: string;
+  /** Which pack the portal should render. Null = the general one. */
+  intake_pack: string | null;
+};
+
 export async function getMyClientProjects(
   ctx: SessionContext
-): Promise<{ id: string; name: string }[]> {
+): Promise<ClientProjectRef[]> {
   const { data } = await selectOrThrow(
     ctx.supabase.rpc("my_client_projects"),
     "my_client_projects"
   );
-  return (data ?? []) as { id: string; name: string }[];
+  return (data ?? []) as ClientProjectRef[];
 }

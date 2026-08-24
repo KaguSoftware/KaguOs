@@ -21,17 +21,16 @@ export default async function ProjectIntakePage({
   const { id } = await params;
   const ctx = await requireSection("work");
 
-  const [{ data: project }, pack, holders] = await Promise.all([
+  const [{ data: project }, holders] = await Promise.all([
     selectOrThrow(
       ctx.supabase
         .from("projects")
-        .select("id, name, client")
+        .select("id, name, client, intake_pack")
         .eq("id", id)
         .eq("is_demo", ctx.showcase)
         .maybeSingle(),
       "project"
     ),
-    getIntakePack(ctx, id),
     // Who can see this pack. Reading `profiles` scoped to the ids on
     // `client_projects` — kind = 'client' by construction, since only a client
     // account can hold a row there (0072 §2), and the filter is stated anyway
@@ -46,6 +45,11 @@ export default async function ProjectIntakePage({
     ),
   ]);
   if (!project) notFound();
+
+  // Second wave, and unavoidable: which questions this project asks is a column
+  // on the row above, and reading the answers without it would mean scoring
+  // them against the wrong questionnaire.
+  const pack = await getIntakePack(ctx, id, project.intake_pack);
 
   const people = holders.map((row) => {
     const profile = row.profiles as unknown as {

@@ -5,6 +5,7 @@ import { after } from "next/server";
 import { redirect } from "next/navigation";
 import { blockIfReadOnly, requireSection, type SessionContext } from "@/lib/data/session";
 import { notifySection, notifyUser } from "@/lib/actions/notify";
+import { DEFAULT_PACK, INTAKE_PACKS } from "@/lib/intake";
 import type { ActionResult } from "@/lib/actions/account";
 import type { ProjectStatus } from "@/lib/types";
 
@@ -52,7 +53,19 @@ function projectFields(formData: FormData) {
     prod_url: cleanUrl(formData.get("prod_url")),
     notes: String(formData.get("notes") ?? "").trim() || null,
     due_on: String(formData.get("due_on") ?? "").trim() || null,
+    // Which questions this project's client is asked (0073). Validated against
+    // the registry rather than stored raw: the column is free text by design,
+    // but there is no reason to let a hand-crafted POST write a key that
+    // `packFor()` will only ever fall back from.
+    intake_pack: intakePackKey(formData.get("intake_pack")),
   };
+}
+
+/** "" / unknown → null, which reads as the general pack. */
+function intakePackKey(raw: FormDataEntryValue | null): string | null {
+  const key = String(raw ?? "").trim();
+  if (!key || key === DEFAULT_PACK) return null;
+  return key in INTAKE_PACKS ? key : null;
 }
 
 export async function createProject(

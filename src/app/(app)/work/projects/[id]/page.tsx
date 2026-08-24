@@ -40,7 +40,6 @@ export default async function ProjectPage({
     { data: sourceIdea },
     secretRows,
     ideaCountRes,
-    intakeSummaries,
     clientCountRes,
   ] = await Promise.all([
       // Gate the project itself on the demo/real split: in showcase mode a real
@@ -89,9 +88,6 @@ export default async function ProjectPage({
       // else for the reason spelled out above: an extra query inside a wave
       // already in flight costs ~3ms, a second wave costs a round-trip. Skipped
       // entirely in showcase — a demo project has no client and no pack.
-      ctx.showcase
-        ? Promise.resolve(null)
-        : getIntakeSummaries(ctx, [id]),
       selectOrThrow(
         ctx.supabase
           .from("client_projects")
@@ -104,8 +100,23 @@ export default async function ProjectPage({
 
   const secrets = (secretRows ?? []) as ProjectSecret[];
   const ideaCount = ideaCountRes.count ?? 0;
-  const intake = intakeSummaries?.get(id) ?? null;
   const clientCount = clientCountRes.count ?? 0;
+
+  // A SECOND wave, against this file's own one-wave rule, and deliberately.
+  // Which questions this project asks is `intake_pack` on the row above, and
+  // the meter's denominator is a property of the pack — computed against the
+  // wrong one, the panel would quietly disagree with the intake page it links
+  // to. A number that is right one round-trip later beats a number that is
+  // wrong immediately. Skipped in showcase and when nobody can fill it in, so
+  // most project pages never pay for it at all.
+  const intake =
+    ctx.showcase || clientCount === 0
+      ? null
+      : (
+          await getIntakeSummaries(ctx, [
+            { id, packKey: (project as Project).intake_pack },
+          ])
+        ).get(id) ?? null;
 
   return (
     <>

@@ -7,10 +7,12 @@ import {
   DUE_LABELS,
   DUE_ORDER,
   DUE_SHORT,
-  INTAKE_SECTIONS,
   rowTouched,
+  splitMulti,
+  tableKey,
   visibleFields,
   type IntakeCard,
+  type IntakeColumn,
 } from "@/lib/intake";
 import type { IntakePack } from "@/lib/data/intake";
 import { cn } from "@/lib/utils";
@@ -26,27 +28,63 @@ import { cn } from "@/lib/utils";
  * where three quarters of them are empty reads as broken, when what it actually
  * means is "they haven't got to section 5 yet".
  *
- * A producer who needs to change something changes it with the client, not
- * behind their back. (The write path would allow it — `can_write('work')` is an
- * arm of every intake policy in 0072 §4 — so this is a product decision, and
- * the seam is here if it turns out to be the wrong one.)
+ * Arabic is shown WITH the English rather than instead of it. A producer in
+ * Istanbul reading a menu a client typed in Baghdad needs both halves visible:
+ * the Arabic is the deliverable, the English is how they check it.
+ *
+ * A producer who needs something changed changes it with the client, not behind
+ * their back. (The write path would allow it — `can_write('work')` is an arm of
+ * every intake policy in 0072 §4 — so this is a product decision, and the seam
+ * is here if it turns out to be the wrong one.)
  */
 
-const NOT_ANSWERED = (
-  <span className="text-faint">— not answered yet</span>
-);
+const NOT_ANSWERED = <span className="text-faint">— not answered yet</span>;
+
+function Ar({ children, className }: { children?: string; className?: string }) {
+  if (!children) return null;
+  return (
+    <span lang="ar" dir="rtl" className={cn("block text-muted", className)}>
+      {children}
+    </span>
+  );
+}
+
+/** One cell, rendered as the words a human wrote rather than the token stored. */
+function cellText(column: IntakeColumn, raw: string): string {
+  if (!raw) return "";
+  if (column.kind === "choice") {
+    const { label, labelAr } = choiceLabel(column.options, raw);
+    return labelAr ? `${label} · ${labelAr}` : label;
+  }
+  if (column.kind === "multi") {
+    return splitMulti(raw)
+      .map((value) => choiceLabel(column.options, value).label)
+      .join(", ");
+  }
+  return raw;
+}
 
 function CardBlock({ card, pack }: { card: IntakeCard; pack: IntakePack }) {
+  // Prose panels are instructions to the client. Nothing was answered in them,
+  // so reproducing them here would pad the document with text the reader wrote.
+  if (card.kind === "note") return null;
+
+  const heading = (
+    <h4 className="text-[calc(13px*var(--text-scale,1))] font-medium text-ink">
+      {card.title}
+      <Ar className="mt-0.5 font-normal">{card.titleAr}</Ar>
+    </h4>
+  );
+
   if (card.kind === "table") {
+    const key = tableKey(pack.pack.key, card.key);
     const rows = pack.rows
-      .filter((row) => row.table_key === card.key && rowTouched(row))
+      .filter((row) => row.table_key === key && rowTouched(row))
       .sort((a, b) => a.sort - b.sort);
 
     return (
       <div>
-        <h4 className="text-[calc(13px*var(--text-scale,1))] font-medium text-ink">
-          {card.title}
-        </h4>
+        {heading}
         {rows.length === 0 ? (
           <p className="mt-1.5 text-[calc(13px*var(--text-scale,1))]">{NOT_ANSWERED}</p>
         ) : (
@@ -54,16 +92,19 @@ function CardBlock({ card, pack }: { card: IntakeCard; pack: IntakePack }) {
           // are homogeneous and the reason to open this page is to compare them
           // down a column — which a stack of labelled cards makes impossible.
           <div className="mt-2 overflow-x-auto rounded-md border border-line">
-            <table className="w-full min-w-[36rem] border-collapse text-left">
+            <table className="w-full min-w-[42rem] border-collapse text-left">
               <thead>
                 <tr className="border-b border-line bg-raised/40">
                   {card.columns.map((column) => (
                     <th
                       key={column.key}
                       scope="col"
-                      className="whitespace-nowrap px-3 py-2 font-mono text-[calc(10px*var(--text-scale,1))] font-normal uppercase tracking-wider text-faint"
+                      className="whitespace-nowrap px-3 py-2 align-bottom font-mono text-[calc(10px*var(--text-scale,1))] font-normal uppercase tracking-wider text-faint"
                     >
                       {column.label}
+                      <Ar className="mt-0.5 font-sans normal-case tracking-normal">
+                        {column.labelAr}
+                      </Ar>
                     </th>
                   ))}
                 </tr>
@@ -72,17 +113,19 @@ function CardBlock({ card, pack }: { card: IntakeCard; pack: IntakePack }) {
                 {rows.map((row) => (
                   <tr key={row.id} className="border-b border-line/60 last:border-b-0">
                     {card.columns.map((column) => {
-                      const cell = row.data[column.key] ?? "";
+                      const text = cellText(column, row.data[column.key] ?? "");
                       return (
                         <td
                           key={column.key}
+                          lang={column.rtl ? "ar" : undefined}
+                          dir={column.rtl ? "rtl" : undefined}
                           className={cn(
                             "px-3 py-2 align-top text-[calc(13px*var(--text-scale,1))]",
                             column.kind === "number" && "font-mono tabular-nums",
-                            cell ? "text-ink" : "text-faint"
+                            text ? "text-ink" : "text-faint"
                           )}
                         >
-                          {cell || "—"}
+                          {text || "—"}
                         </td>
                       );
                     })}
@@ -96,27 +139,37 @@ function CardBlock({ card, pack }: { card: IntakeCard; pack: IntakePack }) {
     );
   }
 
-  const fields = visibleFields(card, pack.answers);
+  const fields = visibleFields(pack.pack.key, card, pack.answers);
 
   return (
     <div>
-      <h4 className="text-[calc(13px*var(--text-scale,1))] font-medium text-ink">
-        {card.title}
-      </h4>
+      {heading}
       <dl className="mt-2 grid gap-2 sm:grid-cols-2">
         {fields.map((field) => {
-          const raw = pack.answers[answerKey(card.key, field.key)] ?? "";
-          const shown =
-            field.kind === "choice" && raw ? choiceLabel(field, raw) : raw;
+          const raw = pack.answers[answerKey(pack.pack.key, card.key, field.key)] ?? "";
+          let shown = raw;
+          if (raw && field.kind === "choice") {
+            const { label, labelAr } = choiceLabel(field.options, raw);
+            shown = labelAr ? `${label} · ${labelAr}` : label;
+          } else if (raw && field.kind === "multi") {
+            shown = splitMulti(raw)
+              .map((value) => choiceLabel(field.options, value).label)
+              .join(", ");
+          }
           return (
             <div key={field.key} className={field.kind === "long" ? "sm:col-span-2" : undefined}>
               <dt className="font-mono text-[calc(10px*var(--text-scale,1))] uppercase tracking-wider text-faint">
                 {field.label}
+                <Ar className="mt-0.5 font-sans normal-case tracking-normal">
+                  {field.labelAr}
+                </Ar>
               </dt>
               <dd
+                lang={field.rtl ? "ar" : undefined}
+                dir={field.rtl ? "rtl" : undefined}
                 className={cn(
                   "mt-0.5 text-[calc(13px*var(--text-scale,1))]",
-                  shown ? "text-ink" : "",
+                  shown && "text-ink",
                   field.kind === "long" && "whitespace-pre-wrap leading-relaxed"
                 )}
               >
@@ -141,9 +194,7 @@ export function IntakeReview({ pack }: { pack: IntakePack }) {
       <Panel className="p-4 md:p-5">
         <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
           <h2 className="text-sm font-semibold text-ink">Completion</h2>
-          <p className="font-mono text-xs tabular-nums text-faint">
-            {pack.progress.pct}%
-          </p>
+          <p className="font-mono text-xs tabular-nums text-faint">{pack.progress.pct}%</p>
         </div>
         <ProgressMeter
           className="mt-3"
@@ -155,9 +206,7 @@ export function IntakeReview({ pack }: { pack: IntakePack }) {
 
         <div className="mt-5 grid gap-5">
           {DUE_ORDER.map((due) => {
-            const group = pack.checks.filter(
-              (check) => check.due === due && !check.ok
-            );
+            const group = pack.checks.filter((check) => check.due === due && !check.ok);
             if (group.length === 0) return null;
             return (
               <div key={due}>
@@ -174,9 +223,7 @@ export function IntakeReview({ pack }: { pack: IntakePack }) {
                       {check.optional && (
                         <span className="text-faint"> · only if it applies</span>
                       )}
-                      {check.note && (
-                        <span className="text-amber"> · {check.note}</span>
-                      )}
+                      {check.note && <span className="text-amber"> · {check.note}</span>}
                     </li>
                   ))}
                 </ul>
@@ -193,7 +240,7 @@ export function IntakeReview({ pack }: { pack: IntakePack }) {
       </Panel>
 
       {/* ---- The answers, in the order they were asked. */}
-      {INTAKE_SECTIONS.map((section) => (
+      {pack.pack.sections.map((section) => (
         <section key={section.key}>
           <header className="mb-3 flex flex-wrap items-baseline gap-x-3 border-b border-line pb-2.5">
             <span className="font-mono text-xs tracking-wider text-primary-dim">
@@ -202,6 +249,11 @@ export function IntakeReview({ pack }: { pack: IntakePack }) {
             <h3 className="text-[calc(16px*var(--text-scale,1))] font-semibold tracking-tight text-ink">
               {section.title}
             </h3>
+            {section.titleAr && (
+              <span lang="ar" dir="rtl" className="text-[calc(13px*var(--text-scale,1))] text-muted">
+                {section.titleAr}
+              </span>
+            )}
             <span className="ml-auto shrink-0 font-mono text-[calc(10px*var(--text-scale,1))] uppercase tracking-wider text-faint">
               {DUE_SHORT[section.due]}
             </span>

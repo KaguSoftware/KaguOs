@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
-import { Check, Loader2, Plus, Send, Trash2, Undo2 } from "lucide-react";
+import { useMemo, useState } from "react";
+import { Check, Loader2, Plus, Send, Trash2, TriangleAlert, Undo2 } from "lucide-react";
 import {
   addIntakeRow,
   deleteIntakeRow,
@@ -20,15 +20,20 @@ import {
   answerKey,
   buildChecks,
   DUE_LABELS,
+  DUE_LABELS_AR,
   DUE_ORDER,
   DUE_SHORT,
-  INTAKE_SECTIONS,
+  joinMulti,
   progressOf,
+  splitMulti,
+  tableKey,
   visibleFields,
   type AnswerMap,
   type IntakeCard,
+  type IntakeChoice,
   type IntakeColumn,
   type IntakeField,
+  type IntakePackDef,
   type IntakeRow,
 } from "@/lib/intake";
 import { cn, formatRelative } from "@/lib/utils";
@@ -39,26 +44,35 @@ import { cn, formatRelative } from "@/lib/utils";
  * ── Why this is one big client component ────────────────────────────────────
  *
  * Two things force it. Conditional questions ("what's the rate per group?"
- * appears the instant you say some items carry tax) have to be immediate, and
- * the completion meter has to move as you answer — a form that told you your
- * progress one server round-trip late would feel broken on the hotel wifi this
- * will actually be filled in on. So the answers live here and the server is
- * written to, not read from, while the pack is open.
+ * appears the instant you say some items carry tax; a day's opening times
+ * disappear the instant you mark it closed) have to be immediate, and the
+ * completion meter has to move as you answer — a form that reported progress
+ * one server round-trip late would feel broken on the hotel wifi this will
+ * actually be filled in on. So the answers live here, and the server is written
+ * to rather than read from while the pack is open.
  *
- * Local state is seeded from the props ONCE and never re-adopts them. That is
- * deliberate: every save revalidates the route, so adopting fresh props would
- * mean a save in one field could overwrite what someone had just typed in
- * another. React preserves this component's state across those re-renders, so
- * seeding once is both simpler and more correct.
+ * Local state is seeded from the props ONCE and never re-adopts them. Every
+ * save revalidates the route, so adopting fresh props would let a save in one
+ * field overwrite what was being typed in another. React preserves this
+ * component's state across those re-renders, so seeding once is both simpler
+ * and more correct.
  *
  * ── Why it saves on blur rather than behind a Save button ───────────────────
  *
- * The pack it replaces was an HTML file that autosaved into the browser's own
- * storage and produced a zip to email back. Every failure mode of that design
- * is a lost afternoon: a cleared cache, a second device, a phone that closed
- * the tab. Here an answer is in the database the moment it leaves the field,
- * where the team can already see it — which also means a half-finished pack is
- * useful to Kagu, instead of being invisible until it's done.
+ * The form it replaces was an HTML file that autosaved into the browser's own
+ * storage and produced a zip to email back. Every failure mode of that is a
+ * lost afternoon: a cleared cache, a second device, a tab that closed. Here an
+ * answer is in the database the moment it leaves the field, where the team can
+ * already see it — so a half-finished pack is useful to Kagu instead of being
+ * invisible until it's done.
+ *
+ * ── English and Arabic ──────────────────────────────────────────────────────
+ *
+ * Both, at once, everywhere the pack supplies both. Not a language toggle: the
+ * person filling this in and the person reading the answers don't share a first
+ * language, and a switch would mean one of them is always looking at the wrong
+ * page. Arabic renders in its own line under the English, marked `lang="ar"`
+ * and `dir="rtl"` so it shapes and orders correctly.
  */
 
 const SPAN: Record<number, string> = {
@@ -80,38 +94,59 @@ function span(n: number | undefined, fallback = 12) {
   return SPAN[n ?? fallback] ?? SPAN[fallback];
 }
 
+/** The Arabic half of anything — its own line, right-to-left, quieter. */
+function Ar({ children, className }: { children?: string; className?: string }) {
+  if (!children) return null;
+  return (
+    <span
+      lang="ar"
+      dir="rtl"
+      className={cn("block text-muted", className)}
+    >
+      {children}
+    </span>
+  );
+}
+
 const LABEL_CLASSES =
-  "mb-1.5 flex items-baseline gap-1.5 font-mono text-[calc(10px*var(--text-scale,1))] uppercase tracking-wider text-faint";
+  "mb-1.5 block font-mono text-[calc(10px*var(--text-scale,1))] uppercase tracking-wider text-faint";
 
 /**
- * The label above every control — quiet, uppercase, out of the way of the answer.
+ * The label above every control.
  *
- * Renders a real `<label htmlFor>` for a real control, and a plain `<span id>`
+ * Renders a real `<label htmlFor>` for a real control and a plain `<span id>`
  * for the chip groups, which have no single element to point at. A `<label>`
  * wrapping nothing is worse than no label: a screen reader announces it as a
  * form control that cannot be operated.
  */
 function ControlLabel({
-  children,
+  en,
+  ar,
   htmlFor,
   id,
   required,
 }: {
-  children: React.ReactNode;
-  /** The input this labels. Omit (and pass `id`) for a chip group. */
+  en: string;
+  ar?: string;
   htmlFor?: string;
-  /** Set instead of `htmlFor` — the group points back at this with aria-labelledby. */
   id?: string;
   required?: boolean;
 }) {
   const inner = (
     <>
-      {children}
-      {required && (
-        <span className="text-primary-dim" aria-label="required">
-          *
-        </span>
-      )}
+      <span>
+        {en}
+        {required && (
+          <span className="ml-1 text-primary-dim" aria-label="required">
+            *
+          </span>
+        )}
+      </span>
+      {/* Arabic labels keep the mono/uppercase treatment off — neither does
+          anything useful to Arabic script. */}
+      <Ar className="mt-0.5 font-sans text-[calc(11px*var(--text-scale,1))] normal-case tracking-normal">
+        {ar}
+      </Ar>
     </>
   );
   return htmlFor ? (
@@ -125,53 +160,119 @@ function ControlLabel({
   );
 }
 
+/** One chip. Shared by the one-of-N and many-of-N groups so they can't drift. */
+function Chip({
+  option,
+  active,
+  onClick,
+  disabled,
+}: {
+  option: IntakeChoice;
+  active: boolean;
+  onClick: () => void;
+  disabled?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      aria-pressed={active}
+      disabled={disabled}
+      onClick={onClick}
+      className={cn(
+        "rounded-full border px-3 py-1.5 text-[calc(13px*var(--text-scale,1))]",
+        "transition-[color,background-color,border-color,transform] duration-150 ease-mac active:scale-[0.98]",
+        "disabled:pointer-events-none disabled:opacity-50",
+        active
+          ? "border-primary bg-primary font-medium text-primary-ink"
+          : "border-line-strong bg-raised text-muted hover:border-faint hover:text-ink"
+      )}
+    >
+      {option.label}
+      {option.labelAr && (
+        <span
+          lang="ar"
+          dir="rtl"
+          className={cn("ms-2", active ? "opacity-70" : "opacity-80")}
+        >
+          {option.labelAr}
+        </span>
+      )}
+    </button>
+  );
+}
+
 /**
  * A one-of-N answer as chips.
  *
  * Not a dropdown: these questions have two to five answers, all of which are
  * worth reading before deciding, and a dropdown hides four of them behind a
- * click. Not a radio list either — the chips fit on one line and read as a
- * decision rather than a form.
- *
- * Re-clicking the chosen chip does NOT clear it. Every one of these questions
- * has a real answer, so "no answer" is never a state worth one accidental tap.
+ * click. Re-clicking the chosen chip does NOT clear it — every one of these
+ * questions has a real answer, so "no answer" is never a state worth one
+ * accidental tap.
  */
 function ChoiceChips({
   options,
   value,
   onPick,
   labelledBy,
-  disabled,
 }: {
-  options: { value: string; label: string }[];
+  options: IntakeChoice[];
   value: string;
   onPick: (value: string) => void;
-  /** Id of the span above — the group has no control of its own to be labelled by. */
   labelledBy: string;
-  disabled?: boolean;
 }) {
   return (
     <div role="group" aria-labelledby={labelledBy} className="flex flex-wrap gap-2">
+      {options.map((option) => (
+        <Chip
+          key={option.value}
+          option={option}
+          active={value === option.value}
+          onClick={() => onPick(option.value)}
+        />
+      ))}
+    </div>
+  );
+}
+
+/**
+ * A many-of-N answer as chips — allergens, the days a price rule covers.
+ *
+ * Toggling IS the interaction here, so unlike the single-pick group a second
+ * click removes. Stored as one comma-joined string, which is what the original
+ * form's export produced and what a human reading the row expects to see.
+ */
+function MultiChips({
+  options,
+  value,
+  onChange,
+  labelledBy,
+}: {
+  options: IntakeChoice[];
+  value: string;
+  onChange: (value: string) => void;
+  labelledBy: string;
+}) {
+  const picked = splitMulti(value);
+  return (
+    <div role="group" aria-labelledby={labelledBy} className="flex flex-wrap gap-2">
       {options.map((option) => {
-        const active = value === option.value;
+        const active = picked.includes(option.value);
         return (
-          <button
+          <Chip
             key={option.value}
-            type="button"
-            aria-pressed={active}
-            disabled={disabled}
-            onClick={() => onPick(option.value)}
-            className={cn(
-              "rounded-full border px-3 py-1.5 text-[calc(13px*var(--text-scale,1))]",
-              "transition-[color,background-color,border-color,transform] duration-150 ease-mac active:scale-[0.98]",
-              "disabled:pointer-events-none disabled:opacity-50",
-              active
-                ? "border-primary bg-primary font-medium text-primary-ink"
-                : "border-line-strong bg-raised text-muted hover:border-faint hover:text-ink"
-            )}
-          >
-            {option.label}
-          </button>
+            option={option}
+            active={active}
+            onClick={() =>
+              onChange(
+                joinMulti(
+                  active
+                    ? picked.filter((v) => v !== option.value)
+                    : [...picked, option.value]
+                )
+              )
+            }
+          />
         );
       })}
     </div>
@@ -179,21 +280,11 @@ function ChoiceChips({
 }
 
 /** Two-step delete for one line of a table — quiet enough to sit on every row. */
-function RemoveLine({
-  onConfirm,
-  label,
-  disabled,
-}: {
-  onConfirm: () => void;
-  /** Which line this removes — "Remove" alone is ambiguous on a list of twenty. */
-  label: string;
-  disabled?: boolean;
-}) {
+function RemoveLine({ onConfirm, label }: { onConfirm: () => void; label: string }) {
   const [armed, setArmed] = useState(false);
   return (
     <button
       type="button"
-      disabled={disabled}
       aria-label={armed ? `Confirm removing ${label}` : `Remove ${label}`}
       onBlur={() => setArmed(false)}
       onClick={() => {
@@ -206,7 +297,7 @@ function RemoveLine({
       }}
       className={cn(
         "inline-flex items-center gap-1 rounded-md px-2 py-1 font-mono text-[calc(10px*var(--text-scale,1))] uppercase tracking-wider",
-        "transition-colors duration-150 disabled:opacity-50",
+        "transition-colors duration-150",
         armed ? "text-danger" : "text-faint hover:text-danger"
       )}
     >
@@ -219,12 +310,15 @@ function RemoveLine({
 export function IntakeForm({
   projectId,
   projectName,
+  pack,
   initialAnswers,
   initialRows,
   initialSubmittedAt,
 }: {
   projectId: string;
   projectName: string;
+  /** WHICH questions this project asks — see projects.intake_pack (0073). */
+  pack: IntakePackDef;
   initialAnswers: AnswerMap;
   initialRows: IntakeRow[];
   initialSubmittedAt: string | null;
@@ -237,34 +331,32 @@ export function IntakeForm({
   // Save button has to answer without being asked.
   const [saveState, setSaveState] = useState<"idle" | "saving" | "saved">("idle");
 
-  const checks = useMemo(() => buildChecks(answers, rows), [answers, rows]);
+  const checks = useMemo(
+    () => buildChecks(pack, answers, rows),
+    [pack, answers, rows]
+  );
   const progress = useMemo(() => progressOf(checks), [checks]);
 
-  const persist = useCallback(
-    (fn: () => Promise<{ ok: boolean; message: string } | null>) => {
-      setSaveState("saving");
-      run(fn, {
-        onSuccess: () => setSaveState("saved"),
-        // The rollback slot doubles as the failure signal: useAction has already
-        // toasted the reason, and leaving the indicator on "Saving…" forever
-        // would be the one lie this control can tell.
-        rollback: () => setSaveState("idle"),
-      });
-    },
-    [run]
-  );
+  function persist(fn: () => Promise<{ ok: boolean; message: string } | null>) {
+    setSaveState("saving");
+    run(fn, {
+      onSuccess: () => setSaveState("saved"),
+      // The rollback slot doubles as the failure signal: useAction has already
+      // toasted the reason, and leaving the indicator on "Saving…" forever
+      // would be the one lie this control can tell.
+      rollback: () => setSaveState("idle"),
+    });
+  }
 
-  function setAnswer(cardKey: string, field: IntakeField, value: string) {
-    const key = answerKey(cardKey, field.key);
+  function setAnswer(cardKey: string, fieldKey: string, value: string) {
+    const key = answerKey(pack.key, cardKey, fieldKey);
     setAnswers((prev) => ({ ...prev, [key]: value }));
     persist(() => saveIntakeAnswer(projectId, key, value));
   }
 
   function setCell(row: IntakeRow, column: IntakeColumn, value: string) {
     const next = { ...row.data, [column.key]: value };
-    setRows((prev) =>
-      prev.map((r) => (r.id === row.id ? { ...r, data: next } : r))
-    );
+    setRows((prev) => prev.map((r) => (r.id === row.id ? { ...r, data: next } : r)));
     persist(() => saveIntakeRow(projectId, row.id, row.table_key, next));
   }
 
@@ -272,14 +364,13 @@ export function IntakeForm({
    * The one write that CANNOT be optimistic. Every cell in a line is saved
    * against that line's id, so the row has to exist in the database before it
    * can exist on screen — inventing a local id would mean the first thing typed
-   * into a new line is written against a row that isn't there. So this awaits
-   * the insert and adopts the id it returns, rather than going through
-   * useAction's optimistic path.
+   * into a new line is written against a row that isn't there.
    */
   async function addLine(card: IntakeCard & { kind: "table" }) {
+    const key = tableKey(pack.key, card.key);
     setSaveState("saving");
     try {
-      const result = await addIntakeRow(projectId, card.key);
+      const result = await addIntakeRow(projectId, key);
       if (!result?.ok || !result.id) {
         setSaveState("idle");
         toast.error(result?.message ?? "Couldn't add that line.");
@@ -287,7 +378,7 @@ export function IntakeForm({
       }
       setRows((prev) => [
         ...prev,
-        { id: result.id!, table_key: card.key, data: {}, sort: prev.length },
+        { id: result.id!, table_key: key, data: {}, sort: prev.length },
       ]);
       setSaveState("saved");
     } catch {
@@ -305,35 +396,41 @@ export function IntakeForm({
       // reshuffles itself because a delete failed is worse than the failure.
       rollback: () => {
         setSaveState("idle");
-        setRows((prev) =>
-          [...prev, row].sort((a, b) => a.sort - b.sort)
-        );
+        setRows((prev) => [...prev, row].sort((a, b) => a.sort - b.sort));
       },
     });
   }
 
-  /* ── one field ─────────────────────────────────────────────────────────── */
+  /* ── one control ───────────────────────────────────────────────────────── */
   function renderField(card: IntakeCard, field: IntakeField) {
-    const key = answerKey(card.key, field.key);
+    const key = answerKey(pack.key, card.key, field.key);
     const value = answers[key] ?? "";
     const id = `f-${card.key}-${field.key}`;
+    const chips = field.kind === "choice" || field.kind === "multi";
 
     return (
       <div key={field.key} className={cn("min-w-0", span(field.span))}>
         <ControlLabel
-          htmlFor={field.kind === "choice" ? undefined : id}
-          id={field.kind === "choice" ? `${id}-label` : undefined}
+          en={field.label}
+          ar={field.labelAr}
+          htmlFor={chips ? undefined : id}
+          id={chips ? `${id}-label` : undefined}
           required={field.required}
-        >
-          {field.label}
-        </ControlLabel>
+        />
 
         {field.kind === "choice" ? (
           <ChoiceChips
             options={field.options ?? []}
             value={value}
             labelledBy={`${id}-label`}
-            onPick={(picked) => setAnswer(card.key, field, picked)}
+            onPick={(picked) => setAnswer(card.key, field.key, picked)}
+          />
+        ) : field.kind === "multi" ? (
+          <MultiChips
+            options={field.options ?? []}
+            value={value}
+            labelledBy={`${id}-label`}
+            onChange={(next) => setAnswer(card.key, field.key, next)}
           />
         ) : field.kind === "long" ? (
           <Textarea
@@ -341,8 +438,11 @@ export function IntakeForm({
             defaultValue={value}
             placeholder={field.placeholder}
             maxLength={8000}
+            lang={field.rtl ? "ar" : undefined}
+            dir={field.rtl ? "rtl" : undefined}
             onBlur={(event) => {
-              if (event.target.value !== value) setAnswer(card.key, field, event.target.value);
+              if (event.target.value !== value)
+                setAnswer(card.key, field.key, event.target.value);
             }}
           />
         ) : field.kind === "date" ? (
@@ -350,7 +450,7 @@ export function IntakeForm({
             name={id}
             id={id}
             defaultValue={value}
-            onChange={(iso) => setAnswer(card.key, field, iso)}
+            onChange={(iso) => setAnswer(card.key, field.key, iso)}
           />
         ) : (
           <Input
@@ -359,17 +459,87 @@ export function IntakeForm({
             defaultValue={value}
             placeholder={field.placeholder}
             maxLength={2000}
-            className={field.kind === "number" ? "font-mono tabular-nums" : undefined}
+            lang={field.rtl ? "ar" : undefined}
+            dir={field.rtl ? "rtl" : undefined}
+            className={cn(
+              field.kind === "number" && "font-mono tabular-nums",
+              field.rtl && "text-right"
+            )}
             onBlur={(event) => {
-              if (event.target.value !== value) setAnswer(card.key, field, event.target.value);
+              if (event.target.value !== value)
+                setAnswer(card.key, field.key, event.target.value);
             }}
           />
         )}
 
-        {field.hint && (
+        {(field.hint || field.hintAr) && (
           <p className="mt-1.5 text-[calc(12px*var(--text-scale,1))] text-faint">
             {field.hint}
+            <Ar className="mt-0.5">{field.hintAr}</Ar>
           </p>
+        )}
+      </div>
+    );
+  }
+
+  function renderCell(row: IntakeRow, column: IntakeColumn) {
+    const id = `c-${row.id}-${column.key}`;
+    const cell = row.data[column.key] ?? "";
+    const chips = column.kind === "choice" || column.kind === "multi";
+
+    return (
+      <div key={column.key} className={cn("min-w-0", span(column.span))}>
+        <ControlLabel
+          en={column.label}
+          ar={column.labelAr}
+          htmlFor={chips ? undefined : id}
+          id={chips ? `${id}-label` : undefined}
+          required={column.required}
+        />
+        {column.kind === "choice" ? (
+          <ChoiceChips
+            options={column.options ?? []}
+            value={cell}
+            labelledBy={`${id}-label`}
+            onPick={(picked) => setCell(row, column, picked)}
+          />
+        ) : column.kind === "multi" ? (
+          <MultiChips
+            options={column.options ?? []}
+            value={cell}
+            labelledBy={`${id}-label`}
+            onChange={(next) => setCell(row, column, next)}
+          />
+        ) : column.kind === "long" ? (
+          <Textarea
+            id={id}
+            defaultValue={cell}
+            placeholder={column.placeholder}
+            maxLength={2000}
+            lang={column.rtl ? "ar" : undefined}
+            dir={column.rtl ? "rtl" : undefined}
+            onBlur={(event) => {
+              if (event.target.value !== cell) setCell(row, column, event.target.value);
+            }}
+          />
+        ) : (
+          <Input
+            id={id}
+            inputMode={column.kind === "number" ? "decimal" : undefined}
+            defaultValue={cell}
+            placeholder={column.placeholder}
+            maxLength={2000}
+            lang={column.rtl ? "ar" : undefined}
+            dir={column.rtl ? "rtl" : undefined}
+            className={cn(
+              "h-8",
+              column.kind === "number" && "font-mono tabular-nums",
+              column.rtl && "text-right"
+            )}
+            onBlur={(event) => {
+              if (event.target.value !== cell) setCell(row, column, event.target.value);
+            }}
+          />
         )}
       </div>
     );
@@ -377,21 +547,56 @@ export function IntakeForm({
 
   /* ── one card ──────────────────────────────────────────────────────────── */
   function renderCard(card: IntakeCard) {
-    const mine =
-      card.kind === "table" ? rows.filter((row) => row.table_key === card.key) : [];
+    // A prose panel — the "this is the biggest risk of the phase" warning the
+    // recipes section opens with. Carries its own edge colour because the whole
+    // point of it is that it is not another question.
+    if (card.kind === "note") {
+      return (
+        <Panel
+          key={card.key}
+          className={cn(
+            "p-4 md:p-5",
+            card.tone === "warning" && "border-amber/40 bg-amber/5"
+          )}
+        >
+          <h3 className="flex items-start gap-2 text-sm font-semibold text-ink">
+            {card.tone === "warning" && (
+              <TriangleAlert className="mt-0.5 size-4 shrink-0 text-amber" aria-hidden />
+            )}
+            <span className="min-w-0">
+              {card.title}
+              <Ar className="mt-1 font-normal">{card.titleAr}</Ar>
+            </span>
+          </h3>
+          {(card.hint || card.hintAr) && (
+            <p className="mt-2.5 max-w-[70ch] text-[calc(13px*var(--text-scale,1))] leading-relaxed text-muted">
+              {card.hint}
+              <Ar className="mt-1.5">{card.hintAr}</Ar>
+            </p>
+          )}
+        </Panel>
+      );
+    }
+
+    const key = card.kind === "table" ? tableKey(pack.key, card.key) : "";
+    const mine = card.kind === "table" ? rows.filter((r) => r.table_key === key) : [];
 
     return (
       <Panel key={card.key} className="p-4 md:p-5">
-        <h3 className="text-sm font-semibold text-ink">{card.title}</h3>
-        {card.hint && (
-          <p className="mt-1.5 max-w-[70ch] text-[calc(13px*var(--text-scale,1))] leading-relaxed text-muted">
+        <h3 className="text-sm font-semibold text-ink">
+          {card.title}
+          <Ar className="mt-0.5 font-normal">{card.titleAr}</Ar>
+        </h3>
+        {(card.hint || card.hintAr) && (
+          <p className="mt-2 max-w-[70ch] text-[calc(13px*var(--text-scale,1))] leading-relaxed text-muted">
             {card.hint}
+            <Ar className="mt-1.5">{card.hintAr}</Ar>
           </p>
         )}
 
         {card.kind === "fields" ? (
           <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-12">
-            {visibleFields(card, answers).map((field) => renderField(card, field))}
+            {visibleFields(pack.key, card, answers).map((field) => renderField(card, field))}
           </div>
         ) : (
           <div className="mt-4">
@@ -402,10 +607,7 @@ export function IntakeForm({
             ) : (
               <ul className="grid gap-2.5">
                 {mine.map((row, index) => (
-                  <li
-                    key={row.id}
-                    className="rounded-md border border-line bg-raised/25 p-3"
-                  >
+                  <li key={row.id} className="rounded-md border border-line bg-raised/25 p-3">
                     <div className="mb-2 flex items-center justify-between gap-3">
                       <span className="font-mono text-[calc(10px*var(--text-scale,1))] tracking-wider text-faint">
                         {String(index + 1).padStart(2, "0")}
@@ -416,45 +618,7 @@ export function IntakeForm({
                       />
                     </div>
                     <div className="grid grid-cols-1 gap-3 sm:grid-cols-12">
-                      {card.columns.map((column) => {
-                        const id = `c-${row.id}-${column.key}`;
-                        const cell = row.data[column.key] ?? "";
-                        return (
-                          <div key={column.key} className={cn("min-w-0", span(column.span))}>
-                            <ControlLabel htmlFor={id} required={column.required}>
-                              {column.label}
-                            </ControlLabel>
-                            {column.kind === "long" ? (
-                              <Textarea
-                                id={id}
-                                defaultValue={cell}
-                                placeholder={column.placeholder}
-                                maxLength={2000}
-                                onBlur={(event) => {
-                                  if (event.target.value !== cell)
-                                    setCell(row, column, event.target.value);
-                                }}
-                              />
-                            ) : (
-                              <Input
-                                id={id}
-                                inputMode={column.kind === "number" ? "decimal" : undefined}
-                                defaultValue={cell}
-                                placeholder={column.placeholder}
-                                maxLength={2000}
-                                className={cn(
-                                  "h-8",
-                                  column.kind === "number" && "font-mono tabular-nums"
-                                )}
-                                onBlur={(event) => {
-                                  if (event.target.value !== cell)
-                                    setCell(row, column, event.target.value);
-                                }}
-                              />
-                            )}
-                          </div>
-                        );
-                      })}
+                      {card.columns.map((column) => renderCell(row, column))}
                     </div>
                   </li>
                 ))}
@@ -468,11 +632,16 @@ export function IntakeForm({
                 "mt-3 flex w-full items-center justify-center gap-1.5 rounded-md border border-dashed border-line-strong px-3 py-2.5",
                 "text-[calc(13px*var(--text-scale,1))] text-primary-dim",
                 "transition-[color,background-color,border-color] duration-150",
-                "hover:border-primary hover:bg-primary/5 disabled:opacity-50"
+                "hover:border-primary hover:bg-primary/5"
               )}
             >
               <Plus className="size-3.5" aria-hidden />
               {card.addLabel}
+              {card.addLabelAr && (
+                <span lang="ar" dir="rtl" className="opacity-80">
+                  {card.addLabelAr}
+                </span>
+              )}
             </button>
           </div>
         )}
@@ -483,8 +652,7 @@ export function IntakeForm({
   /* ── the page ──────────────────────────────────────────────────────────── */
   return (
     <div className="grid gap-10">
-      {/* ---- Where you are. Answers-so-far, then what's still open, then the
-          one line that says whether anything is unsaved. */}
+      {/* ---- Where you are. */}
       <div className="rounded-lg border border-line bg-surface p-4 md:p-5">
         <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
           <p className="text-sm font-medium text-ink">{projectName}</p>
@@ -507,14 +675,20 @@ export function IntakeForm({
                   {progress.week1Total - progress.week1Done} left
                 </span>{" "}
                 in the answers that unlock the build
+                <Ar className="mt-0.5">
+                  {`بقي ${progress.week1Total - progress.week1Done} من الإجابات التي تفتح البناء`}
+                </Ar>
               </>
             ) : (
               <span className="text-primary-dim">
                 Everything the build needs to start is answered
+                <Ar className="mt-0.5 text-primary-dim">
+                  كل ما يحتاجه البناء للانطلاق مُجاب
+                </Ar>
               </span>
             )}
           </p>
-          <p className="ml-auto flex items-center gap-1.5 font-mono text-[calc(11px*var(--text-scale,1))] text-faint">
+          <p className="ml-auto flex items-center gap-1.5 self-start font-mono text-[calc(11px*var(--text-scale,1))] text-faint">
             {saveState === "saving" ? (
               <>
                 <Loader2 className="size-3 animate-spin" aria-hidden />
@@ -532,12 +706,13 @@ export function IntakeForm({
         </div>
       </div>
 
-      {/* ---- Jump list. The pack is long by nature, and a client filling in
+      {/* ---- Jump list. The pack is long by nature, and someone filling in
           section 06 on a Tuesday needs to land on section 06. */}
       <nav aria-label="Sections" className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-        {INTAKE_SECTIONS.map((section) => {
-          const sectionChecks = checks.filter((c) => c.sectionKey === section.key);
-          const counted = sectionChecks.filter((c) => !c.optional);
+        {pack.sections.map((section) => {
+          const counted = checks.filter(
+            (c) => c.sectionKey === section.key && !c.optional
+          );
           const done = counted.filter((c) => c.ok).length;
           const finished = counted.length > 0 && done === counted.length;
           return (
@@ -547,8 +722,13 @@ export function IntakeForm({
               className="flex items-baseline gap-2.5 rounded-md border border-line bg-surface px-3 py-2.5 transition-colors duration-150 hover:border-line-strong hover:bg-raised/30"
             >
               <span className="font-mono text-xs text-primary-dim">{section.num}</span>
-              <span className="min-w-0 flex-1 truncate text-[calc(13px*var(--text-scale,1))] text-ink">
-                {section.title}
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-[calc(13px*var(--text-scale,1))] text-ink">
+                  {section.title}
+                </span>
+                <Ar className="truncate text-[calc(12px*var(--text-scale,1))]">
+                  {section.titleAr}
+                </Ar>
               </span>
               <span
                 className={cn(
@@ -564,7 +744,7 @@ export function IntakeForm({
       </nav>
 
       {/* ---- The pack itself. */}
-      {INTAKE_SECTIONS.map((section) => (
+      {pack.sections.map((section) => (
         <section key={section.key} id={`s-${section.key}`} className="scroll-mt-20">
           <header className="mb-4 border-b border-line pb-3">
             <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
@@ -574,13 +754,23 @@ export function IntakeForm({
               <h2 className="text-[calc(18px*var(--text-scale,1))] font-semibold tracking-tight text-ink">
                 {section.title}
               </h2>
+              {section.titleAr && (
+                <span
+                  lang="ar"
+                  dir="rtl"
+                  className="text-[calc(15px*var(--text-scale,1))] text-muted"
+                >
+                  {section.titleAr}
+                </span>
+              )}
               <span className="ml-auto shrink-0 rounded-full border border-line px-2 py-px font-mono text-[calc(10px*var(--text-scale,1))] uppercase tracking-wider text-faint">
                 {DUE_SHORT[section.due]}
               </span>
             </div>
-            {section.blurb && (
+            {(section.blurb || section.blurbAr) && (
               <p className="mt-2 max-w-[70ch] text-[calc(13px*var(--text-scale,1))] leading-relaxed text-muted">
                 {section.blurb}
+                <Ar className="mt-1.5">{section.blurbAr}</Ar>
               </p>
             )}
           </header>
@@ -592,16 +782,23 @@ export function IntakeForm({
       <section id="s-send" className="scroll-mt-20">
         <header className="mb-4 border-b border-line pb-3">
           <div className="flex flex-wrap items-baseline gap-x-3">
-            <span className="font-mono text-xs tracking-wider text-primary-dim">10</span>
             <h2 className="text-[calc(18px*var(--text-scale,1))] font-semibold tracking-tight text-ink">
               Review and send
             </h2>
+            <span lang="ar" dir="rtl" className="text-[calc(15px*var(--text-scale,1))] text-muted">
+              المراجعة والإرسال
+            </span>
           </div>
           <p className="mt-2 max-w-[70ch] text-[calc(13px*var(--text-scale,1))] leading-relaxed text-muted">
             Everything above is already saved and already visible to us — sending
             is how you say it&rsquo;s ready to work from. You can send an
             unfinished pack: the week-1 answers are what unlock the build, and
             the rest can follow.
+            <Ar className="mt-1.5">
+              كل ما فوق محفوظ ومرئي لنا بالفعل — الإرسال يعني أنه جاهز للعمل
+              عليه. يمكنكم إرسال حزمة غير مكتملة: إجابات الأسبوع الأول هي التي
+              تفتح البناء، والباقي يلحق.
+            </Ar>
           </p>
         </header>
 
@@ -614,6 +811,9 @@ export function IntakeForm({
                 <div key={due}>
                   <p className="mb-2 font-mono text-[calc(11px*var(--text-scale,1))] uppercase tracking-wider text-faint">
                     {DUE_LABELS[due]}
+                    <Ar className="mt-0.5 font-sans normal-case tracking-normal">
+                      {DUE_LABELS_AR[due]}
+                    </Ar>
                   </p>
                   <ul className="grid">
                     {group.map((check) => (
@@ -627,9 +827,7 @@ export function IntakeForm({
                             "mt-0.5 grid size-4 shrink-0 place-items-center rounded-full border",
                             check.ok
                               ? "border-primary bg-primary text-primary-ink"
-                              : check.optional
-                                ? "border-line text-transparent"
-                                : "border-line-strong text-transparent"
+                              : "border-line-strong text-transparent"
                           )}
                         >
                           <Check className="size-2.5 [stroke-width:3]" />
@@ -649,6 +847,9 @@ export function IntakeForm({
                               · only if it applies
                             </span>
                           )}
+                          <Ar className="text-[calc(12px*var(--text-scale,1))]">
+                            {check.labelAr}
+                          </Ar>
                           {check.note && (
                             <span className="block text-[calc(12px*var(--text-scale,1))] text-amber">
                               {check.note}
@@ -670,6 +871,9 @@ export function IntakeForm({
                   <span className="text-primary-dim">Sent {formatRelative(sentAt)}.</span>{" "}
                   Kagu has it. Spotted something wrong? Change it above — it saves
                   straight away, and we see the change.
+                  <Ar className="mt-1">
+                    وصلت إلى كاغو. لاحظتم خطأً؟ عدّلوه فوق — يُحفظ مباشرة ونراه.
+                  </Ar>
                 </p>
                 <Button
                   size="md"
@@ -707,7 +911,7 @@ export function IntakeForm({
                   }}
                 >
                   <Send className="size-3.5" aria-hidden />
-                  Send to Kagu
+                  Send to Kagu · أرسل
                 </Button>
               </div>
             )}

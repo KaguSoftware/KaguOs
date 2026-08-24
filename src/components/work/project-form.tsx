@@ -11,6 +11,7 @@ import { DatePicker } from "@/components/ui/date-picker";
 import { UrlInput } from "@/components/ui/typed-inputs";
 import { PROJECT_STATUS_OPTIONS } from "@/components/work/new-project-form";
 import { PROJECT_TYPE_OPTIONS, SECTOR_OPTIONS } from "@/lib/options";
+import { DEFAULT_PACK, INTAKE_PACK_OPTIONS } from "@/lib/intake";
 import { cn } from "@/lib/utils";
 import type { Project } from "@/lib/types";
 
@@ -111,6 +112,22 @@ export function EditProjectForm({ project }: { project: Project }) {
           />
         </Field>
       </div>
+      {/* Which questionnaire this project's client fills in. Lives with the
+          project rather than with the client account because it is a property
+          of the ENGAGEMENT — a padel club and a clinic get asked different
+          things, and the same person could be the contact for both. */}
+      <Field
+        label="Client input pack"
+        htmlFor="project-pack"
+        hint="The questions a client account assigned to this project is asked. General works for any business."
+      >
+        <Dropdown
+          id="project-pack"
+          name="intake_pack"
+          defaultValue={project.intake_pack ?? DEFAULT_PACK}
+          options={INTAKE_PACK_OPTIONS}
+        />
+      </Field>
       <Field label="Notes" htmlFor="project-notes">
         <Textarea
           id="project-notes"

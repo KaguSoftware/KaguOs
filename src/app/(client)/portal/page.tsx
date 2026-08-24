@@ -22,7 +22,7 @@ export default async function PortalIndexPage() {
 
   const summaries = await getIntakeSummaries(
     ctx,
-    projects.map((project) => project.id)
+    projects.map((project) => ({ id: project.id, packKey: project.intake_pack }))
   );
 
   return (

@@ -66,6 +66,60 @@ Contracts w/ PDFs), **Debug** (everyone: per-project boards, self-claim-only, re
 - Chart colors are validated (dataviz skill): income `oklch(0.62 0.13 160)`, expense
   `oklch(0.55 0.16 25)` — L band 0.48–0.67 on dark; re-validate any new chart palette.
 
+## Current status (2026-08-24, later)
+
+### 🟡 INPUT PACKS ARE PER-PROJECT NOW — plus the real Touch Padel questionnaire, EN + AR (2026-08-24) — tsc clean · lint clean · build green, **migration 0073 WRITTEN BUT NOT APPLIED**
+
+0072 shipped ONE pack for every project: the neutral one, asking every business
+the same generalised questions. Right default, wrong thing to put in front of a
+named client — Touch Padel don't have "bookable resources", they have courts;
+they don't have "products and services", they have a menu and a kitchen with
+recipes in it. Asked in the general form they'd answer in the general form, and
+vague answers are what this whole feature exists to stop.
+
+**1. A registry.** `INTAKE_PACKS` in `lib/intake.ts` holds `general` (0072's) and
+`touch-padel` (a faithful port of Parsa's HTML — same questions, same order, same
+conditional reveals). `projects.intake_pack` (0073) says which; null/unknown →
+general, via `packFor()`, so a renamed pack degrades instead of 500ing. Picked
+from a dropdown in the project's Details panel — it's a property of the
+ENGAGEMENT, not of the client account.
+
+⚠️ **Answer keys are namespaced `pack.card.field`** (and table keys `pack.card`).
+Switching a project's pack therefore HIDES the old answers rather than merging
+two questionnaires that use `decisions.tax.mode` to mean different things.
+Switching back brings them intact.
+
+**2. English + Arabic, together, not toggled.** Every label / hint / chip / column
+header carries an optional `*Ar`, rendered underneath in `lang="ar" dir="rtl"`.
+Deliberately not a language switch: the person filling it in and the person
+reading the answers don't share a first language, and a switch means one of them
+is always on the wrong page. `rtl: true` on a field marks one whose CONTENT is
+Arabic (the Arabic half of a menu item) so the input itself flips.
+
+**3. Two new primitives** the padel pack needed: `multi` (many-of-N chips —
+allergens, the days a price rule covers; stored comma-joined) and a `note` card
+(prose with nothing to answer — the "single largest risk of the phase" panel;
+excluded from the checklist, because a warning you can't answer isn't an
+outstanding item).
+
+**Two deliberate departures from the HTML,** both forced, both noted in the file:
+the rate-rule court picker was a `<select>` populated from the courts you'd just
+typed — nothing here can build a dropdown out of another card's rows, so it's a
+text field (the original's own CSV resolved it to the court NAME anyway); and
+sub-recipes nested ingredient lines inside each row — rows don't nest, so it's
+split into "name + batch yield" and "what goes into one batch", which is exactly
+the shape the original's export flattened them into.
+
+**4. Touch Padel project CREATED** — `37024fb4-0852-4fe3-a9f8-3835f4ee4666`,
+active, client "Touch Padel". Created before 0073 existed, so its `intake_pack`
+is null; **0073 contains the idempotent UPDATE that sets it**, so applying the
+migration fixes it. Nothing else was written to the database.
+
+**⚠️ 0073 IS NOT APPLIED, and neither is 0072.** Apply in order. 0073 also DROPs
+and recreates `my_client_projects()` (adding a return column is a return-type
+change, which `create or replace` refuses) — the portal can't read `projects`, so
+the pack key has to come out of that function.
+
 ## Current status (2026-08-24)
 
 ### 🟡 THE CLIENT ROLE, REBUILT AROUND PROJECTS — plus the input pack that gives it a purpose (2026-08-24) — BUILT + STATICALLY VERIFIED (tsc clean · lint clean · build green · check:principals clean · check:demo at the 1 pre-existing flag), **migration 0072 WRITTEN BUT NOT APPLIED**, live-drive PENDING
