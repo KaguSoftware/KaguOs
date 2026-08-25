@@ -1,7 +1,11 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Building2, Route, TriangleAlert } from "lucide-react";
-import { loadPortal, milestoneProgress } from "@/lib/data/portal";
+import {
+  loadPortal,
+  milestoneProgress,
+  type MilestoneProgress,
+} from "@/lib/data/portal";
 import { PageHeader } from "@/components/shell/page-header";
 import { EmptyState } from "@/components/ui/empty-state";
 import { LiveRefresh } from "@/components/shell/live-refresh";
@@ -103,6 +107,12 @@ export default async function PortalProgressPage() {
                           ? "The plan hasn't been shared yet"
                           : "Everything on the plan is done"}
                     </p>
+                    {build.weighted && (
+                      <p className="mt-1 text-[calc(12px*var(--text-scale,1))] text-faint">
+                        Phases count for different amounts — the bigger ones move
+                        this further.
+                      </p>
+                    )}
                   </Panel>
 
                   <Panel className="p-4">
@@ -165,7 +175,7 @@ export default async function PortalProgressPage() {
                     />
                   </div>
                 ) : (
-                  <Timeline milestones={milestones} today={today} />
+                  <Timeline milestones={milestones} build={build} today={today} />
                 )}
               </section>
             );
@@ -187,9 +197,11 @@ export default async function PortalProgressPage() {
  */
 function Timeline({
   milestones,
+  build,
   today,
 }: {
   milestones: ProjectMilestone[];
+  build: MilestoneProgress;
   today: string;
 }) {
   return (
@@ -227,6 +239,31 @@ function Timeline({
                 </p>
               )}
 
+              {/* How far through THIS phase, and what that is worth overall.
+                  Only on the phases where the answer isn't already obvious: a
+                  finished phase says "done" above and a bar at 100% under it
+                  adds nothing, and an untouched one at 0% draws the eye to a
+                  bar that has no news in it. */}
+              {build.weighted && milestone.status !== "done" && pctOf(milestone) > 0 && (
+                <div className="mt-2 max-w-sm">
+                  <ProgressMeter
+                    pct={pctOf(milestone)}
+                    done={0}
+                    total={0}
+                    caption={`${pctOf(milestone)}%`}
+                    label={`${milestone.title} — how far through this phase`}
+                  />
+                </div>
+              )}
+
+              {build.weighted && Number(milestone.weight) > 0 && (
+                <p className="mt-1 font-mono text-[calc(11px*var(--text-scale,1))] tabular-nums text-faint">
+                  {trim(milestone.weight)}% of the project
+                  {milestone.status !== "done" &&
+                    ` · ${trim(build.share.get(milestone.id) ?? 0)}% of it counted so far`}
+                </p>
+              )}
+
               <p className="mt-1 flex flex-wrap gap-x-3 font-mono text-[calc(11px*var(--text-scale,1))] text-faint">
                 {milestone.done_on && (
                   <span className="text-primary-dim">
@@ -245,4 +282,14 @@ function Timeline({
       })}
     </ol>
   );
+}
+
+/** A phase's own completion, as a whole number for the bar. */
+function pctOf(milestone: ProjectMilestone) {
+  return Math.max(0, Math.min(100, Math.round(Number(milestone.completion) || 0)));
+}
+
+/** A percentage with no trailing zeroes — these sit inside sentences. */
+function trim(value: number | string) {
+  return Math.round((Number(value) || 0) * 100) / 100;
 }

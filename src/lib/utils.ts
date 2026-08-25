@@ -111,6 +111,28 @@ export function addDays(date: string, days: number) {
   return `${shifted.getFullYear()}-${month}-${day}`;
 }
 
+/**
+ * `YYYY-MM-DD` N months after a plain date string, clamped to the end of the
+ * month it lands in.
+ *
+ * The clamp is the whole reason this exists. A payment plan starting on the
+ * 31st stepped by native Date arithmetic gives 31 Jan → 3 Mar, which puts a
+ * client's February payment in March and then never returns to the 31st again.
+ * Clamped, the schedule reads 31 Jan, 28 Feb, 31 Mar — which is what both sides
+ * mean by "monthly" and what every bank does.
+ *
+ * Pure string→string like `addDays`, so no timezone can leak in.
+ */
+export function addMonths(date: string, months: number) {
+  const [y, m, d] = date.split("-").map(Number);
+  const target = new Date(y, m - 1 + months, 1);
+  // Day 0 of the following month is the last day of this one.
+  const lastDay = new Date(target.getFullYear(), target.getMonth() + 1, 0).getDate();
+  const day = `${Math.min(d, lastDay)}`.padStart(2, "0");
+  const month = `${target.getMonth() + 1}`.padStart(2, "0");
+  return `${target.getFullYear()}-${month}-${day}`;
+}
+
 const relFmt = new Intl.RelativeTimeFormat("en", { numeric: "auto" });
 
 /** Compact relative time ("3h ago", "2d ago"). Snapshot at render time. */

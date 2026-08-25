@@ -12,6 +12,8 @@ import {
   type InvoiceCurrency,
   type ProjectInvoice,
   type ProjectMilestone,
+  type ProjectPaymentInstallment,
+  type ProjectPaymentPlan,
 } from "@/lib/types";
 
 /**
@@ -35,7 +37,7 @@ export async function getProjectMilestones(
   projectIds: string[]
 ): Promise<ProjectMilestone[]> {
   if (projectIds.length === 0) return [];
-  return (await rowsOrThrow(
+  const rows = (await rowsOrThrow(
     ctx.supabase
       .from("project_milestones")
       .select("*")
@@ -44,6 +46,14 @@ export async function getProjectMilestones(
       .order("created_at"),
     "project_milestones"
   )) as ProjectMilestone[];
+  // `numeric` arrives from PostgREST as a STRING, same as an invoice amount.
+  // Coerced once, here, because these two feed arithmetic in three different
+  // components and `"20" * 0.8` is not a number anybody wants on a client's bar.
+  return rows.map((row) => ({
+    ...row,
+    weight: Number(row.weight ?? 0),
+    completion: Number(row.completion ?? 0),
+  }));
 }
 
 export async function getProjectInvoices(
@@ -151,40 +161,230 @@ export function moneyLines(
     .map(([currency, amount]) => ({ currency, amount }));
 }
 
-/* ── Progress, as a fraction ──────────────────────────────────────────────── */
+/* ── Progress, as a weighted fraction ─────────────────────────────────────── */
 
 export type MilestoneProgress = {
   total: number;
   done: number;
+  /** The headline. Weighted when the plan carries weights — see below. */
   pct: number;
   /** The next thing that isn't finished — what a client actually came to read. */
   next: ProjectMilestone | null;
   blocked: ProjectMilestone[];
+  /** True when at least one phase has been given a weight. */
+  weighted: boolean;
+  /** Sum of the weights. 100 when the plan adds up; the team's page says so. */
+  allocated: number;
+  /** Each phase's contribution to `pct`, in points, keyed by milestone id. */
+  share: Map<string, number>;
 };
 
 /**
- * The build's headline, from its milestones.
+ * The build's headline, from its phases.
  *
- * A blocked milestone counts as NOT done and is surfaced separately rather than
- * folded into the percentage. "78%, one thing blocked" is the honest sentence;
- * a bar that quietly absorbs a blockage is how a client finds out about it in a
- * meeting instead of on this page.
+ * ── The arithmetic ─────────────────────────────────────────────────────────
+ *
+ * Each phase carries a `weight` — what share of the whole build it is worth —
+ * and a `completion` — how far through that phase we are. A phase contributes
+ * `weight × completion / 100` points, so a 20% phase at 80% moves the bar by
+ * 16. The headline is the sum of those points.
+ *
+ * ── Why the denominator is `max(allocated, 100)` and not `allocated` ───────
+ *
+ * Normalising by the weights actually handed out would make any plan reach 100%
+ * as soon as everything IN it was done — including a plan with one 20% phase in
+ * it because nobody has written the other four yet. A client would be told a
+ * project was finished on the strength of an unfinished plan.
+ *
+ * Dividing by 100 instead means an under-allocated plan reads honestly low, and
+ * the producer's own page carries the "80% still unallocated" warning that
+ * explains why. Over-allocation (weights summing past 100, which is somebody
+ * mid-edit) divides by the real total so the bar can never exceed 100%.
+ *
+ * ── Plans with no weights at all ───────────────────────────────────────────
+ *
+ * Every phase falls back to an equal share, which is exactly what this function
+ * did before weights existed (0075 §1c) — with one improvement: a half-finished
+ * phase now counts as half. Nobody's bar jumps on the day this deploys.
+ *
+ * A blocked phase is not special-cased in the percentage: it contributes
+ * whatever it has actually completed and is surfaced separately, because "78%,
+ * one thing blocked" is the honest sentence and a bar that quietly absorbs a
+ * blockage is how a client finds out about it in a meeting instead.
  */
 export function milestoneProgress(
   milestones: ProjectMilestone[]
 ): MilestoneProgress {
   const total = milestones.length;
   const done = milestones.filter((m) => m.status === "done").length;
+  const allocated = milestones.reduce((sum, m) => sum + Number(m.weight ?? 0), 0);
+  const weighted = allocated > 0;
+
+  // Unweighted plans: every phase is worth one share of however many there are.
+  const denominator = weighted ? Math.max(allocated, 100) : total;
+  const share = new Map<string, number>();
+  let points = 0;
+
+  for (const milestone of milestones) {
+    const weight = weighted ? Number(milestone.weight ?? 0) : 1;
+    const completion =
+      milestone.status === "done" ? 100 : Number(milestone.completion ?? 0);
+    const contribution =
+      denominator === 0 ? 0 : ((weight * completion) / 100 / denominator) * 100;
+    share.set(milestone.id, contribution);
+    points += contribution;
+  }
+
   return {
     total,
     done,
-    pct: total === 0 ? 0 : Math.round((done / total) * 100),
+    // Rounded once, at the end. Rounding each phase first is how five 6.6%
+    // phases add up to 35% on a page that also says the parts are 7% each.
+    pct: Math.max(0, Math.min(100, Math.round(points))),
     next:
       milestones.find((m) => m.status === "in_progress") ??
       milestones.find((m) => m.status !== "done") ??
       null,
     blocked: milestones.filter((m) => m.status === "blocked"),
+    weighted,
+    allocated: Math.round(allocated * 100) / 100,
+    share,
   };
+}
+
+/* ── The payment plan ─────────────────────────────────────────────────────── */
+
+export async function getPaymentPlans(
+  ctx: SessionContext,
+  projectIds: string[]
+): Promise<ProjectPaymentPlan[]> {
+  if (projectIds.length === 0) return [];
+  const rows = (await rowsOrThrow(
+    ctx.supabase
+      .from("project_payment_plans")
+      .select("*")
+      .in("project_id", projectIds)
+      .order("starts_on")
+      .order("created_at"),
+    "project_payment_plans"
+  )) as ProjectPaymentPlan[];
+  return rows.map((row) => ({
+    ...row,
+    amount_each: row.amount_each === null ? null : Number(row.amount_each),
+  }));
+}
+
+/**
+ * Every payment of every plan on these projects.
+ *
+ * Keyed on `project_id` rather than on plan ids so it is one round-trip
+ * alongside the plans instead of a second wave that depends on the first. The
+ * RLS policy still hides the payments of an unpublished plan from a client
+ * (0075 §2c), so a client asking for a project's payments cannot get at a
+ * schedule whose plan they cannot see.
+ */
+export async function getPaymentInstallments(
+  ctx: SessionContext,
+  projectIds: string[]
+): Promise<ProjectPaymentInstallment[]> {
+  if (projectIds.length === 0) return [];
+  const rows = (await rowsOrThrow(
+    ctx.supabase
+      .from("project_payment_installments")
+      .select("*")
+      .in("project_id", projectIds)
+      .order("due_on")
+      .order("seq"),
+    "project_payment_installments"
+  )) as ProjectPaymentInstallment[];
+  return rows.map((row) => ({ ...row, amount: Number(row.amount) }));
+}
+
+export type PlanSummary = {
+  plan: ProjectPaymentPlan;
+  /** In due order, waived rows included — they stay on the schedule. */
+  payments: ProjectPaymentInstallment[];
+  /** Everything not waived. The plan's real value. */
+  total: number;
+  paid: number;
+  /** Scheduled or invoiced — what is still to come. */
+  remaining: number;
+  overdue: number;
+  overdueCount: number;
+  count: number;
+  paidCount: number;
+  pct: number;
+  /** The soonest payment still to be made. The one line a client wants. */
+  next: ProjectPaymentInstallment | null;
+};
+
+/**
+ * One plan, scored.
+ *
+ * A waived payment is dropped from every total but kept in the list, for the
+ * same reason a void invoice stays on the statement: a client who saw a payment
+ * once should not have to wonder where it went.
+ *
+ * "Overdue" here means the schedule said a date and it has passed — not that a
+ * bill has gone unpaid. The two are separate on purpose: an unbilled payment
+ * that has slipped is Kagu's problem to chase, and the portal words it that way
+ * rather than dunning a client for an invoice nobody sent them.
+ */
+export function planSummary(
+  plan: ProjectPaymentPlan,
+  payments: ProjectPaymentInstallment[],
+  today: string
+): PlanSummary {
+  let total = 0;
+  let paid = 0;
+  let remaining = 0;
+  let overdue = 0;
+  let overdueCount = 0;
+  let count = 0;
+  let paidCount = 0;
+  let next: ProjectPaymentInstallment | null = null;
+
+  for (const payment of payments) {
+    if (payment.status === "waived") continue;
+    count += 1;
+    total += payment.amount;
+
+    if (payment.status === "paid") {
+      paid += payment.amount;
+      paidCount += 1;
+      continue;
+    }
+
+    remaining += payment.amount;
+    if (!next || payment.due_on < next.due_on) next = payment;
+    if (payment.due_on < today) {
+      overdue += payment.amount;
+      overdueCount += 1;
+    }
+  }
+
+  return {
+    plan,
+    payments,
+    total,
+    paid,
+    remaining,
+    overdue,
+    overdueCount,
+    count,
+    paidCount,
+    pct: total <= 0 ? 0 : Math.min(100, Math.round((paid / total) * 100)),
+    next,
+  };
+}
+
+/** Every plan on a project, scored, most recently started first. */
+export function planSummaries(
+  plans: ProjectPaymentPlan[],
+  byPlan: Map<string, ProjectPaymentInstallment[]>,
+  today: string
+): PlanSummary[] {
+  return plans.map((plan) => planSummary(plan, byPlan.get(plan.id) ?? [], today));
 }
 
 /* ── One wave for the whole portal ────────────────────────────────────────── */
@@ -203,6 +403,9 @@ export type PortalData = {
   intake: Map<string, IntakeSummary>;
   milestonesByProject: Map<string, ProjectMilestone[]>;
   invoicesByProject: Map<string, ProjectInvoice[]>;
+  plansByProject: Map<string, ProjectPaymentPlan[]>;
+  /** Keyed by plan, not by project — a payment only means anything inside one. */
+  paymentsByPlan: Map<string, ProjectPaymentInstallment[]>;
 };
 
 export async function getPortalData(
@@ -211,20 +414,24 @@ export async function getPortalData(
 ): Promise<PortalData> {
   const ids = projects.map((project) => project.id);
 
-  const [intake, milestones, invoices] = await Promise.all([
+  const [intake, milestones, invoices, plans, payments] = await Promise.all([
     getIntakeSummaries(
       ctx,
       projects.map((project) => ({ id: project.id, packKey: project.intake_pack }))
     ),
     getProjectMilestones(ctx, ids),
     getProjectInvoices(ctx, ids),
+    getPaymentPlans(ctx, ids),
+    getPaymentInstallments(ctx, ids),
   ]);
 
   const milestonesByProject = new Map<string, ProjectMilestone[]>();
   const invoicesByProject = new Map<string, ProjectInvoice[]>();
+  const plansByProject = new Map<string, ProjectPaymentPlan[]>();
   for (const id of ids) {
     milestonesByProject.set(id, []);
     invoicesByProject.set(id, []);
+    plansByProject.set(id, []);
   }
   for (const milestone of milestones) {
     milestonesByProject.get(milestone.project_id)?.push(milestone);
@@ -232,8 +439,27 @@ export async function getPortalData(
   for (const invoice of invoices) {
     invoicesByProject.get(invoice.project_id)?.push(invoice);
   }
+  for (const plan of plans) {
+    plansByProject.get(plan.project_id)?.push(plan);
+  }
 
-  return { projects, intake, milestonesByProject, invoicesByProject };
+  // Seeded from the PLANS rather than from the payments, so a published plan
+  // with nothing scheduled in it yet still gets an (empty) entry instead of an
+  // undefined the callers each have to remember to default.
+  const paymentsByPlan = new Map<string, ProjectPaymentInstallment[]>();
+  for (const plan of plans) paymentsByPlan.set(plan.id, []);
+  for (const payment of payments) {
+    paymentsByPlan.get(payment.plan_id)?.push(payment);
+  }
+
+  return {
+    projects,
+    intake,
+    milestonesByProject,
+    invoicesByProject,
+    plansByProject,
+    paymentsByPlan,
+  };
 }
 
 /**

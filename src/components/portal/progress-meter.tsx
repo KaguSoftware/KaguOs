@@ -18,15 +18,24 @@ export function ProgressMeter({
   done,
   total,
   label,
+  caption,
   className,
 }: {
   pct: number;
   done: number;
   total: number;
   label?: string;
+  /**
+   * Replaces the `done/total` count beside the bar.
+   *
+   * For the one case where the fraction is not what the bar is a fraction OF: a
+   * weighted phase contributes its own completion times its share, so "3/7"
+   * beside it would be a count of something else entirely (0075 §1).
+   */
+  caption?: string;
   className?: string;
 }) {
-  const complete = total > 0 && done === total;
+  const complete = caption ? pct >= 100 : total > 0 && done === total;
   return (
     <div className={cn("flex items-center gap-3", className)}>
       <div
@@ -46,7 +55,7 @@ export function ProgressMeter({
         />
       </div>
       <span className="shrink-0 font-mono text-xs tabular-nums text-faint">
-        {done}/{total}
+        {caption ?? `${done}/${total}`}
       </span>
     </div>
   );

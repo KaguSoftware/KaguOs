@@ -1,12 +1,5 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
-import {
-  canWrite,
-  getSessionContext,
-  isClient,
-  type SessionContext,
-} from "@/lib/data/session";
 import {
   INVOICE_CURRENCIES,
   INVOICE_STATUSES,
@@ -16,76 +9,25 @@ import {
   type MilestoneStatus,
 } from "@/lib/types";
 import type { ActionResult } from "@/lib/actions/account";
+import {
+  amountOf,
+  date,
+  guard,
+  percentOf,
+  revalidateBoth,
+  text,
+} from "@/lib/actions/portal-write";
 import { todayInIstanbul } from "@/lib/utils";
 
 /**
- * What the team publishes TO a client — the milestones and invoices behind the
- * portal's progress and finance pages (0074).
+ * What the team publishes TO a client — the phases and invoices behind the
+ * portal's progress and finance pages (0074, 0075 §1).
  *
- * ── The one guard, and why it is written here rather than reused ────────────
- *
- * Every action opens with `guard()`, which mirrors the RLS policy exactly:
- * `can_write('work') OR can_write('management')`. Neither `blockIfReadOnly`
- * variant expresses that — they each take ONE section — and calling
- * blockIfReadOnly("work") would refuse the finance person whose whole job this
- * is, with a message about a section they can see perfectly well.
- *
- * A client is refused in its own arm, above everything. It should be
- * unreachable (these actions are imported only by a page inside the teammate
- * shell), and the database refuses it independently — but a client account
- * writing its own milestones would be the portal telling a customer a thing the
- * customer told it, which is worth two lines to make impossible.
+ * The guard, the revalidation and the small validators all live in
+ * `portal-write.ts`, shared with the payment-plan actions: everything either
+ * file writes is read by a customer, and one answer about who may publish is
+ * the only safe number of answers.
  */
-
-type Guarded =
-  | { ctx: SessionContext; stop?: undefined }
-  | { ctx?: undefined; stop: { ok: false; message: string } };
-
-async function guard(projectId: string): Promise<Guarded> {
-  if (!projectId) return { stop: { ok: false, message: "Missing project." } };
-
-  const ctx = await getSessionContext();
-
-  if (isClient(ctx)) {
-    return { stop: { ok: false, message: "That isn't something your account can do." } };
-  }
-  if (ctx.showcase) {
-    return {
-      stop: {
-        ok: false,
-        message: "Showcase mode is read-only — exit showcase to make changes.",
-      },
-    };
-  }
-  if (!canWrite(ctx, "work") && !canWrite(ctx, "management")) {
-    return {
-      stop: {
-        ok: false,
-        message: "You need edit access to Work or Management to publish this.",
-      },
-    };
-  }
-  return { ctx };
-}
-
-/**
- * Both sides of every one of these rows, refreshed together.
- *
- * A milestone marked done changes what the CLIENT sees, and the client's pages
- * are server-rendered — revalidating only the member's own route would leave
- * the portal reading a stale plan until it happened to re-render. The portal's
- * three pages are listed individually because they are separate routes with
- * separate caches; `/portal` is not a prefix wildcard.
- */
-function revalidateBoth(projectId: string) {
-  revalidatePath(`/work/projects/${projectId}/client`);
-  revalidatePath(`/work/projects/${projectId}`);
-  revalidatePath("/portal");
-  revalidatePath("/portal/progress");
-  revalidatePath("/portal/finance");
-}
-
-/* ── Small validators, so a direct POST can't write nonsense ──────────────── */
 
 /**
  * Server actions are reachable by direct POST, not only through the form, so
@@ -111,19 +53,7 @@ function asCurrency(value: unknown): InvoiceCurrency | null {
     : null;
 }
 
-/** Trimmed, capped, and null rather than "" — the columns are nullable text. */
-function text(value: unknown, max: number): string | null {
-  const trimmed = String(value ?? "").trim().slice(0, max);
-  return trimmed === "" ? null : trimmed;
-}
-
-/** `YYYY-MM-DD` or null. Anything else is dropped rather than guessed at. */
-function date(value: unknown): string | null {
-  const raw = String(value ?? "").trim();
-  return /^\d{4}-\d{2}-\d{2}$/.test(raw) ? raw : null;
-}
-
-/* ── Milestones ───────────────────────────────────────────────────────────── */
+/* ── Phases ───────────────────────────────────────────────────────────────── */
 
 export type MilestoneInput = {
   title: string;
@@ -131,6 +61,10 @@ export type MilestoneInput = {
   status?: string;
   target_on?: string;
   done_on?: string;
+  /** Share of the whole build, 0–100. Blank means "not sized yet". */
+  weight?: string;
+  /** How far through this phase alone, 0–100. */
+  completion?: string;
   visible_to_client?: boolean;
 };
 
@@ -173,6 +107,12 @@ export async function createMilestone(
       detail: text(formData.get("detail"), 4000),
       status: asMilestoneStatus(formData.get("status")) ?? "planned",
       target_on: date(formData.get("target_on")),
+      // The two numbers that make this a phase rather than a checkbox (0075
+      // §1). Both clamp to 0–100; the database trigger then reconciles them
+      // with the status, so a phase added as Done arrives at 100 whatever the
+      // completion field said.
+      weight: percentOf(formData.get("weight")),
+      completion: percentOf(formData.get("completion")),
       sort: (last?.sort ?? -1) + 1,
       // A checkbox absent from FormData means unchecked, which is the one
       // encoding where "the field wasn't submitted" and "the user said no" are
@@ -214,6 +154,11 @@ export async function updateMilestone(
       // are not sure when it happened. Filled in from today, but never
       // overwritten — an explicitly back-dated completion survives.
       done_on: status === "done" ? (doneOn ?? todayInIstanbul()) : null,
+      weight: percentOf(input.weight),
+      // Sent as typed. The trigger has the last word on the pair — done forces
+      // 100, 100 forces done — so this action does not also try to reconcile
+      // them and end up disagreeing with the database about which won.
+      completion: percentOf(input.completion),
       visible_to_client: input.visible_to_client ?? true,
     })
     .eq("id", milestoneId)
@@ -315,11 +260,6 @@ export type InvoiceInput = {
   paid_on?: string;
   note?: string;
 };
-
-function amountOf(value: unknown): number | null {
-  const parsed = Number(String(value ?? "").replace(/,/g, "").trim());
-  return Number.isFinite(parsed) && parsed > 0 ? Math.round(parsed * 100) / 100 : null;
-}
 
 export async function createInvoice(
   _prev: ActionResult,

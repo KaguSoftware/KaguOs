@@ -83,6 +83,14 @@ const CURRENCY_OPTIONS = INVOICE_CURRENCIES.map((currency) => ({
 const LABEL =
   "mb-1.5 block font-mono text-[calc(10px*var(--text-scale,1))] uppercase tracking-wider text-faint";
 
+/**
+ * A percentage as this panel writes it: trailing zeroes dropped, sign always
+ * present. `20%` and `16.5%`, never `20.00%` — these sit inside sentences.
+ */
+function pct(value: number | string) {
+  return `${Math.round((Number(value) || 0) * 100) / 100}%`;
+}
+
 /** Row shell: the collapsed summary line, and the expanded editor beneath it. */
 function Row({
   summary,
@@ -160,6 +168,22 @@ function MilestoneEditor({
   const [detail, setDetail] = useState(milestone.detail ?? "");
   const [targetOn, setTargetOn] = useState(milestone.target_on ?? "");
   const [doneOn, setDoneOn] = useState(milestone.done_on ?? "");
+  const [weight, setWeight] = useState(String(milestone.weight ?? 0));
+  const [completion, setCompletion] = useState(String(milestone.completion ?? 0));
+
+  /**
+   * The status dropdown moves the completion figure with it, because the
+   * database will anyway (0075 §1d). Mirrored here so the number on screen is
+   * the number about to be saved — a form that shows 30% and stores 100% is
+   * worse than one that has no field at all.
+   */
+  function changeStatus(next: ProjectMilestone["status"]) {
+    setStatus(next);
+    if (next === "done") setCompletion("100");
+    else if (Number(completion) >= 100) setCompletion("0");
+  }
+
+  const contribution = (Number(weight) || 0) * ((Number(completion) || 0) / 100);
 
   return (
     <div className="grid gap-4">
@@ -194,7 +218,7 @@ function MilestoneEditor({
           <Dropdown
             options={MILESTONE_OPTIONS}
             value={status}
-            onChange={(value) => setStatus(value as ProjectMilestone["status"])}
+            onChange={(value) => changeStatus(value as ProjectMilestone["status"])}
           />
         </div>
 
@@ -206,6 +230,58 @@ function MilestoneEditor({
             onChange={setTargetOn}
           />
         </div>
+
+        {/* The two numbers behind the client's bar. Side by side because they
+            only mean anything as a pair, with the arithmetic spelled out under
+            them — "20% of the build × 80% done = 16 points" is the sentence
+            somebody needs to read once to trust the figure ever after. */}
+        <div>
+          <span className={LABEL}>Weight — share of the whole build</span>
+          <NumberInput
+            name={`m-weight-${milestone.id}`}
+            defaultValue={weight}
+            onValueChange={setWeight}
+            suffix="%"
+          />
+        </div>
+
+        <div>
+          <span className={LABEL}>Completion — of this phase alone</span>
+          {/* Keyed on the status so that changing the dropdown REMOUNTS this
+              field. NumberInput is uncontrolled — it seeds from defaultValue
+              once — so without the key, marking a phase done would move the
+              value about to be saved without moving the number on screen,
+              which is the exact mismatch `changeStatus` exists to prevent. */}
+          <NumberInput
+            key={`m-completion-${milestone.id}-${status}`}
+            name={`m-completion-${milestone.id}`}
+            defaultValue={completion}
+            onValueChange={setCompletion}
+            suffix="%"
+          />
+        </div>
+
+        <p className="text-[calc(12px*var(--text-scale,1))] text-faint sm:col-span-2">
+          {Number(weight) > 0 ? (
+            <>
+              This phase is worth{" "}
+              <span className="font-mono tabular-nums text-muted">{pct(weight)}</span>{" "}
+              of the project and is{" "}
+              <span className="font-mono tabular-nums text-muted">{pct(completion)}</span>{" "}
+              done — it moves the client&apos;s bar by{" "}
+              <span className="font-mono tabular-nums text-ink">
+                {pct(contribution)}
+              </span>
+              .
+            </>
+          ) : (
+            <>
+              No weight set. While every phase of this project is at 0, they all
+              count equally; give one a weight and the unweighted ones stop
+              counting at all.
+            </>
+          )}
+        </p>
 
         {status === "done" && (
           <div>
@@ -242,6 +318,8 @@ function MilestoneEditor({
                   status,
                   target_on: targetOn,
                   done_on: doneOn,
+                  weight,
+                  completion,
                   visible_to_client: visible,
                 }),
               { success: "Saved.", onSuccess: onDone }
@@ -290,6 +368,18 @@ function MilestoneEditor({
 }
 
 
+/**
+ * The plan, with its weights adding up (or not) in plain sight.
+ *
+ * ── Why the allocation line is always there ────────────────────────────────
+ *
+ * Weights are the one thing on this page whose mistakes are invisible from the
+ * inside. Every row can look right while the plan as a whole adds up to 60%,
+ * and the only symptom is a client's bar that stops at 60 the day everything
+ * ships. So the total sits in the header, permanently, and says which way it is
+ * out — this is the number the producer came to check even when they didn't
+ * know it.
+ */
 export function MilestonesPanel({
   projectId,
   milestones,
@@ -299,11 +389,16 @@ export function MilestonesPanel({
 }) {
   const [openId, setOpenId] = useState<string | null>(null);
   const published = milestones.filter((m) => m.visible_to_client).length;
+  const allocated =
+    Math.round(
+      milestones.reduce((sum, m) => sum + (Number(m.weight) || 0), 0) * 100
+    ) / 100;
+  const weighted = allocated > 0;
 
   return (
     <Panel>
       <PanelHeader
-        title="Plan the client sees"
+        title="Phases the client sees"
         action={
           <span className="flex items-center gap-3">
             <span className="font-mono text-xs text-faint">
@@ -320,6 +415,37 @@ export function MilestonesPanel({
           </span>
         }
       />
+
+      {milestones.length > 0 && (
+        <p
+          className={cn(
+            "border-b border-line px-4 py-2.5 text-[calc(12px*var(--text-scale,1))]",
+            weighted && allocated !== 100 ? "text-amber" : "text-faint"
+          )}
+        >
+          {!weighted ? (
+            <>
+              No phase is weighted, so all {milestones.length} count equally —{" "}
+              {pct(100 / milestones.length)} each. Give them weights to make the
+              big ones move the bar further.
+            </>
+          ) : allocated === 100 ? (
+            <>Weights add up to 100%. The bar reaches 100 when the plan does.</>
+          ) : allocated < 100 ? (
+            <>
+              Weights add up to {pct(allocated)} — {pct(100 - allocated)} of the
+              project is unallocated, so this plan can only ever reach{" "}
+              {pct(allocated)}.
+            </>
+          ) : (
+            <>
+              Weights add up to {pct(allocated)}, past a whole project. Every
+              phase is scaled down to fit, so each one moves the bar less than
+              its number says.
+            </>
+          )}
+        </p>
+      )}
 
       {milestones.length === 0 ? (
         <p className="px-4 py-6 text-[calc(13px*var(--text-scale,1))] text-faint">
@@ -339,11 +465,19 @@ export function MilestonesPanel({
               }
               summary={
                 <>
-                  <span className="block truncate text-[calc(13px*var(--text-scale,1))] text-ink">
-                    {milestone.title}
+                  <span className="flex flex-wrap items-baseline gap-x-2">
+                    <span className="min-w-0 truncate text-[calc(13px*var(--text-scale,1))] text-ink">
+                      {milestone.title}
+                    </span>
+                    {Number(milestone.weight) > 0 && (
+                      <span className="shrink-0 font-mono text-[calc(11px*var(--text-scale,1))] tabular-nums text-muted">
+                        {pct(milestone.weight)} of the build
+                      </span>
+                    )}
                   </span>
                   <span className="block truncate font-mono text-[calc(11px*var(--text-scale,1))] uppercase tracking-wider text-faint">
                     {MILESTONE_STATUS_LABELS[milestone.status]}
+                    {` · ${pct(milestone.completion)} done`}
                     {milestone.target_on && ` · target ${milestone.target_on}`}
                     {milestone.done_on && ` · done ${milestone.done_on}`}
                   </span>

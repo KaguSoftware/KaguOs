@@ -989,7 +989,13 @@ export const MILESTONE_STATUS_LABELS: Record<MilestoneStatus, string> = {
   blocked: "Blocked",
 };
 
-/** One step of the build, written for the client rather than for the board. */
+/**
+ * One phase of the build, written for the client rather than for the board.
+ *
+ * `weight` and `completion` (0075 §1) are what make it a PHASE rather than a
+ * checkbox: a phase worth 20% of the project, sitting at 80% of itself, moves
+ * the headline by 16 points. The arithmetic is in `milestoneProgress`.
+ */
 export type ProjectMilestone = {
   id: string;
   project_id: string;
@@ -999,6 +1005,10 @@ export type ProjectMilestone = {
   target_on: string | null;
   done_on: string | null;
   sort: number;
+  /** Share of the whole build, 0–100. 0 means "not weighted" — see 0075 §1(c). */
+  weight: number;
+  /** How far through this phase alone, 0–100. Forced to 100 when done. */
+  completion: number;
   /** False keeps a half-planned step on the member side — see 0074 §1. */
   visible_to_client: boolean;
   created_by: string | null;
@@ -1038,6 +1048,132 @@ export type ProjectInvoice = {
   paid_on: string | null;
   note: string | null;
   created_by: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+/* ── The payment plan (0075 §2) ────────────────────────────────────────────
+ *
+ * An invoice is a bill that has already gone out. A plan is the agreement it
+ * comes from — "a third up front, a third on delivery, a third on launch", or
+ * "$1,200 a month until we say stop" — and it is the thing a client actually
+ * wants to see when they ask what this is going to cost them.
+ *
+ * The two stay separate objects, linked by `invoice_id` on the payment. See
+ * 0075's header for why merging them would make both worse.
+ */
+
+/** What shape the agreement is. Purely how it is described to the client. */
+export type PaymentPlanKind = "installments" | "recurring";
+export const PAYMENT_PLAN_KINDS: PaymentPlanKind[] = ["installments", "recurring"];
+
+export const PAYMENT_PLAN_KIND_LABELS: Record<PaymentPlanKind, string> = {
+  installments: "Fixed instalments",
+  recurring: "Recurring / retainer",
+};
+
+export type PaymentCadence = "weekly" | "monthly" | "quarterly" | "yearly";
+export const PAYMENT_CADENCES: PaymentCadence[] = [
+  "weekly",
+  "monthly",
+  "quarterly",
+  "yearly",
+];
+
+export const PAYMENT_CADENCE_LABELS: Record<PaymentCadence, string> = {
+  weekly: "Weekly",
+  monthly: "Monthly",
+  quarterly: "Quarterly",
+  yearly: "Yearly",
+};
+
+/** "$1,200 / month" — the unit a recurring plan is quoted in. */
+export const PAYMENT_CADENCE_PER: Record<PaymentCadence, string> = {
+  weekly: "week",
+  monthly: "month",
+  quarterly: "quarter",
+  yearly: "year",
+};
+
+/** Days between two payments. Months are handled by `addMonths`, not by these. */
+export const PAYMENT_CADENCE_MONTHS: Record<PaymentCadence, number> = {
+  weekly: 0,
+  monthly: 1,
+  quarterly: 3,
+  yearly: 12,
+};
+
+/** 'draft' is the one a client never sees — the RLS policy hides it (0075 §2c). */
+export type PaymentPlanStatus = "draft" | "active" | "completed" | "cancelled";
+export const PAYMENT_PLAN_STATUSES: PaymentPlanStatus[] = [
+  "draft",
+  "active",
+  "completed",
+  "cancelled",
+];
+
+export const PAYMENT_PLAN_STATUS_LABELS: Record<PaymentPlanStatus, string> = {
+  draft: "Draft",
+  active: "Active",
+  completed: "Completed",
+  cancelled: "Cancelled",
+};
+
+export type ProjectPaymentPlan = {
+  id: string;
+  project_id: string;
+  title: string;
+  kind: PaymentPlanKind;
+  currency: InvoiceCurrency;
+  /** The headline figure when every payment is the same. Null on a bespoke one. */
+  amount_each: number | null;
+  cadence: PaymentCadence;
+  starts_on: string;
+  /** Null on an open-ended retainer. */
+  ends_on: string | null;
+  status: PaymentPlanStatus;
+  note: string | null;
+  visible_to_client: boolean;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+/**
+ * One payment of a plan.
+ *
+ * 'invoiced' is the state between promise and bill — the schedule said this was
+ * due, and somebody has raised the document for it. A client sees the same row
+ * on both sides of that line, which is the point: the schedule does not
+ * rearrange itself the moment we get round to billing it.
+ */
+export type InstallmentStatus = "scheduled" | "invoiced" | "paid" | "waived";
+export const INSTALLMENT_STATUSES: InstallmentStatus[] = [
+  "scheduled",
+  "invoiced",
+  "paid",
+  "waived",
+];
+
+export const INSTALLMENT_STATUS_LABELS: Record<InstallmentStatus, string> = {
+  scheduled: "Scheduled",
+  invoiced: "Invoiced",
+  paid: "Paid",
+  waived: "Waived",
+};
+
+export type ProjectPaymentInstallment = {
+  id: string;
+  plan_id: string;
+  project_id: string;
+  seq: number;
+  label: string | null;
+  amount: number;
+  due_on: string;
+  status: InstallmentStatus;
+  paid_on: string | null;
+  invoice_id: string | null;
+  note: string | null;
   created_at: string;
   updated_at: string;
 };

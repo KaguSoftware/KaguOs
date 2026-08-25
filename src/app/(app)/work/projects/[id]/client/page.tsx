@@ -5,10 +5,13 @@ import { ArrowLeft, UserRound } from "lucide-react";
 import { canWrite, requireSection } from "@/lib/data/session";
 import { rowsOrThrow, selectOrThrow } from "@/lib/data/query";
 import {
+  getPaymentInstallments,
+  getPaymentPlans,
   getProjectInvoices,
   getProjectMilestones,
   invoiceTotals,
   milestoneProgress,
+  planSummaries,
 } from "@/lib/data/portal";
 import { PageHeader } from "@/components/shell/page-header";
 import { LiveRefresh } from "@/components/shell/live-refresh";
@@ -17,6 +20,7 @@ import {
   InvoicesPanel,
   MilestonesPanel,
 } from "@/components/work/client-portal-editor";
+import { PaymentPlansPanel } from "@/components/work/payment-plan-editor";
 import { todayInIstanbul } from "@/lib/utils";
 
 export const metadata: Metadata = { title: "Client view" };
@@ -49,39 +53,51 @@ export default async function ProjectClientViewPage({
   const { id } = await params;
   const ctx = await requireSection("work");
 
-  const [{ data: project }, holders, milestones, invoices] = await Promise.all([
-    selectOrThrow(
-      ctx.supabase
-        .from("projects")
-        .select("id, name, client")
-        .eq("id", id)
-        .eq("is_demo", ctx.showcase)
-        .maybeSingle(),
-      "project"
-    ),
-    // ⚠️ The relationship is NAMED, not inferred. `client_projects` has two
-    // foreign keys into `profiles` — `user_id` and `created_by` — so a bare
-    // embed is ambiguous and PostgREST refuses the whole request with PGRST201
-    // at runtime only. Same shape as the intake page's query, for the same
-    // reason.
-    rowsOrThrow(
-      ctx.supabase
-        .from("client_projects")
-        .select(
-          "user_id, profiles!client_projects_user_id_fkey!inner(full_name, email, kind)"
-        )
-        .eq("project_id", id)
-        .eq("profiles.kind", "client"),
-      "client_projects"
-    ),
-    getProjectMilestones(ctx, [id]),
-    getProjectInvoices(ctx, [id]),
-  ]);
+  const [{ data: project }, holders, milestones, invoices, plans, payments] =
+    await Promise.all([
+      selectOrThrow(
+        ctx.supabase
+          .from("projects")
+          .select("id, name, client")
+          .eq("id", id)
+          .eq("is_demo", ctx.showcase)
+          .maybeSingle(),
+        "project"
+      ),
+      // ⚠️ The relationship is NAMED, not inferred. `client_projects` has two
+      // foreign keys into `profiles` — `user_id` and `created_by` — so a bare
+      // embed is ambiguous and PostgREST refuses the whole request with PGRST201
+      // at runtime only. Same shape as the intake page's query, for the same
+      // reason.
+      rowsOrThrow(
+        ctx.supabase
+          .from("client_projects")
+          .select(
+            "user_id, profiles!client_projects_user_id_fkey!inner(full_name, email, kind)"
+          )
+          .eq("project_id", id)
+          .eq("profiles.kind", "client"),
+        "client_projects"
+      ),
+      getProjectMilestones(ctx, [id]),
+      getProjectInvoices(ctx, [id]),
+      getPaymentPlans(ctx, [id]),
+      getPaymentInstallments(ctx, [id]),
+    ]);
   if (!project) notFound();
 
   const today = todayInIstanbul();
   const build = milestoneProgress(milestones.filter((m) => m.visible_to_client));
   const totals = invoiceTotals(invoices, today);
+
+  // Scored here rather than in the panel: `planSummary` is the same function
+  // the client's own finance page runs, and a second copy of the arithmetic in
+  // a client component is how the two screens end up quoting different numbers
+  // at the same person.
+  const paymentsByPlan = new Map<string, typeof payments>();
+  for (const plan of plans) paymentsByPlan.set(plan.id, []);
+  for (const payment of payments) paymentsByPlan.get(payment.plan_id)?.push(payment);
+  const summaries = planSummaries(plans, paymentsByPlan, today);
   const canEdit = canWrite(ctx, "work") || canWrite(ctx, "management");
 
   const people = holders.map((row) => {
@@ -94,7 +110,14 @@ export default async function ProjectClientViewPage({
 
   return (
     <>
-      <LiveRefresh tables={["project_milestones", "project_invoices"]} />
+      <LiveRefresh
+        tables={[
+          "project_milestones",
+          "project_invoices",
+          "project_payment_plans",
+          "project_payment_installments",
+        ]}
+      />
 
       <Link
         href={`/work/projects/${id}`}
@@ -135,10 +158,17 @@ export default async function ProjectClientViewPage({
           label="Build progress"
           note={
             build.total === 0
-              ? "No published milestones"
-              : build.next
-                ? `Next: ${build.next.title}`
-                : "Everything published is done"
+              ? "No published phases"
+              : build.weighted && build.allocated < 100
+                ? `${100 - build.allocated}% of the plan is unweighted`
+                : build.next
+                  ? `Next: ${build.next.title}`
+                  : "Everything published is done"
+          }
+          tone={
+            build.weighted && build.allocated < 100 && build.total > 0
+              ? "amber"
+              : undefined
           }
         >
           <span className="font-mono text-[calc(22px*var(--text-scale,1))] font-medium tabular-nums text-ink">
@@ -166,6 +196,7 @@ export default async function ProjectClientViewPage({
 
       <div className="grid gap-6">
         <MilestonesPanel projectId={id} milestones={milestones} />
+        <PaymentPlansPanel projectId={id} summaries={summaries} today={today} />
         <InvoicesPanel projectId={id} invoices={invoices} />
       </div>
     </>
