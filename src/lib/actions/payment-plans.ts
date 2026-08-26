@@ -22,6 +22,7 @@ import {
   text,
 } from "@/lib/actions/portal-write";
 import {
+  cleanCustomSchedule,
   countBetween,
   layOutSchedule,
   MAX_PAYMENTS,
@@ -91,6 +92,44 @@ function asCurrency(value: unknown): InvoiceCurrency | null {
     : null;
 }
 
+/**
+ * The typed-out schedule of a custom plan, off the wire.
+ *
+ * A hand-rolled POST can put anything in this field, so every step assumes the
+ * worst: not JSON, not an array, elements that aren't objects, a million rows.
+ * Anything that doesn't survive is dropped, and `cleanCustomSchedule` then
+ * applies the same rules the form's preview used — positive amounts, real
+ * dates, sorted, capped.
+ */
+function parseCustomRows(
+  value: unknown
+): { seq: number; amount: number; due_on: string; label: string | null }[] {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(String(value ?? ""));
+  } catch {
+    return [];
+  }
+  if (!Array.isArray(parsed)) return [];
+
+  return cleanCustomSchedule(
+    parsed.slice(0, MAX_PAYMENTS + 1).flatMap((row) => {
+      if (typeof row !== "object" || row === null) return [];
+      const entry = row as Record<string, unknown>;
+      return [
+        {
+          label: typeof entry.label === "string" ? entry.label : "",
+          amount:
+            typeof entry.amount === "number" || typeof entry.amount === "string"
+              ? entry.amount
+              : 0,
+          due_on: typeof entry.due_on === "string" ? entry.due_on : "",
+        },
+      ];
+    })
+  );
+}
+
 /* ── Plans ────────────────────────────────────────────────────────────────── */
 
 /**
@@ -131,16 +170,35 @@ export async function createPaymentPlan(
   const each = amountOf(formData.get("amount_each"));
   const total = amountOf(formData.get("total_amount"));
 
-  // How many payments to lay out, in order of how explicitly it was said:
-  // a typed count, then an end date, then the default for this kind of plan.
-  const count =
-    countOf(formData.get("count"), MAX_PAYMENTS) ??
-    (endsOn ? countBetween(startsOn, endsOn, cadence) : null) ??
-    (kind === "recurring" ? 12 : 1);
+  // A custom plan brings its own rows and skips the generator entirely: there
+  // is no cadence to step, which is the whole point of the kind (0078). The
+  // rows arrive as JSON because they are a variable-length list of triples and
+  // FormData's flat string map is a poor shape for that — parsed defensively,
+  // since a hand-rolled POST could put anything in the field.
+  const schedule =
+    kind === "custom"
+      ? parseCustomRows(formData.get("custom_rows"))
+      : layOutSchedule({
+          startsOn,
+          cadence,
+          // How many payments to lay out, in order of how explicitly it was
+          // said: a typed count, then an end date, then the default for this
+          // kind of plan.
+          count:
+            countOf(formData.get("count"), MAX_PAYMENTS) ??
+            (endsOn ? countBetween(startsOn, endsOn, cadence) : null) ??
+            (kind === "recurring" ? 12 : 1),
+          each,
+          total,
+        });
 
-  // One function, shared with the form's preview, so what gets written is
-  // exactly what the producer was shown before they pressed the button.
-  const schedule = layOutSchedule({ startsOn, cadence, count, each, total });
+  if (kind === "custom" && schedule.length === 0) {
+    return {
+      ok: false,
+      message: "Add at least one payment — a date and an amount.",
+    };
+  }
+
   const amounts = schedule.map((row) => row.amount);
 
   const { data: plan, error } = await ctx.supabase
@@ -153,11 +211,24 @@ export async function createPaymentPlan(
       // The headline figure, and only when it is true of every payment. A
       // schedule split off a total ends on an odd cent, so it has no single
       // "each" to quote and the plan says so by leaving this null.
+      //
+      // On a custom plan the typed rows are the only evidence — a stray
+      // `amount_each` on the request is ignored rather than trusted over them,
+      // because this is the number the client reads as the headline and the
+      // rows underneath it would contradict it.
       amount_each:
-        each ?? (amounts.length > 0 && new Set(amounts).size === 1 ? amounts[0] : null),
+        (kind === "custom" ? null : each) ??
+        (amounts.length > 0 && new Set(amounts).size === 1 ? amounts[0] : null),
       cadence,
-      starts_on: startsOn,
-      ends_on: endsOn,
+      // A custom plan's start and end are FACTS about its rows, not something
+      // typed separately — the form never asks. Taken from the schedule so the
+      // portal's "runs March → November" line is true of what is actually in
+      // the table.
+      starts_on: kind === "custom" ? (schedule[0]?.due_on ?? startsOn) : startsOn,
+      ends_on:
+        kind === "custom"
+          ? (schedule[schedule.length - 1]?.due_on ?? null)
+          : endsOn,
       status,
       note: text(formData.get("note"), 2000),
       visible_to_client: formData.get("visible_to_client") !== null,
@@ -178,6 +249,10 @@ export async function createPaymentPlan(
           seq: row.seq,
           amount: row.amount,
           due_on: row.due_on,
+          // Null on a generated schedule, which is what `layOutSchedule` puts
+          // there — a generated payment has nothing to say that its date does
+          // not already say.
+          label: row.label,
         }))
       );
     // The plan itself is already saved, so this is reported rather than rolled

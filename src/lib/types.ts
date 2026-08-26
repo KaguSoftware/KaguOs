@@ -1063,13 +1063,30 @@ export type ProjectInvoice = {
  * 0075's header for why merging them would make both worse.
  */
 
-/** What shape the agreement is. Purely how it is described to the client. */
-export type PaymentPlanKind = "installments" | "recurring";
-export const PAYMENT_PLAN_KINDS: PaymentPlanKind[] = ["installments", "recurring"];
+/**
+ * What shape the agreement is.
+ *
+ * The first two are purely how it is described to the client — the rows
+ * underneath them are identical, and only the wording changes ("3 × $3,000"
+ * versus "$1,200 / month").
+ *
+ * 'custom' is the one that means something structurally: there is no rhythm to
+ * describe, so the plan's cadence is decoration and the schedule is whatever
+ * dates were actually agreed. The create form drops its generator for a list
+ * you type; the panel treats it the same as any other plan afterwards, because
+ * by then every plan is just rows.
+ */
+export type PaymentPlanKind = "installments" | "recurring" | "custom";
+export const PAYMENT_PLAN_KINDS: PaymentPlanKind[] = [
+  "installments",
+  "recurring",
+  "custom",
+];
 
 export const PAYMENT_PLAN_KIND_LABELS: Record<PaymentPlanKind, string> = {
   installments: "Fixed instalments",
   recurring: "Recurring / retainer",
+  custom: "Custom dates",
 };
 
 export type PaymentCadence = "weekly" | "monthly" | "quarterly" | "yearly";

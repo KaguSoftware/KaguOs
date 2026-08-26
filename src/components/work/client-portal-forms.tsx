@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
+import { Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { CreateForm } from "@/components/ui/create";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -8,10 +9,11 @@ import { DatePicker } from "@/components/ui/date-picker";
 import { Dropdown } from "@/components/ui/dropdown";
 import { Field } from "@/components/ui/field";
 import { Input, Textarea } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 import { NumberInput } from "@/components/ui/number-input";
 import { createInvoice, createMilestone } from "@/lib/actions/client-portal";
 import { createPaymentPlan } from "@/lib/actions/payment-plans";
-import { layOutSchedule, MAX_PAYMENTS } from "@/lib/payments";
+import { cleanCustomSchedule, layOutSchedule, MAX_PAYMENTS } from "@/lib/payments";
 import {
   INVOICE_CURRENCIES,
   INVOICE_STATUSES,
@@ -27,7 +29,7 @@ import {
   type PaymentCadence,
   type PaymentPlanKind,
 } from "@/lib/types";
-import { formatDate, formatMoney } from "@/lib/utils";
+import { addMonths, formatDate, formatMoney } from "@/lib/utils";
 
 /**
  * The three create surfaces behind the client view.
@@ -267,6 +269,104 @@ export function NewInvoiceForm({ projectId }: { projectId: string }) {
   );
 }
 
+/* ── A schedule with no rhythm ────────────────────────────────────────────── */
+
+type CustomRow = { key: number; label: string; amount: string; due_on: string };
+
+/**
+ * The typed-out schedule of a custom plan (0078).
+ *
+ * ── Why this replaces the generator rather than sitting beside it ──────────
+ *
+ * Because the two describe incompatible things. A cadence, a count and a start
+ * date are a rule that produces dates; a custom plan HAS no rule, and leaving
+ * the generator's fields on screen next to a list you are typing would leave
+ * the producer guessing which of the two the button is about to obey. Choosing
+ * "Custom dates" is choosing which one, so the other one goes away.
+ *
+ * ── Why the rows are JSON in a hidden field ────────────────────────────────
+ *
+ * FormData is a flat map of strings, and a variable-length list of triples
+ * either becomes `row[3][amount]`-style key parsing on the server or one field
+ * that says exactly what it is. The action parses it defensively either way —
+ * a POST from outside this form can put anything in there — so the honest
+ * shape wins. See `parseCustomRows`.
+ *
+ * ── The blank row at the bottom ────────────────────────────────────────────
+ *
+ * There is always one, and it is not an error. Somebody typing a schedule ends
+ * every row wanting another; `cleanCustomSchedule` drops the unfilled ones on
+ * both sides, so the trailing blank costs nothing and removes a click per
+ * payment.
+ */
+function CustomSchedule({
+  rows,
+  setRows,
+  currency,
+}: {
+  rows: CustomRow[];
+  setRows: (next: CustomRow[]) => void;
+  currency: string;
+}) {
+  function update(key: number, patch: Partial<CustomRow>) {
+    const next = rows.map((row) => (row.key === key ? { ...row, ...patch } : row));
+    const last = next[next.length - 1];
+    // Typing into the trailing blank grows the list, so the next row is always
+    // there without anybody asking for it.
+    if (last && (last.amount !== "" || last.due_on !== "" || last.label !== "")) {
+      const guess = last.due_on ? addMonths(last.due_on, 1) : "";
+      next.push({ key: last.key + 1, label: "", amount: "", due_on: guess });
+    }
+    setRows(next.slice(0, MAX_PAYMENTS + 1));
+  }
+
+  return (
+    <div className="grid gap-2">
+      {rows.map((row, index) => (
+        <div key={row.key} className="flex flex-wrap items-center gap-2">
+          <span className="w-5 shrink-0 font-mono text-[calc(11px*var(--text-scale,1))] tabular-nums text-faint">
+            {index + 1}
+          </span>
+          <div className="w-40">
+            <DatePicker
+              name={`custom-due-${row.key}`}
+              defaultValue={row.due_on}
+              onChange={(iso) => update(row.key, { due_on: iso })}
+            />
+          </div>
+          <div className="w-36">
+            <NumberInput
+              name={`custom-amount-${row.key}`}
+              defaultValue={row.amount}
+              onValueChange={(value) => update(row.key, { amount: value })}
+              suffix={currency}
+            />
+          </div>
+          <div className="min-w-[9rem] flex-1">
+            <Input
+              value={row.label}
+              onChange={(event) => update(row.key, { label: event.target.value })}
+              maxLength={160}
+              placeholder="On signature, on launch…"
+            />
+          </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            aria-label={`Remove payment ${index + 1}`}
+            // The last row is the blank one you type into; removing it would
+            // leave nowhere to add the next payment.
+            disabled={rows.length === 1 || index === rows.length - 1}
+            onClick={() => setRows(rows.filter((entry) => entry.key !== row.key))}
+          >
+            <Trash2 className="size-3.5" aria-hidden />
+          </Button>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 /**
  * A payment plan, and the schedule it implies.
  *
@@ -303,20 +403,41 @@ export function NewPaymentPlanForm({
   const [count, setCount] = useState("3");
   const [each, setEach] = useState("");
   const [total, setTotal] = useState("");
+  const [rows, setRows] = useState<CustomRow[]>([
+    { key: 0, label: "", amount: "", due_on: today },
+  ]);
 
-  const schedule = layOutSchedule({
-    startsOn: startsOn || today,
-    cadence,
-    count: Math.max(0, Math.min(Number(count) || 0, MAX_PAYMENTS)),
-    each: Number(each) > 0 ? Number(each) : null,
-    total: Number(total) > 0 ? Number(total) : null,
-  });
+  const custom = kind === "custom";
+
+  // Both branches end in the same shape, so everything downstream — the
+  // preview, the total, the hidden field — is written once rather than twice.
+  const schedule = useMemo(
+    () =>
+      custom
+        ? cleanCustomSchedule(rows)
+        : layOutSchedule({
+            startsOn: startsOn || today,
+            cadence,
+            count: Math.max(0, Math.min(Number(count) || 0, MAX_PAYMENTS)),
+            each: Number(each) > 0 ? Number(each) : null,
+            total: Number(total) > 0 ? Number(total) : null,
+          }),
+    [custom, rows, startsOn, today, cadence, count, each, total]
+  );
   const scheduled = schedule.reduce((sum, row) => sum + row.amount, 0);
 
   return (
     <CreateForm
       action={createPaymentPlan}
-      fieldLabels={{ title: "Name", count: "Number of payments" }}
+      // `count` is only a field when the generator is on screen. Listing it on a
+      // custom plan would make the empty-field confirm fire on every submit,
+      // for an input that isn't there — and a confirm that always fires is one
+      // people learn to click through.
+      fieldLabels={
+        custom
+          ? { title: "Name" }
+          : { title: "Name", count: "Number of payments" }
+      }
       submitLabel="Create plan"
       onCancel={() => router.back()}
       onDone={() => router.push(back)}
@@ -346,43 +467,49 @@ export function NewPaymentPlanForm({
             searchThreshold={0}
           />
         </Field>
-        <Field label="Every" htmlFor="pp-cadence">
-          <Dropdown
-            id="pp-cadence"
-            name="cadence"
-            value={cadence}
-            onChange={(value) => setCadence(value as PaymentCadence)}
-            options={CADENCE_OPTIONS}
-            searchThreshold={0}
-          />
-        </Field>
+        {!custom && (
+          <Field label="Every" htmlFor="pp-cadence">
+            <Dropdown
+              id="pp-cadence"
+              name="cadence"
+              value={cadence}
+              onChange={(value) => setCadence(value as PaymentCadence)}
+              options={CADENCE_OPTIONS}
+              searchThreshold={0}
+            />
+          </Field>
+        )}
       </div>
 
       <div className="grid gap-4 sm:grid-cols-3">
-        <Field
-          label="Amount per payment"
-          htmlFor="pp-each"
-          hint="The usual way."
-        >
-          <NumberInput
-            id="pp-each"
-            name="amount_each"
-            onValueChange={setEach}
-            suffix={currency}
-          />
-        </Field>
-        <Field
-          label="…or a total to divide"
-          htmlFor="pp-total"
-          hint="Split evenly; the last payment takes the odd cent."
-        >
-          <NumberInput
-            id="pp-total"
-            name="total_amount"
-            onValueChange={setTotal}
-            suffix={currency}
-          />
-        </Field>
+        {!custom && (
+          <>
+            <Field
+              label="Amount per payment"
+              htmlFor="pp-each"
+              hint="The usual way."
+            >
+              <NumberInput
+                id="pp-each"
+                name="amount_each"
+                onValueChange={setEach}
+                suffix={currency}
+              />
+            </Field>
+            <Field
+              label="…or a total to divide"
+              htmlFor="pp-total"
+              hint="Split evenly; the last payment takes the odd cent."
+            >
+              <NumberInput
+                id="pp-total"
+                name="total_amount"
+                onValueChange={setTotal}
+                suffix={currency}
+              />
+            </Field>
+          </>
+        )}
         <Field label="Currency" htmlFor="pp-currency">
           <Dropdown
             id="pp-currency"
@@ -395,36 +522,66 @@ export function NewPaymentPlanForm({
         </Field>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-3">
-        <Field label="First payment" htmlFor="pp-starts" hint="Empty = today.">
-          <DatePicker
-            id="pp-starts"
-            name="starts_on"
-            defaultValue={today}
-            onChange={setStartsOn}
-          />
-        </Field>
+      {/* The generator's inputs — a rule that produces dates. A custom plan has
+          no such rule, so they are replaced rather than disabled: leaving a
+          cadence and a count on screen beside a list you are typing leaves it
+          ambiguous which of the two the button obeys. */}
+      {custom ? (
         <Field
-          label="Number of payments"
-          htmlFor="pp-count"
-          hint="An open-ended retainer: leave a year here and extend it later."
+          label="The payments"
+          hint="A date and an amount each. The label is optional and the client reads it. Type in the last row to add another; they sort by date when saved."
         >
-          <NumberInput
-            id="pp-count"
-            name="count"
-            defaultValue="3"
-            decimals={0}
-            onValueChange={setCount}
-          />
+          <CustomSchedule rows={rows} setRows={setRows} currency={currency} />
         </Field>
-        <Field
-          label="Ends"
-          htmlFor="pp-ends"
-          hint="Optional, and shown to the client. Blank = open-ended."
-        >
-          <DatePicker id="pp-ends" name="ends_on" />
-        </Field>
-      </div>
+      ) : (
+        <div className="grid gap-4 sm:grid-cols-3">
+          <Field label="First payment" htmlFor="pp-starts" hint="Empty = today.">
+            <DatePicker
+              id="pp-starts"
+              name="starts_on"
+              defaultValue={today}
+              onChange={setStartsOn}
+            />
+          </Field>
+          <Field
+            label="Number of payments"
+            htmlFor="pp-count"
+            hint="An open-ended retainer: leave a year here and extend it later."
+          >
+            <NumberInput
+              id="pp-count"
+              name="count"
+              defaultValue="3"
+              decimals={0}
+              onValueChange={setCount}
+            />
+          </Field>
+          <Field
+            label="Ends"
+            htmlFor="pp-ends"
+            hint="Optional, and shown to the client. Blank = open-ended."
+          >
+            <DatePicker id="pp-ends" name="ends_on" />
+          </Field>
+        </div>
+      )}
+
+      {/* The rows, as the action will read them. Hidden rather than assembled
+          from named inputs because they are a variable-length list — see
+          CustomSchedule's header. */}
+      {custom && (
+        <input
+          type="hidden"
+          name="custom_rows"
+          value={JSON.stringify(
+            schedule.map((row) => ({
+              label: row.label ?? "",
+              amount: row.amount,
+              due_on: row.due_on,
+            }))
+          )}
+        />
+      )}
 
       {/* The whole reason this form is not three fields and a button. */}
       <div className="rounded-md border border-line bg-raised/30 p-3">
@@ -433,8 +590,9 @@ export function NewPaymentPlanForm({
         </p>
         {schedule.length === 0 ? (
           <p className="mt-2 text-[calc(13px*var(--text-scale,1))] text-faint">
-            No amount yet — the plan saves on its own and you add its payments by
-            hand, which is what a bespoke schedule wants anyway.
+            {custom
+              ? "Nothing filled in yet — a payment needs a date and an amount above zero to count."
+              : "No amount yet — the plan saves on its own and you add its payments by hand, which is what a bespoke schedule wants anyway."}
           </p>
         ) : (
           <>
@@ -442,18 +600,27 @@ export function NewPaymentPlanForm({
               {schedule.length} {schedule.length === 1 ? "payment" : "payments"},{" "}
               {formatMoney(scheduled, currency)} in total.
             </p>
+            {/* A generated schedule is a rule, and six rows are enough to see
+                the rule is right. A typed one is not — every row is a separate
+                decision somebody made, and truncating it hides the one they
+                fat-fingered. */}
             <ul className="mt-2 grid gap-0.5">
-              {schedule.slice(0, 6).map((row) => (
+              {(custom ? schedule : schedule.slice(0, 6)).map((row) => (
                 <li
                   key={row.seq}
                   className="flex justify-between gap-4 font-mono text-[calc(12px*var(--text-scale,1))] tabular-nums"
                 >
-                  <span className="text-muted">{formatDate(row.due_on)}</span>
+                  <span className="text-muted">
+                    {formatDate(row.due_on)}
+                    {row.label && (
+                      <span className="ml-2 text-faint">{row.label}</span>
+                    )}
+                  </span>
                   <span className="text-ink">{formatMoney(row.amount, currency)}</span>
                 </li>
               ))}
             </ul>
-            {schedule.length > 6 && (
+            {!custom && schedule.length > 6 && (
               <p className="mt-1.5 font-mono text-[calc(11px*var(--text-scale,1))] text-faint">
                 …and {schedule.length - 6} more, through{" "}
                 {formatDate(schedule[schedule.length - 1].due_on)}.
