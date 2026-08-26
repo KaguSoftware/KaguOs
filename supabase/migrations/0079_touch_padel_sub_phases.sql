@@ -20,6 +20,53 @@
 
 begin;
 
+-- ---------------------------------------------------------------------------
+-- Precondition: 0078 must already be applied.
+--
+-- Everything below names `parent_id`, which does not exist until 0078 adds it.
+-- Without this check the failure is a bare `42703: column "parent_id" does not
+-- exist` pointing at a DELETE, which says nothing about the actual cause --
+-- that a migration was run out of order. Checked rather than documented,
+-- because a comment cannot stop a file being run.
+do $$
+begin
+  if not exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public' and table_name = 'project_milestones'
+      and column_name = 'parent_id'
+  ) then
+    raise exception
+      '0079 requires 0078: project_milestones.parent_id does not exist. Apply 0078_milestone_sub_phases.sql first, then re-run this file.';
+  end if;
+end $$;
+
+-- ⚠️ SUPERSEDED BY 0080.
+--
+-- 0080 replaces these five week-tracks with four systems ('Mobile app',
+-- 'Desktop app', 'Website', 'Management panel'). Its delete removes the five
+-- titles below, so on a replay of THIS file the delete matches nothing and the
+-- insert would put the five tracks back beside the four systems -- nine bars
+-- on the client's page, weights summing to 200. Guarded on a marker 0080
+-- creates rather than on a version number (migration-workflow): if the
+-- 'Management panel' system exists on this project, the newer plan is in place
+-- and this file has nothing to do. The precondition above already proved
+-- `parent_id` exists, so the column can be named in open code here.
+--
+-- The delete and the insert sit INSIDE this block (0077's structure) so that
+-- `return` genuinely skips them -- a guard in its own block followed by bare
+-- statements would only ever skip itself.
+do $$
+begin
+  if exists (
+    select 1 from public.project_milestones
+    where project_id = '37024fb4-0852-4fe3-a9f8-3835f4ee4666'
+      and parent_id is null
+      and title = 'Management panel'
+  ) then
+    raise notice '0079 superseded by 0080 -- the four-system plan is in place, skipping';
+    return;
+  end if;
+
 -- Replay-safe, and ordered: children are deleted via the parents' cascade
 -- (0078 s1a), so clearing the five top-level rows clears the whole plan. Same
 -- single-project scoping as 0076 and 0077 -- never widen it.
@@ -160,5 +207,7 @@ join (values
    'A real backup and restore test performed together, restoring to a separate environment and confirming the data is intact — an acceptance condition, not a claim. Then repositories, the Supabase project, the domain and both store listings confirmed in Touch''s name, and sign-off.')
 ) as child(parent_title, sort, weight, title, detail)
   on child.parent_title = parents.title;
+
+end $$;
 
 commit;

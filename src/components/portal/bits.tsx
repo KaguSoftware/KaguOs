@@ -1,8 +1,10 @@
 import Link from "next/link";
 import { CircleDashed, CircleDot, CircleSlash, CircleCheck } from "lucide-react";
 import { Badge, type BadgeTone } from "@/components/ui/badge";
-import type { MoneyByCurrency } from "@/lib/data/portal";
-import { moneyLines } from "@/lib/data/portal";
+// From `lib/money`, never from `lib/data/portal`: that module is `server-only`
+// and this one is imported by a client component (the progress columns), which
+// would drag it into the browser bundle and fail the build.
+import { moneyLines, type MoneyByCurrency } from "@/lib/money";
 import {
   INVOICE_STATUS_LABELS,
   MILESTONE_STATUS_LABELS,
@@ -114,9 +116,20 @@ const MILESTONE_TONES: Record<MilestoneStatus, BadgeTone> = {
   blocked: "danger",
 };
 
-export function MilestoneBadge({ status }: { status: MilestoneStatus }) {
+export function MilestoneBadge({
+  status,
+  label,
+}: {
+  status: MilestoneStatus;
+  /**
+   * A translated word for the state. The default labels are English; the
+   * portal's Arabic pages resolve theirs from `dict(locale)` and pass them in,
+   * so the pill's colour and its word come from the same status either way.
+   */
+  label?: string;
+}) {
   return (
-    <Badge tone={MILESTONE_TONES[status]}>{MILESTONE_STATUS_LABELS[status]}</Badge>
+    <Badge tone={MILESTONE_TONES[status]}>{label ?? MILESTONE_STATUS_LABELS[status]}</Badge>
   );
 }
 

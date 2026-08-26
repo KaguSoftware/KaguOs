@@ -49,6 +49,36 @@ export function formatDate(value: string | Date | null | undefined) {
 }
 
 /**
+ * The same date in the portal's language.
+ *
+ * `formatDate` is deliberately fixed to en-GB for the team's own pages, where
+ * everyone reads English. The client portal renders Arabic sentences, and an
+ * English month name dropped into one ("اكتملت 3 Sep 2026") reads as a bug.
+ * Western digits are kept in both — they are what Touch's own bills use, and
+ * mixing numbering systems between the date and the percentages beside it is
+ * worse than either alone.
+ */
+const localeDateFmts: Record<"en" | "ar", Intl.DateTimeFormat> = {
+  en: dateFmt,
+  ar: new Intl.DateTimeFormat("ar", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    numberingSystem: "latn",
+  }),
+};
+
+export function formatDateIn(
+  locale: "en" | "ar",
+  value: string | Date | null | undefined
+) {
+  if (!value) return "—";
+  return localeDateFmts[locale].format(
+    typeof value === "string" ? new Date(value) : value
+  );
+}
+
+/**
  * The company's timezone. Kagu is one office in Istanbul, so "today" is one
  * answer for everybody — it must NOT depend on where the code runs.
  */

@@ -27,6 +27,7 @@
  * template string lets each say so.
  */
 import type { Locale } from "@/lib/locale";
+import type { MilestoneStatus } from "@/lib/types";
 
 const en = {
   /* ── shell ─────────────────────────────────────────────────────────────── */
@@ -85,6 +86,51 @@ const en = {
   nextUp: "Next up",
   targetOn: (date: string) => `target ${date}`,
   recently: "Recently",
+
+  /* ── progress page ─────────────────────────────────────────────────────── */
+  progressDescription:
+    "What Kagu has finished, what's underway, and what we're waiting on.",
+  /* The "nothing shared yet" pair lives in the portal-index block above —
+     the same sentence, said once. */
+  noPlanTitle: "No plan shared yet",
+  noPlanHint:
+    "Kagu will publish the steps of this build here. Until then, the input pack is the thing to get on with.",
+  phasesDone: (done: number, total: number) => `${done}/${total} done`,
+  nextIs: (title: string) => `Next: ${title}`,
+  planNotShared: "The plan hasn't been shared yet",
+  everythingDone: "Everything on the plan is done",
+  weightedNote:
+    "Phases count for different amounts — the bigger ones move this further.",
+  sentThankYou: "Sent to Kagu — thank you",
+  carryOn: "Carry on filling it in",
+  blockedCount: (n: number) =>
+    n === 1 ? "One thing is blocked" : `${n} things are blocked`,
+  ofTheProject: (pct: string) => `${pct}% of the project`,
+  countedSoFar: (pct: string) => `${pct}% of it counted so far`,
+  phaseProgressAria: (name: string) => `${name} — how far through this phase`,
+  /* One function rather than a literal, because the sign differs: "%" here,
+     "٪" in Arabic, and a number rendered by the component must match the
+     sentences around it. */
+  percent: (pct: number) => `${pct}%`,
+  statusPlanned: "Planned",
+  statusInProgress: "In progress",
+  statusDone: "Done",
+  statusBlocked: "Blocked",
+  late: "Late",
+  doneOn: (date: string) => `done ${date}`,
+
+  /* ── progress: the four systems ─────────────────────────────────────────── */
+  systemsAria: "The systems being built, one column each",
+  systemProgressAria: (name: string) => `${name} — how far along`,
+  shareOfBuild: (pct: string) => `${pct}% of the build`,
+  shareOfSystem: (pct: string) => `${pct}% of this system`,
+  stepsDone: (done: number, total: number) => `${done}/${total} steps done`,
+  partOf: (system: string) => `Part of ${system}`,
+  stepProgress: "How far through this step",
+  stepProgressAria: (name: string) => `${name} — how far through this step`,
+  whatThisIs: "What this is",
+  notStartedYet: "Not started yet",
+  closeStep: "Close this step",
   /* The sentence under the greeting. A whole function rather than fragments a
      caller joins: English needs the comma-and list and a leading capital, and
      Arabic needs neither — a shared join() in the page would have to know
@@ -241,6 +287,43 @@ const ar: Dict = {
   nextUp: "التالي",
   targetOn: (date: string) => `الموعد ${date}`,
   recently: "آخر التحديثات",
+
+  /* ── progress page ─────────────────────────────────────────────────────── */
+  progressDescription: "ما أنجزته كاغو، وما هو قيد العمل، وما ننتظره منكم.",
+  noPlanTitle: "لم تتم مشاركة خطة بعد",
+  noPlanHint:
+    "ستنشر كاغو خطوات هذا البناء هنا. حتى ذلك الحين، حزمة المدخلات هي ما يمكنكم العمل عليه.",
+  phasesDone: (done: number, total: number) => `${done}/${total} مكتملة`,
+  nextIs: (title: string) => `التالي: ${title}`,
+  planNotShared: "لم تتم مشاركة الخطة بعد",
+  everythingDone: "كل ما في الخطة مكتمل",
+  weightedNote: "المراحل لا تتساوى في الوزن — الكبيرة منها تحرّك هذا الشريط أكثر.",
+  sentThankYou: "أُرسلت إلى كاغو — شكرًا لكم",
+  carryOn: "أكملوا تعبئتها",
+  blockedCount: (n: number) => (n === 1 ? "أمر واحد متوقف" : `${n} أمور متوقفة`),
+  ofTheProject: (pct: string) => `${pct}٪ من المشروع`,
+  countedSoFar: (pct: string) => `احتُسب منها ${pct}٪ حتى الآن`,
+  phaseProgressAria: (name: string) => `${name} — مدى التقدّم في هذه المرحلة`,
+  percent: (pct: number) => `${pct}٪`,
+  statusPlanned: "مخطط",
+  statusInProgress: "قيد التنفيذ",
+  statusDone: "مكتمل",
+  statusBlocked: "متوقف",
+  late: "متأخر",
+  doneOn: (date: string) => `اكتملت ${date}`,
+
+  /* ── progress: the four systems ─────────────────────────────────────────── */
+  systemsAria: "الأنظمة قيد البناء، عمود لكل نظام",
+  systemProgressAria: (name: string) => `${name} — مدى التقدّم`,
+  shareOfBuild: (pct: string) => `${pct}٪ من البناء`,
+  shareOfSystem: (pct: string) => `${pct}٪ من هذا النظام`,
+  stepsDone: (done: number, total: number) => `${done}/${total} خطوات مكتملة`,
+  partOf: (system: string) => `ضمن ${system}`,
+  stepProgress: "مدى التقدّم في هذه الخطوة",
+  stepProgressAria: (name: string) => `${name} — مدى التقدّم في هذه الخطوة`,
+  whatThisIs: "ما هذه الخطوة",
+  notStartedYet: "لم تبدأ بعد",
+  closeStep: "إغلاق هذه الخطوة",
   /* No leading capital and no "and" before the last item — Arabic joins the
      list with و prefixed to the word itself. */
   headline: (packs: number, overdue: number, blocked: number) => {
@@ -337,6 +420,28 @@ const DICTS: Record<Locale, Dict> = { en, ar };
  */
 export function dict(locale: Locale): Dict {
   return DICTS[locale];
+}
+
+/**
+ * A milestone's state, in the reader's language.
+ *
+ * `MILESTONE_STATUS_LABELS` in lib/types.ts is the team's English vocabulary
+ * and stays that way — it is what the board, the editor and every `(app)` page
+ * use. The portal is the one surface that also speaks Arabic, so it maps the
+ * same four states onto its own dictionary here rather than each page writing
+ * the switch again (there were two, and they disagreed).
+ */
+export function milestoneStatusLabel(t: Dict, status: MilestoneStatus): string {
+  switch (status) {
+    case "done":
+      return t.statusDone;
+    case "in_progress":
+      return t.statusInProgress;
+    case "blocked":
+      return t.statusBlocked;
+    default:
+      return t.statusPlanned;
+  }
 }
 
 export type PortalDict = Dict;

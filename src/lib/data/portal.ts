@@ -90,7 +90,14 @@ export async function getProjectInvoices(
  * they cannot check against their own bank statement. So a client billed in two
  * currencies sees two lines, and neither of them is an estimate.
  */
-export type MoneyByCurrency = Partial<Record<InvoiceCurrency, number>>;
+/**
+ * The money-shape helpers moved to `lib/money.ts` when a CLIENT component first
+ * needed one: this module is `server-only`, and importing any part of it from
+ * the browser bundle fails the build. Re-exported here so every existing
+ * server-side call site reads the same as it always did.
+ */
+import type { MoneyByCurrency } from "@/lib/money";
+export { hasMoney, moneyLines, type MoneyByCurrency } from "@/lib/money";
 
 export type InvoiceTotals = {
   billed: MoneyByCurrency;
@@ -148,20 +155,6 @@ export function invoiceTotals(
 }
 
 /** Is this bucket worth rendering at all? */
-export function hasMoney(bucket: MoneyByCurrency): boolean {
-  return Object.values(bucket).some((value) => (value ?? 0) > 0.005);
-}
-
-/** Currency/amount pairs, largest first, for a stack of money lines. */
-export function moneyLines(
-  bucket: MoneyByCurrency
-): { currency: InvoiceCurrency; amount: number }[] {
-  return (Object.entries(bucket) as [InvoiceCurrency, number][])
-    .filter(([, amount]) => amount > 0.005)
-    .sort((a, b) => b[1] - a[1])
-    .map(([currency, amount]) => ({ currency, amount }));
-}
-
 /* ── Progress, as a weighted fraction ─────────────────────────────────────── */
 
 export type MilestoneProgress = {
@@ -273,29 +266,6 @@ export function milestoneProgress(
     allocated: Math.round(allocated * 100) / 100,
     share,
   };
-}
-
-/**
- * A plan grouped for display: each top-level phase with its sub-phases under
- * it, both already in `sort` order from the query.
- *
- * Children are looked up by parent id rather than by position, so a plan that
- * mixes nested and flat phases renders correctly — which every project on the
- * system does today, since nothing had children before 0078.
- */
-export function milestoneTree(
-  milestones: ProjectMilestone[]
-): { phase: ProjectMilestone; steps: ProjectMilestone[] }[] {
-  const byParent = new Map<string, ProjectMilestone[]>();
-  for (const m of milestones) {
-    if (!m.parent_id) continue;
-    const bucket = byParent.get(m.parent_id);
-    if (bucket) bucket.push(m);
-    else byParent.set(m.parent_id, [m]);
-  }
-  return milestones
-    .filter((m) => !m.parent_id)
-    .map((phase) => ({ phase, steps: byParent.get(phase.id) ?? [] }));
 }
 
 /* ── The payment plan ─────────────────────────────────────────────────────── */

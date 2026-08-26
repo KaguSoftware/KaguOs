@@ -33,6 +33,7 @@ import {
   MILESTONE_STATUS_LABELS,
   type ProjectInvoice,
   type ProjectMilestone,
+  milestoneTree,
 } from "@/lib/types";
 import { cn, formatMoney } from "@/lib/utils";
 
@@ -388,11 +389,16 @@ export function MilestonesPanel({
   milestones: ProjectMilestone[];
 }) {
   const [openId, setOpenId] = useState<string | null>(null);
-  const published = milestones.filter((m) => m.visible_to_client).length;
+  // Top level only, everywhere in this panel. A sub-phase's weight is a share
+  // of ITS PARENT (0078 §1c), so folding both levels into one sum produces the
+  // nonsense the client's bar never shows — five tracks and twenty weeks
+  // "adding up to 600%".
+  const tree = milestoneTree(milestones);
+  const top = tree.map((node) => node.phase);
+  const published = top.filter((m) => m.visible_to_client).length;
   const allocated =
-    Math.round(
-      milestones.reduce((sum, m) => sum + (Number(m.weight) || 0), 0) * 100
-    ) / 100;
+    Math.round(top.reduce((sum, m) => sum + (Number(m.weight) || 0), 0) * 100) /
+    100;
   const weighted = allocated > 0;
 
   return (
@@ -402,7 +408,7 @@ export function MilestonesPanel({
         action={
           <span className="flex items-center gap-3">
             <span className="font-mono text-xs text-faint">
-              {published}/{milestones.length} published
+              {published}/{top.length} published
             </span>
             <LinkButton
               href={`/work/projects/${projectId}/client/new-milestone`}
@@ -416,7 +422,7 @@ export function MilestonesPanel({
         }
       />
 
-      {milestones.length > 0 && (
+      {top.length > 0 && (
         <p
           className={cn(
             "border-b border-line px-4 py-2.5 text-[calc(12px*var(--text-scale,1))]",
@@ -425,8 +431,8 @@ export function MilestonesPanel({
         >
           {!weighted ? (
             <>
-              No phase is weighted, so all {milestones.length} count equally —{" "}
-              {pct(100 / milestones.length)} each. Give them weights to make the
+              No phase is weighted, so all {top.length} count equally —{" "}
+              {pct(100 / top.length)} each. Give them weights to make the
               big ones move the bar further.
             </>
           ) : allocated === 100 ? (
@@ -447,7 +453,7 @@ export function MilestonesPanel({
         </p>
       )}
 
-      {milestones.length === 0 ? (
+      {top.length === 0 ? (
         <p className="px-4 py-6 text-[calc(13px*var(--text-scale,1))] text-faint">
           Nothing published yet. Until there is, the client&apos;s Progress page
           tells them the plan hasn&apos;t been shared and points them at their
@@ -455,43 +461,98 @@ export function MilestonesPanel({
         </p>
       ) : (
         <ul>
-          {milestones.map((milestone, index) => (
-            <Row
-              key={milestone.id}
-              hidden={!milestone.visible_to_client}
-              open={openId === milestone.id}
-              onToggle={() =>
-                setOpenId((current) => (current === milestone.id ? null : milestone.id))
-              }
-              summary={
-                <>
-                  <span className="flex flex-wrap items-baseline gap-x-2">
-                    <span className="min-w-0 truncate text-[calc(13px*var(--text-scale,1))] text-ink">
-                      {milestone.title}
-                    </span>
-                    {Number(milestone.weight) > 0 && (
-                      <span className="shrink-0 font-mono text-[calc(11px*var(--text-scale,1))] tabular-nums text-muted">
-                        {pct(milestone.weight)} of the build
+          {tree.map(({ phase, steps }, index) => (
+            <li key={phase.id}>
+              <ul>
+                <Row
+                  hidden={!phase.visible_to_client}
+                  open={openId === phase.id}
+                  onToggle={() =>
+                    setOpenId((current) => (current === phase.id ? null : phase.id))
+                  }
+                  summary={
+                    <>
+                      <span className="flex flex-wrap items-baseline gap-x-2">
+                        <span className="min-w-0 truncate text-[calc(13px*var(--text-scale,1))] text-ink">
+                          {phase.title}
+                        </span>
+                        {Number(phase.weight) > 0 && (
+                          <span className="shrink-0 font-mono text-[calc(11px*var(--text-scale,1))] tabular-nums text-muted">
+                            {pct(phase.weight)} of the build
+                          </span>
+                        )}
+                        {steps.length > 0 && (
+                          <span className="shrink-0 font-mono text-[calc(11px*var(--text-scale,1))] tabular-nums text-faint">
+                            {steps.filter((s) => s.status === "done").length}/
+                            {steps.length} steps
+                          </span>
+                        )}
                       </span>
-                    )}
-                  </span>
-                  <span className="block truncate font-mono text-[calc(11px*var(--text-scale,1))] uppercase tracking-wider text-faint">
-                    {MILESTONE_STATUS_LABELS[milestone.status]}
-                    {` · ${pct(milestone.completion)} done`}
-                    {milestone.target_on && ` · target ${milestone.target_on}`}
-                    {milestone.done_on && ` · done ${milestone.done_on}`}
-                  </span>
-                </>
-              }
-            >
-              <MilestoneEditor
-                projectId={projectId}
-                milestone={milestone}
-                first={index === 0}
-                last={index === milestones.length - 1}
-                onDone={() => setOpenId(null)}
-              />
-            </Row>
+                      <span className="block truncate font-mono text-[calc(11px*var(--text-scale,1))] uppercase tracking-wider text-faint">
+                        {MILESTONE_STATUS_LABELS[phase.status]}
+                        {` · ${pct(phase.completion)} done`}
+                        {steps.length > 0 && " · rolled up"}
+                        {phase.target_on && ` · target ${phase.target_on}`}
+                        {phase.done_on && ` · done ${phase.done_on}`}
+                      </span>
+                    </>
+                  }
+                >
+                  <MilestoneEditor
+                    projectId={projectId}
+                    milestone={phase}
+                    first={index === 0}
+                    last={index === tree.length - 1}
+                    onDone={() => setOpenId(null)}
+                  />
+                </Row>
+              </ul>
+
+              {/* Sub-phases. Indented and rule-marked rather than merely
+                  smaller, so the level is legible at a glance instead of being
+                  inferred from type size. */}
+              {steps.length > 0 && (
+                <ul className="ms-4 border-s border-line ps-1">
+                  {steps.map((step, stepIndex) => (
+                    <Row
+                      key={step.id}
+                      hidden={!step.visible_to_client}
+                      open={openId === step.id}
+                      onToggle={() =>
+                        setOpenId((current) => (current === step.id ? null : step.id))
+                      }
+                      summary={
+                        <>
+                          <span className="flex flex-wrap items-baseline gap-x-2">
+                            <span className="min-w-0 truncate text-[calc(12px*var(--text-scale,1))] text-muted">
+                              {step.title}
+                            </span>
+                            {Number(step.weight) > 0 && (
+                              <span className="shrink-0 font-mono text-[calc(11px*var(--text-scale,1))] tabular-nums text-faint">
+                                {pct(step.weight)} of this phase
+                              </span>
+                            )}
+                          </span>
+                          <span className="block truncate font-mono text-[calc(11px*var(--text-scale,1))] uppercase tracking-wider text-faint">
+                            {MILESTONE_STATUS_LABELS[step.status]}
+                            {` · ${pct(step.completion)} done`}
+                            {step.target_on && ` · target ${step.target_on}`}
+                          </span>
+                        </>
+                      }
+                    >
+                      <MilestoneEditor
+                        projectId={projectId}
+                        milestone={step}
+                        first={stepIndex === 0}
+                        last={stepIndex === steps.length - 1}
+                        onDone={() => setOpenId(null)}
+                      />
+                    </Row>
+                  ))}
+                </ul>
+              )}
+            </li>
           ))}
         </ul>
       )}

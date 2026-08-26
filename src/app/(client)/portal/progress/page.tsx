@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Building2, Route, TriangleAlert } from "lucide-react";
+import { cookies } from "next/headers";
+import { ArrowRight, Building2, Route, TriangleAlert } from "lucide-react";
 import {
   loadPortal,
   milestoneProgress,
@@ -16,10 +17,20 @@ import {
   MilestoneBadge,
   MilestoneDot,
 } from "@/components/portal/bits";
-import type { ProjectMilestone } from "@/lib/types";
-import { cn, formatDate, todayInIstanbul } from "@/lib/utils";
+import {
+  SystemColumns,
+  type StepView,
+  type SystemView,
+} from "@/components/portal/system-columns";
+import { dict, milestoneStatusLabel, type PortalDict } from "@/lib/i18n";
+import { LOCALE_COOKIE, parseLocale, type Locale } from "@/lib/locale";
+import { milestoneTree, type ProjectMilestone } from "@/lib/types";
+import { cn, formatDateIn, todayInIstanbul } from "@/lib/utils";
 
-export const metadata: Metadata = { title: "Progress" };
+export async function generateMetadata(): Promise<Metadata> {
+  const locale = parseLocale((await cookies()).get(LOCALE_COOKIE)?.value);
+  return { title: dict(locale).navProgress };
+}
 
 /**
  * Where the build is.
@@ -39,10 +50,28 @@ export const metadata: Metadata = { title: "Progress" };
  * almost always waiting on the client. It is pulled to the top of the business
  * rather than left in date order down the list, where it would read as one
  * quiet row among nine.
+ *
+ * ── Two shapes of plan, two views ──────────────────────────────────────────
+ *
+ * A plan whose top-level phases are the SYSTEMS being delivered, each with
+ * its own steps (0080: mobile app, desktop app, website, management panel), is
+ * shown as one column per system — the reader's question is "how far is my
+ * app?", and a column with a bar answers it in one glance. Any other plan — a
+ * flat list, a sequence of weeks, phases without steps — keeps the rail, which
+ * is the right shape for "what comes next". `columnar()` is the test.
+ *
+ * ── Language ───────────────────────────────────────────────────────────────
+ *
+ * Every word the page says in its own voice comes from `dict(locale)`, the
+ * dashboard's rule. The plan's titles and detail are the producer's text and
+ * arrive in whatever language they were written; the chrome around them must
+ * not be the thing that makes an Arabic page read as English.
  */
 export default async function PortalProgressPage() {
   const portal = await loadPortal();
   const today = todayInIstanbul();
+  const locale = parseLocale((await cookies()).get(LOCALE_COOKIE)?.value);
+  const t = dict(locale);
 
   return (
     <>
@@ -50,17 +79,14 @@ export default async function PortalProgressPage() {
         tables={["project_milestones", "project_intake", "project_intake_answers"]}
       />
 
-      <PageHeader
-        title="Progress"
-        description="What Kagu has finished, what's underway, and what we're waiting on."
-      />
+      <PageHeader title={t.navProgress} description={t.progressDescription} />
 
       {portal.projects.length === 0 ? (
         <div className="rounded-lg border border-line bg-surface">
           <EmptyState
             icon={Building2}
-            title="Nothing shared with you yet"
-            hint="As soon as Kagu shares a project with your account, its plan appears here."
+            title={t.nothingSharedTitle}
+            hint={t.nothingSharedHint}
           />
         </div>
       ) : (
@@ -68,18 +94,38 @@ export default async function PortalProgressPage() {
           {portal.projects.map((project) => {
             const milestones = portal.milestonesByProject.get(project.id) ?? [];
             const build = milestoneProgress(milestones);
+            const tree = milestoneTree(milestones);
+            const systems = columnar(tree)
+              ? toSystems(tree, build, t, locale, today)
+              : null;
             const intake = portal.intake.get(project.id);
             const packPct = intake?.progress.pct ?? 0;
             const packSent = Boolean(intake?.submittedAt);
+
+            // For a columnar plan the honest count is steps, not systems —
+            // "0/4 done" while three systems are half-built says nothing.
+            const stepTotal = systems
+              ? systems.reduce((n, s) => n + s.steps.length, 0)
+              : 0;
+            const stepDone = systems
+              ? systems.reduce(
+                  (n, s) => n + s.steps.filter((step) => step.status === "done").length,
+                  0
+                )
+              : 0;
 
             return (
               <section key={project.id}>
                 <BusinessHeading
                   name={project.name}
                   action={
-                    build.total > 0 ? (
+                    systems ? (
                       <span className="font-mono text-xs tabular-nums text-faint">
-                        {build.done}/{build.total} done
+                        {t.stepsDone(stepDone, stepTotal)}
+                      </span>
+                    ) : build.total > 0 ? (
+                      <span className="font-mono text-xs tabular-nums text-faint">
+                        {t.phasesDone(build.done, build.total)}
                       </span>
                     ) : undefined
                   }
@@ -88,56 +134,56 @@ export default async function PortalProgressPage() {
                 <div className="mb-5 grid gap-3 sm:grid-cols-2">
                   <Panel className="p-4">
                     <p className="font-mono text-[calc(10px*var(--text-scale,1))] uppercase tracking-wider text-faint">
-                      The build
+                      {t.build}
                     </p>
                     <p className="mt-1.5 text-[calc(19px*var(--text-scale,1))] font-medium tabular-nums text-ink">
-                      {build.pct}%
+                      {t.percent(build.pct)}
                     </p>
                     <ProgressMeter
                       className="mt-2"
                       pct={build.pct}
-                      done={build.done}
-                      total={build.total}
-                      label={`${project.name} build progress`}
+                      done={systems ? stepDone : build.done}
+                      total={systems ? stepTotal : build.total}
+                      label={t.buildProgressAria(project.name)}
                     />
                     <p className="mt-2 text-[calc(12px*var(--text-scale,1))] text-faint">
                       {build.next
-                        ? `Next: ${build.next.title}`
+                        ? t.nextIs(build.next.title)
                         : build.total === 0
-                          ? "The plan hasn't been shared yet"
-                          : "Everything on the plan is done"}
+                          ? t.planNotShared
+                          : t.everythingDone}
                     </p>
-                    {build.weighted && (
+                    {build.weighted && !systems && (
                       <p className="mt-1 text-[calc(12px*var(--text-scale,1))] text-faint">
-                        Phases count for different amounts — the bigger ones move
-                        this further.
+                        {t.weightedNote}
                       </p>
                     )}
                   </Panel>
 
                   <Panel className="p-4">
                     <p className="font-mono text-[calc(10px*var(--text-scale,1))] uppercase tracking-wider text-faint">
-                      Your input pack
+                      {t.yourInputPack}
                     </p>
                     <p className="mt-1.5 text-[calc(19px*var(--text-scale,1))] font-medium tabular-nums text-ink">
-                      {packPct}%
+                      {t.percent(packPct)}
                     </p>
                     <ProgressMeter
                       className="mt-2"
                       pct={packPct}
                       done={intake?.progress.done ?? 0}
                       total={intake?.progress.total ?? 0}
-                      label={`${project.name} input pack completion`}
+                      label={t.packProgressAria(project.name)}
                     />
                     <p className="mt-2 text-[calc(12px*var(--text-scale,1))]">
                       {packSent ? (
-                        <span className="text-primary-dim">Sent to Kagu — thank you</span>
+                        <span className="text-primary-dim">{t.sentThankYou}</span>
                       ) : (
                         <Link
                           href={`/portal/inputs/${project.id}`}
-                          className="text-muted underline-offset-2 hover:text-ink hover:underline"
+                          className="inline-flex items-center gap-1 text-muted underline-offset-2 hover:text-ink hover:underline"
                         >
-                          Carry on filling it in →
+                          {t.carryOn}
+                          <ArrowRight className="size-3.5 rtl:-scale-x-100" aria-hidden />
                         </Link>
                       )}
                     </p>
@@ -148,9 +194,7 @@ export default async function PortalProgressPage() {
                   <div className="mb-5 rounded-md border border-danger/30 bg-danger/5 p-4">
                     <p className="flex items-center gap-2 text-[calc(13px*var(--text-scale,1))] font-medium text-danger">
                       <TriangleAlert className="size-4" aria-hidden />
-                      {build.blocked.length === 1
-                        ? "One thing is blocked"
-                        : `${build.blocked.length} things are blocked`}
+                      {t.blockedCount(build.blocked.length)}
                     </p>
                     <ul className="mt-2 grid gap-1.5">
                       {build.blocked.map((milestone) => (
@@ -168,14 +212,28 @@ export default async function PortalProgressPage() {
 
                 {milestones.length === 0 ? (
                   <div className="rounded-lg border border-line bg-surface">
-                    <EmptyState
-                      icon={Route}
-                      title="No plan shared yet"
-                      hint="Kagu will publish the steps of this build here. Until then, the input pack is the thing to get on with."
-                    />
+                    <EmptyState icon={Route} title={t.noPlanTitle} hint={t.noPlanHint} />
                   </div>
+                ) : systems ? (
+                  <SystemColumns
+                    systems={systems}
+                    labels={{
+                      systemsAria: t.systemsAria,
+                      whatThisIs: t.whatThisIs,
+                      stepProgress: t.stepProgress,
+                      notStartedYet: t.notStartedYet,
+                      closeStep: t.closeStep,
+                      late: t.late,
+                    }}
+                  />
                 ) : (
-                  <Timeline milestones={milestones} build={build} today={today} />
+                  <Timeline
+                    milestones={milestones}
+                    build={build}
+                    t={t}
+                    locale={locale}
+                    today={today}
+                  />
                 )}
               </section>
             );
@@ -185,6 +243,91 @@ export default async function PortalProgressPage() {
     </>
   );
 }
+
+/* ── The columnar shape ───────────────────────────────────────────────────── */
+
+type Tree = ReturnType<typeof milestoneTree>;
+
+/**
+ * Is this plan "systems with steps"?
+ *
+ * Every top-level phase must have steps — one bare phase among four columns
+ * would be a bar with nothing under it — and there must be few enough of them
+ * to sit side by side. Six is the most that fits a wide screen at a readable
+ * width; beyond that the rail is the better shape anyway.
+ */
+function columnar(tree: Tree): boolean {
+  return (
+    tree.length >= 2 &&
+    tree.length <= 6 &&
+    tree.every((node) => node.steps.length > 0)
+  );
+}
+
+/**
+ * The tree, with every label resolved for the client component.
+ *
+ * Strings are built here rather than in the component because half the
+ * dictionary is functions, which cannot cross to the client. A share label is
+ * only produced for a weighted row on a weighted plan — the rail's rule: on an
+ * unweighted plan "0% of the build" would be a lie about a phase that counts
+ * for a quarter, and a zero-weight row on a weighted plan is "not weighted"
+ * (0075 §1c), not "worth nothing".
+ */
+function toSystems(
+  tree: Tree,
+  build: MilestoneProgress,
+  t: PortalDict,
+  locale: Locale,
+  today: string
+): SystemView[] {
+  return tree.map(({ phase, steps }) => {
+    const childAllocated = steps.reduce((sum, s) => sum + Number(s.weight ?? 0), 0);
+    const done = steps.filter((s) => s.status === "done").length;
+    return {
+      id: phase.id,
+      title: phase.title,
+      detail: phase.detail,
+      status: phase.status,
+      statusLabel: milestoneStatusLabel(t, phase.status),
+      pct: pctOf(phase),
+      pctLabel: t.percent(pctOf(phase)),
+      shareLabel:
+        build.weighted && Number(phase.weight) > 0
+          ? t.shareOfBuild(trim(phase.weight))
+          : null,
+      progressAria: t.systemProgressAria(phase.title),
+      stepsDoneLabel: t.stepsDone(done, steps.length),
+      partOfLabel: t.partOf(phase.title),
+      steps: steps.map((step): StepView => {
+        const late =
+          step.status !== "done" && step.target_on !== null && step.target_on < today;
+        return {
+          id: step.id,
+          title: step.title,
+          detail: step.detail,
+          status: step.status,
+          statusLabel: milestoneStatusLabel(t, step.status),
+          pct: pctOf(step),
+          pctLabel: t.percent(pctOf(step)),
+          shareLabel:
+            childAllocated > 0 && Number(step.weight) > 0
+              ? t.shareOfSystem(trim(step.weight))
+              : null,
+          progressAria: t.stepProgressAria(step.title),
+          dateLine: step.done_on
+            ? t.doneOn(formatDateIn(locale, step.done_on))
+            : step.target_on
+              ? t.targetOn(formatDateIn(locale, step.target_on))
+              : null,
+          late,
+        };
+      }),
+    };
+  });
+}
+
+/* ── The rail ─────────────────────────────────────────────────────────────── */
 
 /**
  * The plan, in order.
@@ -198,16 +341,26 @@ export default async function PortalProgressPage() {
 function Timeline({
   milestones,
   build,
+  t,
+  locale,
   today,
 }: {
   milestones: ProjectMilestone[];
   build: MilestoneProgress;
+  t: PortalDict;
+  locale: Locale;
   today: string;
 }) {
+  // Top-level phases carry the rail; their sub-phases are listed inside the
+  // item rather than as further rail stops. A client reading this wants five
+  // things they can hold in their head, each of which opens up — not twenty-five
+  // dots that make the build look like a backlog.
+  const tree = milestoneTree(milestones);
+
   return (
     <ol className="relative grid gap-0">
-      {milestones.map((milestone, index) => {
-        const last = index === milestones.length - 1;
+      {tree.map(({ phase: milestone, steps }, index) => {
+        const last = index === tree.length - 1;
         const late =
           milestone.status !== "done" &&
           milestone.target_on !== null &&
@@ -230,7 +383,10 @@ function Timeline({
                 >
                   {milestone.title}
                 </p>
-                <MilestoneBadge status={milestone.status} />
+                <MilestoneBadge
+                  status={milestone.status}
+                  label={milestoneStatusLabel(t, milestone.status)}
+                />
               </div>
 
               {milestone.detail && (
@@ -250,29 +406,65 @@ function Timeline({
                     pct={pctOf(milestone)}
                     done={0}
                     total={0}
-                    caption={`${pctOf(milestone)}%`}
-                    label={`${milestone.title} — how far through this phase`}
+                    caption={t.percent(pctOf(milestone))}
+                    label={t.phaseProgressAria(milestone.title)}
                   />
                 </div>
               )}
 
               {build.weighted && Number(milestone.weight) > 0 && (
                 <p className="mt-1 font-mono text-[calc(11px*var(--text-scale,1))] tabular-nums text-faint">
-                  {trim(milestone.weight)}% of the project
+                  {t.ofTheProject(trim(milestone.weight))}
                   {milestone.status !== "done" &&
-                    ` · ${trim(build.share.get(milestone.id) ?? 0)}% of it counted so far`}
+                    ` · ${t.countedSoFar(trim(build.share.get(milestone.id) ?? 0))}`}
                 </p>
+              )}
+
+              {/* What this phase is made of. Plain rows, not a second rail:
+                  the nesting is already carried by the indent and the parent's
+                  dot, and a rail inside a rail reads as two plans. */}
+              {steps.length > 0 && (
+                <ul className="mt-2.5 grid gap-1.5 border-s border-line ps-3">
+                  {steps.map((step) => (
+                    <li
+                      key={step.id}
+                      className="flex flex-wrap items-baseline gap-x-2"
+                    >
+                      <span
+                        className={cn(
+                          "text-[calc(13px*var(--text-scale,1))]",
+                          step.status === "done"
+                            ? "text-faint line-through decoration-line"
+                            : "text-muted"
+                        )}
+                      >
+                        {step.title}
+                      </span>
+                      {step.status !== "done" && pctOf(step) > 0 && (
+                        <span className="font-mono text-[calc(11px*var(--text-scale,1))] tabular-nums text-faint">
+                          {t.percent(pctOf(step))}
+                        </span>
+                      )}
+                      {step.status === "blocked" && (
+                        <MilestoneBadge
+                          status={step.status}
+                          label={milestoneStatusLabel(t, step.status)}
+                        />
+                      )}
+                    </li>
+                  ))}
+                </ul>
               )}
 
               <p className="mt-1 flex flex-wrap gap-x-3 font-mono text-[calc(11px*var(--text-scale,1))] text-faint">
                 {milestone.done_on && (
                   <span className="text-primary-dim">
-                    done {formatDate(milestone.done_on)}
+                    {t.doneOn(formatDateIn(locale, milestone.done_on))}
                   </span>
                 )}
                 {milestone.target_on && !milestone.done_on && (
                   <span className={late ? "text-amber" : undefined}>
-                    target {formatDate(milestone.target_on)}
+                    {t.targetOn(formatDateIn(locale, milestone.target_on))}
                   </span>
                 )}
               </p>
@@ -290,6 +482,6 @@ function pctOf(milestone: ProjectMilestone) {
 }
 
 /** A percentage with no trailing zeroes — these sit inside sentences. */
-function trim(value: number | string) {
-  return Math.round((Number(value) || 0) * 100) / 100;
+function trim(value: number | string): string {
+  return String(Math.round((Number(value) || 0) * 100) / 100);
 }

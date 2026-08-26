@@ -98,7 +98,7 @@ begin
     select 1 from public.project_milestones where parent_id = new.id
   ) then
     raise exception
-      'phase % has sub-phases of its own and cannot be nested';
+      'phase % has sub-phases of its own and cannot be nested', new.id;
   end if;
 
   -- A sub-phase belongs to the same project as its parent. Without this a

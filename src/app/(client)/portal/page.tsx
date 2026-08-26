@@ -17,7 +17,7 @@ import { Panel } from "@/components/ui/panel";
 import { ProgressMeter } from "@/components/portal/progress-meter";
 import { Money, MilestoneBadge } from "@/components/portal/bits";
 import { LOCALE_COOKIE, parseLocale } from "@/lib/locale";
-import { dict } from "@/lib/i18n";
+import { dict, milestoneStatusLabel } from "@/lib/i18n";
 import { cn, formatDate, formatRelative, todayInIstanbul } from "@/lib/utils";
 
 /**
@@ -99,12 +99,20 @@ export default async function PortalDashboardPage() {
   // the "what changed since I last looked" line, which is the only thing on
   // this page that is genuinely a feed.
   const recent = businesses
-    .flatMap((entry) =>
-      entry.milestones.map((milestone) => ({
+    .flatMap((entry) => {
+      // A sub-phase title is not self-describing: four tracks each have a
+      // "Week 3", so the feed names the phase it sits inside. Deliberately a
+      // flat list — a step moving IS the news here, which is the one place
+      // both levels belong side by side.
+      const titles = new Map(entry.milestones.map((m) => [m.id, m.title]));
+      return entry.milestones.map((milestone) => ({
         milestone,
+        parentTitle: milestone.parent_id
+          ? (titles.get(milestone.parent_id) ?? null)
+          : null,
         projectName: entry.project.name,
-      }))
-    )
+      }));
+    })
     .filter((row) => row.milestone.status !== "planned")
     .sort((a, b) => b.milestone.updated_at.localeCompare(a.milestone.updated_at))
     .slice(0, 5);
@@ -205,9 +213,12 @@ export default async function PortalDashboardPage() {
                     {entry.project.name}
                   </h2>
                   {entry.build.next ? (
-                    <MilestoneBadge status={entry.build.next.status} />
+                    <MilestoneBadge
+                      status={entry.build.next.status}
+                      label={milestoneStatusLabel(t, entry.build.next.status)}
+                    />
                   ) : entry.build.total > 0 ? (
-                    <MilestoneBadge status="done" />
+                    <MilestoneBadge status="done" label={t.statusDone} />
                   ) : null}
                 </div>
 
@@ -302,13 +313,19 @@ export default async function PortalDashboardPage() {
                 {t.recently}
               </h2>
               <ul className="grid gap-2">
-                {recent.map(({ milestone, projectName }) => (
+                {recent.map(({ milestone, parentTitle, projectName }) => (
                   <li
                     key={milestone.id}
                     className="flex flex-wrap items-baseline gap-x-3 gap-y-1"
                   >
-                    <MilestoneBadge status={milestone.status} />
+                    <MilestoneBadge
+                      status={milestone.status}
+                      label={milestoneStatusLabel(t, milestone.status)}
+                    />
                     <span className="min-w-0 flex-1 text-[calc(13px*var(--text-scale,1))] text-ink">
+                      {parentTitle && (
+                        <span className="text-faint">{parentTitle} · </span>
+                      )}
                       {milestone.title}
                       {businesses.length > 1 && (
                         <span className="text-faint"> · {projectName}</span>

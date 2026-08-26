@@ -1025,6 +1025,29 @@ export type ProjectMilestone = {
 };
 
 /**
+ * A plan grouped for display: each top-level phase with its sub-phases under
+ * it, both already in `sort` order from the query.
+ *
+ * Children are looked up by parent id rather than by position, so a plan that
+ * mixes nested and flat phases renders correctly — which every project on the
+ * system does today, since nothing had children before 0078.
+ */
+export function milestoneTree(
+  milestones: ProjectMilestone[]
+): { phase: ProjectMilestone; steps: ProjectMilestone[] }[] {
+  const byParent = new Map<string, ProjectMilestone[]>();
+  for (const m of milestones) {
+    if (!m.parent_id) continue;
+    const bucket = byParent.get(m.parent_id);
+    if (bucket) bucket.push(m);
+    else byParent.set(m.parent_id, [m]);
+  }
+  return milestones
+    .filter((m) => !m.parent_id)
+    .map((phase) => ({ phase, steps: byParent.get(phase.id) ?? [] }));
+}
+
+/**
  * Invoice currencies. A superset of `Currency` by ONE, and deliberately its own
  * type: `transactions` converts to TRY through `fx_rates`, and a dinar row over
  * there would drop silently out of every total (0074 §2).

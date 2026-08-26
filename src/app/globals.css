@@ -182,6 +182,32 @@
   }
 }
 
+/* The same sheet under dir="rtl": anchored to the inline end, which is now the
+   LEFT edge, so it must arrive from and leave towards the left. `translateX`
+   is physical and has no logical twin, hence a second pair rather than a
+   variant of the first. */
+@keyframes sheet-in-rtl {
+  from {
+    opacity: 0;
+    transform: translateX(-16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes sheet-out-rtl {
+  from {
+    opacity: 1;
+    transform: translateX(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateX(-16px);
+  }
+}
+
 /* Bottom sheets (mobile team status): rise from the edge they're anchored to. */
 @keyframes sheet-up {
   from {
