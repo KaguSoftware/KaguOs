@@ -466,14 +466,21 @@ function PaymentLine({
   return (
     <li
       className={cn(
-        "flex flex-wrap items-baseline gap-x-3 gap-y-0.5 border-b border-line/60 px-3 py-2 last:border-b-0",
+        // Four things do not fit across a phone, and letting them wrap leaves
+        // the badge stranded on a line of its own — which reads as a broken
+        // row rather than as a wrapped one. Below `sm` this is a two-column
+        // grid instead: date over amount down the left, status flush right,
+        // label beside the amount. Nothing is ragged because nothing wraps by
+        // accident. From `sm` up it is the single flex line it was designed
+        // as, and the grid placements below are inert on a flex item.
+        "grid grid-cols-[auto_1fr] items-baseline gap-x-3 gap-y-1 border-b border-line/60 px-3 py-2 last:border-b-0 sm:flex sm:flex-wrap sm:gap-y-0.5",
         next && "bg-raised/40",
         settled && "opacity-70"
       )}
     >
       <span
         className={cn(
-          "w-24 shrink-0 font-mono text-[calc(12px*var(--text-scale,1))] tabular-nums",
+          "col-start-1 row-start-1 w-24 shrink-0 font-mono text-[calc(12px*var(--text-scale,1))] tabular-nums",
           late ? "text-danger" : "text-muted"
         )}
       >
@@ -482,27 +489,23 @@ function PaymentLine({
 
       <span
         className={cn(
-          "font-mono text-[calc(13px*var(--text-scale,1))] tabular-nums",
+          "col-start-1 row-start-2 font-mono text-[calc(13px*var(--text-scale,1))] tabular-nums",
           payment.status === "waived" ? "text-faint line-through" : "text-ink"
         )}
       >
         {formatMoney(payment.amount, currency)}
       </span>
 
-      {/* On a phone the row has no room for four things side by side: the
-          label ends up crushed to a few pixels of ellipsis between the amount
-          and the badge, which reads as a rendering fault rather than as a
-          label. Below `sm` it drops to its own full-width line under the row —
-          ordered last, so the date, the figure and the status still read
-          across the top — and above `sm` it goes back to the single truncating
-          line this row was designed as. */}
+      {/* It wraps on a phone rather than truncating: the column is wide enough
+          for most labels, and half of "on delivery and written acceptance" is
+          worth less than the line it saves. */}
       {payment.label && (
-        <span className="order-last w-full text-[calc(12px*var(--text-scale,1))] text-muted sm:order-none sm:w-auto sm:min-w-0 sm:flex-1 sm:truncate">
+        <span className="col-start-2 row-start-2 text-[calc(12px*var(--text-scale,1))] text-muted sm:min-w-0 sm:flex-1 sm:truncate">
           {payment.label}
         </span>
       )}
 
-      <span className="ml-auto flex items-center gap-2">
+      <span className="col-start-2 row-start-1 ml-auto flex items-center gap-2">
         {next && !late && <Badge tone="info">Next</Badge>}
         {payment.status === "paid" ? (
           <Badge tone="green">
@@ -520,7 +523,7 @@ function PaymentLine({
       </span>
 
       {payment.note && (
-        <span className="order-last w-full text-[calc(12px*var(--text-scale,1))] text-faint">
+        <span className="col-span-2 w-full text-[calc(12px*var(--text-scale,1))] text-faint">
           {payment.note}
         </span>
       )}
