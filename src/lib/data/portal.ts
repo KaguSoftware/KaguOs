@@ -53,6 +53,7 @@ export async function getProjectMilestones(
     ...row,
     weight: Number(row.weight ?? 0),
     completion: Number(row.completion ?? 0),
+    depth: Number(row.depth ?? 0),
   }));
 }
 
@@ -211,13 +212,33 @@ export type MilestoneProgress = {
  * whatever it has actually completed and is surfaced separately, because "78%,
  * one thing blocked" is the honest sentence and a bar that quietly absorbs a
  * blockage is how a client finds out about it in a meeting instead.
+ *
+ * ── Sub-phases (0078) ──────────────────────────────────────────────────────
+ *
+ * A phase may contain phases, one level deep. Only the TOP level is weighed
+ * here: a sub-phase's progress already reaches this function through its
+ * parent's `completion`, which the database rolls up from its children. Handing
+ * a flat list of both levels to a function that summed everything would count
+ * every piece of work twice, so the filter is applied inside rather than being
+ * left to each caller to remember. `total` and `done` count top-level phases
+ * for the same reason — "3/5 done" must not become "14/25" because the plan
+ * gained detail.
+ *
+ * `blocked` is the deliberate exception and spans both levels.
  */
 export function milestoneProgress(
   milestones: ProjectMilestone[]
 ): MilestoneProgress {
-  const total = milestones.length;
-  const done = milestones.filter((m) => m.status === "done").length;
-  const allocated = milestones.reduce((sum, m) => sum + Number(m.weight ?? 0), 0);
+  // Top-level rows ONLY. A sub-phase's work is already counted inside its
+  // parent's completion (0078 §2 rolls it up there), so summing both levels
+  // counts every piece of work twice — and does it quietly, as a plausible
+  // wrong number on a customer's page rather than as an error. Callers may
+  // hand us a flat list containing both; filtering here rather than at each
+  // call site is what stops the next one forgetting.
+  const top = milestones.filter((m) => (m.depth ?? 0) === 0);
+  const total = top.length;
+  const done = top.filter((m) => m.status === "done").length;
+  const allocated = top.reduce((sum, m) => sum + Number(m.weight ?? 0), 0);
   const weighted = allocated > 0;
 
   // Unweighted plans: every phase is worth one share of however many there are.
@@ -225,7 +246,7 @@ export function milestoneProgress(
   const share = new Map<string, number>();
   let points = 0;
 
-  for (const milestone of milestones) {
+  for (const milestone of top) {
     const weight = weighted ? Number(milestone.weight ?? 0) : 1;
     const completion =
       milestone.status === "done" ? 100 : Number(milestone.completion ?? 0);
@@ -242,14 +263,39 @@ export function milestoneProgress(
     // phases add up to 35% on a page that also says the parts are 7% each.
     pct: Math.max(0, Math.min(100, Math.round(points))),
     next:
-      milestones.find((m) => m.status === "in_progress") ??
-      milestones.find((m) => m.status !== "done") ??
+      top.find((m) => m.status === "in_progress") ??
+      top.find((m) => m.status !== "done") ??
       null,
+    // Blocked sub-phases are surfaced too: "blocked" is the one thing a client
+    // must not have hidden from them by a level of nesting.
     blocked: milestones.filter((m) => m.status === "blocked"),
     weighted,
     allocated: Math.round(allocated * 100) / 100,
     share,
   };
+}
+
+/**
+ * A plan grouped for display: each top-level phase with its sub-phases under
+ * it, both already in `sort` order from the query.
+ *
+ * Children are looked up by parent id rather than by position, so a plan that
+ * mixes nested and flat phases renders correctly — which every project on the
+ * system does today, since nothing had children before 0078.
+ */
+export function milestoneTree(
+  milestones: ProjectMilestone[]
+): { phase: ProjectMilestone; steps: ProjectMilestone[] }[] {
+  const byParent = new Map<string, ProjectMilestone[]>();
+  for (const m of milestones) {
+    if (!m.parent_id) continue;
+    const bucket = byParent.get(m.parent_id);
+    if (bucket) bucket.push(m);
+    else byParent.set(m.parent_id, [m]);
+  }
+  return milestones
+    .filter((m) => !m.parent_id)
+    .map((phase) => ({ phase, steps: byParent.get(phase.id) ?? [] }));
 }
 
 /* ── The payment plan ─────────────────────────────────────────────────────── */

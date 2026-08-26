@@ -1005,7 +1005,15 @@ export type ProjectMilestone = {
   target_on: string | null;
   done_on: string | null;
   sort: number;
-  /** Share of the whole build, 0–100. 0 means "not weighted" — see 0075 §1(c). */
+  /** The phase this one sits inside; null for a top-level phase. 0078 §1. */
+  parent_id: string | null;
+  /** 0 top-level, 1 sub-phase. Generated from `parent_id` — never written. */
+  depth: number;
+  /**
+   * Top-level: share of the whole build, 0–100. 0 means "not weighted" (0075
+   * §1c). Sub-phase: share of ITS PARENT. Two denominators, one column — the
+   * level is what tells them apart.
+   */
   weight: number;
   /** How far through this phase alone, 0–100. Forced to 100 when done. */
   completion: number;

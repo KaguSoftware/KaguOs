@@ -58,22 +58,32 @@ begin;
 -- has nothing to do. (migration-workflow: a superseded file needs a
 -- supersession guard, not just `if not exists`.)
 do $$
+declare
+  superseded boolean;
 begin
   -- `parent_id` does not exist until 0078, and on a clean replay this file
-  -- runs first -- so the column is probed rather than referenced directly.
-  -- A plain `where parent_id is not null` would fail with 42703 on the very
-  -- replay this guard exists to survive.
+  -- runs first. So the column is probed FIRST, and the query that names it is
+  -- only ever parsed inside the branch where it exists -- EXECUTE, because
+  -- plpgsql parses a plain statement when the block is first run and a
+  -- `where parent_id is not null` in open code would raise 42703 on exactly
+  -- the replay this guard exists to survive.
   if exists (
     select 1 from information_schema.columns
     where table_schema = 'public' and table_name = 'project_milestones'
       and column_name = 'parent_id'
-  ) and exists (
-    select 1 from public.project_milestones
-    where project_id = '37024fb4-0852-4fe3-a9f8-3835f4ee4666'
-      and parent_id is not null
   ) then
-    raise notice '0077 superseded by 0079 -- sub-phases present, skipping';
-    return;
+    execute $q$
+      select exists (
+        select 1 from public.project_milestones
+        where project_id = '37024fb4-0852-4fe3-a9f8-3835f4ee4666'
+          and parent_id is not null
+      )
+    $q$ into superseded;
+
+    if superseded then
+      raise notice '0077 superseded by 0079 -- sub-phases present, skipping';
+      return;
+    end if;
   end if;
 
 
