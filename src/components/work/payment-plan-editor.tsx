@@ -21,6 +21,7 @@ import { NumberInput } from "@/components/ui/number-input";
 import { LinkButton } from "@/components/ui/link-button";
 import { Panel, PanelHeader } from "@/components/ui/panel";
 import {
+  addInstallment,
   deleteInstallment,
   deletePaymentPlan,
   extendPaymentPlan,
@@ -28,6 +29,7 @@ import {
   updateInstallment,
   updatePaymentPlan,
 } from "@/lib/actions/payment-plans";
+import { paymentDate } from "@/lib/payments";
 import { useAction } from "@/lib/use-action";
 import type { PlanSummary } from "@/lib/data/portal";
 import {
@@ -327,6 +329,118 @@ function PaymentBadge({ status, late }: { status: string; late: boolean }) {
   return <Badge tone="faint">Scheduled</Badge>;
 }
 
+/* ── A payment on a date somebody chose ───────────────────────── */
+
+/**
+ * The other way to build a schedule.
+ *
+ * "Schedule more" beside it repeats the plan's rhythm, which is what a retainer
+ * needs. This is for everything that isn't a rhythm — a deposit, a payment tied
+ * to a delivery, one more agreed in a phone call — and it asks for exactly the
+ * two things such a payment is: a date and an amount.
+ *
+ * Collapsed until asked for, because on a monthly plan it is the control nobody
+ * touches; one click away, because on a bespoke plan it is the only one they
+ * use.
+ */
+function AddPaymentRow({
+  projectId,
+  planId,
+  currency,
+  suggestedDate,
+  suggestedAmount,
+}: {
+  projectId: string;
+  planId: string;
+  currency: string;
+  suggestedDate: string;
+  suggestedAmount: string;
+}) {
+  const { run, pending } = useAction();
+  const [open, setOpen] = useState(false);
+  const [label, setLabel] = useState("");
+  const [amount, setAmount] = useState(suggestedAmount);
+  const [dueOn, setDueOn] = useState(suggestedDate);
+  // Bumped after each save so the date and amount inputs, which are
+  // uncontrolled, actually reset instead of holding the payment just written.
+  const [round, setRound] = useState(0);
+
+  if (!open) {
+    return (
+      <Button variant="outline" size="sm" onClick={() => setOpen(true)}>
+        <Plus className="size-3.5" aria-hidden />
+        Add a payment
+      </Button>
+    );
+  }
+
+  return (
+    <div className="w-full">
+      <div className="flex flex-wrap items-end gap-2">
+        <div className="w-40">
+          <span className={LABEL}>Due</span>
+          <DatePicker
+            key={`add-due-${planId}-${round}`}
+            name={`add-due-${planId}`}
+            defaultValue={dueOn}
+            onChange={setDueOn}
+          />
+        </div>
+        <div className="w-40">
+          <span className={LABEL}>Amount</span>
+          <NumberInput
+            key={`add-amount-${planId}-${round}`}
+            name={`add-amount-${planId}`}
+            defaultValue={amount}
+            onValueChange={setAmount}
+            suffix={currency}
+          />
+        </div>
+        <div className="min-w-[10rem] flex-1">
+          <label className={LABEL} htmlFor={`add-label-${planId}`}>
+            Label
+          </label>
+          <Input
+            id={`add-label-${planId}`}
+            value={label}
+            onChange={(event) => setLabel(event.target.value)}
+            maxLength={160}
+            placeholder="Deposit, On delivery…"
+          />
+        </div>
+
+        <Button
+          variant="primary"
+          size="sm"
+          disabled={pending}
+          onClick={() =>
+            run(() => addInstallment(projectId, planId, { label, amount, due_on: dueOn }), {
+              success: "Payment added.",
+              onSuccess: () => {
+                setLabel("");
+                // The date and amount are deliberately KEPT and the inputs
+                // remounted onto them: somebody entering a bespoke schedule is
+                // typing a run of similar payments, and clearing the fields
+                // after each one makes them retype what they just said.
+                setRound((current) => current + 1);
+              },
+            })
+          }
+        >
+          Add
+        </Button>
+        <Button variant="ghost" size="sm" onClick={() => setOpen(false)}>
+          Done
+        </Button>
+      </div>
+      <p className="mt-1.5 text-[calc(12px*var(--text-scale,1))] text-faint">
+        Goes in on the date you choose, whatever the plan’s cadence says. If the
+        amount differs from the plan’s headline figure, the headline clears.
+      </p>
+    </div>
+  );
+}
+
 /* ── One plan ─────────────────────────────────────────────────────────────── */
 
 function PlanBlock({
@@ -356,6 +470,15 @@ function PlanBlock({
   const [extendBy, setExtendBy] = useState("3");
 
   const hiddenFromClient = !plan.visible_to_client || plan.status === "draft";
+
+  // Where the add-a-payment form opens: one cadence step past the last payment
+  // on the plan, or the plan's start date when there are none. A guess, and
+  // only a guess — the field is a date picker precisely because the answer is
+  // often "no, the 14th".
+  const last = payments[payments.length - 1];
+  const nextSlot = last
+    ? paymentDate(last.due_on, plan.cadence, 1)
+    : plan.starts_on;
 
   return (
     <li className="border-b border-line last:border-b-0">
@@ -596,10 +719,21 @@ function PlanBlock({
         </ul>
       )}
 
-      {/* Extending is how an open-ended retainer stays open-ended: the schedule
-          is laid out a year at a time rather than forever, so the portal never
-          shows a client dates past what anybody has agreed to. */}
+      {/* Two ways to grow a schedule, and they answer different questions.
+          Extending repeats the plan's rhythm — how an open-ended retainer stays
+          open-ended, laid out a year at a time rather than forever so the
+          portal never shows dates past what anybody agreed to. Adding one
+          payment ignores the rhythm entirely, which is what a deposit or a
+          delivery payment actually is. */}
       <div className="flex flex-wrap items-center gap-2 border-t border-line/60 px-4 py-2.5">
+        <AddPaymentRow
+          projectId={projectId}
+          planId={plan.id}
+          currency={plan.currency}
+          suggestedDate={nextSlot}
+          suggestedAmount={plan.amount_each === null ? "" : String(plan.amount_each)}
+        />
+
         <span className="font-mono text-[calc(11px*var(--text-scale,1))] uppercase tracking-wider text-faint">
           Schedule more
         </span>

@@ -43,6 +43,11 @@ import { todayInIstanbul } from "@/lib/utils";
  * plan that regenerated itself from its own parameters would eat those edits
  * every time somebody fixed a typo in the title.
  *
+ * A schedule that is not a rhythm at all — a deposit here, a milestone
+ * payment there — is built the same way, one `addInstallment` at a time, on
+ * whatever dates were actually agreed. The cadence on the plan is then only a
+ * label on how it is described.
+ *
  * ── The cap ────────────────────────────────────────────────────────────────
  *
  * 120 payments. Ten years of monthly, and past it somebody has mistyped a
@@ -380,6 +385,100 @@ export async function deleteInstallment(
 
   revalidateBoth(projectId);
   return { ok: true, message: "Payment removed." };
+}
+
+/**
+ * One payment, on a date somebody chose.
+ *
+ * The other half of `extendPaymentPlan`. That one repeats the cadence — twelve
+ * more months at the same figure — and it is the right tool for a retainer that
+ * keeps running. This is for the schedule that ISN'T a rhythm: a deposit, a
+ * milestone payment, an extra invoice agreed halfway through, "and another
+ * $2,000 when the app store approves it". A date and an amount, nothing
+ * derived, nothing generated.
+ *
+ * `seq` is assigned after the current last one rather than by due date, because
+ * the number is an insertion order and not a ranking — a payment slotted in
+ * before the others still reads correctly in the list, which is sorted by date.
+ *
+ * The plan's `amount_each` headline is cleared when the new payment disagrees
+ * with it. Left alone it would keep advertising "$1,200 / month" on a schedule
+ * that now has a $4,000 row in it, and the headline is what the client reads
+ * first.
+ */
+export async function addInstallment(
+  projectId: string,
+  planId: string,
+  input: InstallmentInput
+): Promise<ActionResult> {
+  const { ctx, stop } = await guard(projectId);
+  if (stop) return stop;
+
+  const amount = amountOf(input.amount);
+  if (amount === null) return { ok: false, message: "Enter an amount above zero." };
+  const dueOn = date(input.due_on);
+  if (!dueOn) return { ok: false, message: "A payment needs a due date." };
+
+  const { data: plan, error: planError } = await ctx.supabase
+    .from("project_payment_plans")
+    .select("id, amount_each")
+    .eq("id", planId)
+    .eq("project_id", projectId)
+    .maybeSingle();
+  if (planError) return { ok: false, message: planError.message };
+  if (!plan) return { ok: false, message: "That plan is gone." };
+
+  const { count, error: countError } = await ctx.supabase
+    .from("project_payment_installments")
+    .select("id", { count: "exact", head: true })
+    .eq("plan_id", planId)
+    .eq("project_id", projectId);
+  if (countError) return { ok: false, message: countError.message };
+  if ((count ?? 0) >= MAX_PAYMENTS) {
+    return {
+      ok: false,
+      message: `A plan holds at most ${MAX_PAYMENTS} payments.`,
+    };
+  }
+
+  const { data: rows, error: rowsError } = await ctx.supabase
+    .from("project_payment_installments")
+    .select("seq")
+    .eq("plan_id", planId)
+    .eq("project_id", projectId)
+    .order("seq", { ascending: false })
+    .limit(1);
+  if (rowsError) return { ok: false, message: rowsError.message };
+
+  const status = asInstallmentStatus(input.status) ?? "scheduled";
+  const paidOn = date(input.paid_on);
+
+  const { error } = await ctx.supabase
+    .from("project_payment_installments")
+    .insert({
+      plan_id: planId,
+      project_id: projectId,
+      seq: (rows?.[0]?.seq ?? 0) + 1,
+      label: text(input.label, 160),
+      amount,
+      due_on: dueOn,
+      status,
+      paid_on: status === "paid" ? (paidOn ?? todayInIstanbul()) : null,
+      note: text(input.note, 2000),
+    });
+  if (error) return { ok: false, message: error.message };
+
+  // A headline that is no longer true of every payment stops being a headline.
+  if (plan.amount_each !== null && Number(plan.amount_each) !== amount) {
+    await ctx.supabase
+      .from("project_payment_plans")
+      .update({ amount_each: null })
+      .eq("id", planId)
+      .eq("project_id", projectId);
+  }
+
+  revalidateBoth(projectId);
+  return { ok: true, message: "Payment added." };
 }
 
 /**
