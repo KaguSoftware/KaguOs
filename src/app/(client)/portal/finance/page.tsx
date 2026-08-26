@@ -175,7 +175,14 @@ export default async function PortalFinancePage() {
           ) : (
             <div className="grid gap-8">
               {perBusiness.map(({ project, invoices, plans, totals }) => (
-                <section key={project.id}>
+                // min-w-0: this is a grid item, whose automatic minimum
+                // size is its own min-content — and the invoice table below
+                // sets a 38rem floor to keep its columns readable. Without
+                // this the section refuses to shrink past ~610px, overflows
+                // the grid, and takes the whole page's horizontal scroll with
+                // it on a phone. The table still scrolls inside its own box;
+                // that is the point of giving it one.
+                <section key={project.id} className="min-w-0">
                   <BusinessHeading
                     name={project.name}
                     action={
@@ -242,83 +249,92 @@ function InvoiceTable({
   today: string;
 }) {
   return (
-    <div className="overflow-x-auto rounded-md border border-line">
-      <table className="w-full min-w-[38rem] border-collapse text-left">
-        <thead>
-          <tr className="border-b border-line bg-raised/40">
-            {["Invoice", "Issued", "Due", "Amount", "Status"].map((heading) => (
-              <th
-                key={heading}
-                scope="col"
-                className="whitespace-nowrap px-3 py-2 font-mono text-[calc(10px*var(--text-scale,1))] font-normal uppercase tracking-wider text-faint"
-              >
-                {heading}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {invoices.map((invoice) => {
-            // "Overdue" is derived, not stored: sent, dated, and that date has
-            // passed. Written out rather than hidden in a helper because the
-            // finance page and the rail's count have to mean the same thing.
-            const overdue =
-              invoice.status === "sent" &&
-              invoice.due_on !== null &&
-              invoice.due_on < today;
-            return (
-              <tr key={invoice.id} className="border-b border-line/60 last:border-b-0">
-                <td className="px-3 py-2.5 align-top">
-                  <span className="block font-mono text-[calc(12px*var(--text-scale,1))] text-muted">
-                    {invoice.number}
-                  </span>
-                  {invoice.title && (
-                    <span className="block text-[calc(13px*var(--text-scale,1))] text-ink">
-                      {invoice.title}
-                    </span>
-                  )}
-                  {/* The note is the one place Kagu writes a sentence to the
-                      client on this page — a payment reference, what a partial
-                      payment covered. Under the title rather than in its own
-                      column, which would be empty for most rows. */}
-                  {invoice.note && (
-                    <span className="mt-0.5 block max-w-[40ch] text-[calc(12px*var(--text-scale,1))] text-faint">
-                      {invoice.note}
-                    </span>
-                  )}
-                </td>
-                <td className="whitespace-nowrap px-3 py-2.5 align-top font-mono text-[calc(12px*var(--text-scale,1))] text-muted">
-                  {formatDate(invoice.issued_on)}
-                </td>
-                <td
-                  className={cn(
-                    "whitespace-nowrap px-3 py-2.5 align-top font-mono text-[calc(12px*var(--text-scale,1))]",
-                    overdue ? "text-danger" : "text-muted"
-                  )}
+    <>
+      <div className="overflow-x-auto rounded-md border border-line">
+        <table className="w-full min-w-[38rem] border-collapse text-left">
+          <thead>
+            <tr className="border-b border-line bg-raised/40">
+              {["Invoice", "Issued", "Due", "Amount", "Status"].map((heading) => (
+                <th
+                  key={heading}
+                  scope="col"
+                  className="whitespace-nowrap px-3 py-2 font-mono text-[calc(10px*var(--text-scale,1))] font-normal uppercase tracking-wider text-faint"
                 >
-                  {invoice.due_on ? formatDate(invoice.due_on) : "—"}
-                </td>
-                <td className="whitespace-nowrap px-3 py-2.5 align-top font-mono text-[calc(13px*var(--text-scale,1))] tabular-nums text-ink">
-                  <AmountCell
-                    amount={invoice.amount}
-                    currency={invoice.currency}
-                    struck={invoice.status === "void"}
-                  />
-                  {invoice.paid_on && (
-                    <span className="mt-0.5 block text-[calc(11px*var(--text-scale,1))] text-primary-dim">
-                      paid {formatDate(invoice.paid_on)}
+                  {heading}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {invoices.map((invoice) => {
+              // "Overdue" is derived, not stored: sent, dated, and that date has
+              // passed. Written out rather than hidden in a helper because the
+              // finance page and the rail's count have to mean the same thing.
+              const overdue =
+                invoice.status === "sent" &&
+                invoice.due_on !== null &&
+                invoice.due_on < today;
+              return (
+                <tr key={invoice.id} className="border-b border-line/60 last:border-b-0">
+                  <td className="px-3 py-2.5 align-top">
+                    <span className="block font-mono text-[calc(12px*var(--text-scale,1))] text-muted">
+                      {invoice.number}
                     </span>
-                  )}
-                </td>
-                <td className="px-3 py-2.5 align-top">
-                  <InvoiceBadge status={invoice.status} overdue={overdue} />
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
-    </div>
+                    {invoice.title && (
+                      <span className="block text-[calc(13px*var(--text-scale,1))] text-ink">
+                        {invoice.title}
+                      </span>
+                    )}
+                    {/* The note is the one place Kagu writes a sentence to the
+                        client on this page — a payment reference, what a partial
+                        payment covered. Under the title rather than in its own
+                        column, which would be empty for most rows. */}
+                    {invoice.note && (
+                      <span className="mt-0.5 block max-w-[40ch] text-[calc(12px*var(--text-scale,1))] text-faint">
+                        {invoice.note}
+                      </span>
+                    )}
+                  </td>
+                  <td className="whitespace-nowrap px-3 py-2.5 align-top font-mono text-[calc(12px*var(--text-scale,1))] text-muted">
+                    {formatDate(invoice.issued_on)}
+                  </td>
+                  <td
+                    className={cn(
+                      "whitespace-nowrap px-3 py-2.5 align-top font-mono text-[calc(12px*var(--text-scale,1))]",
+                      overdue ? "text-danger" : "text-muted"
+                    )}
+                  >
+                    {invoice.due_on ? formatDate(invoice.due_on) : "—"}
+                  </td>
+                  <td className="whitespace-nowrap px-3 py-2.5 align-top font-mono text-[calc(13px*var(--text-scale,1))] tabular-nums text-ink">
+                    <AmountCell
+                      amount={invoice.amount}
+                      currency={invoice.currency}
+                      struck={invoice.status === "void"}
+                    />
+                    {invoice.paid_on && (
+                      <span className="mt-0.5 block text-[calc(11px*var(--text-scale,1))] text-primary-dim">
+                        paid {formatDate(invoice.paid_on)}
+                      </span>
+                    )}
+                  </td>
+                  <td className="px-3 py-2.5 align-top">
+                    <InvoiceBadge status={invoice.status} overdue={overdue} />
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+      {/* The horizontal scroll is the deliberate answer to a narrow screen
+          (see above), but a table that simply stops mid-column at the edge of
+          a phone reads as a broken page rather than as a swipeable one. One
+          line says which it is, below `sm` — above it the 38rem floor fits. */}
+      <p className="mt-1.5 text-[calc(11px*var(--text-scale,1))] text-faint sm:hidden">
+        Swipe the table sideways for the amount and status.
+      </p>
+    </>
   );
 }
 
@@ -473,8 +489,15 @@ function PaymentLine({
         {formatMoney(payment.amount, currency)}
       </span>
 
+      {/* On a phone the row has no room for four things side by side: the
+          label ends up crushed to a few pixels of ellipsis between the amount
+          and the badge, which reads as a rendering fault rather than as a
+          label. Below `sm` it drops to its own full-width line under the row —
+          ordered last, so the date, the figure and the status still read
+          across the top — and above `sm` it goes back to the single truncating
+          line this row was designed as. */}
       {payment.label && (
-        <span className="min-w-0 flex-1 truncate text-[calc(12px*var(--text-scale,1))] text-muted">
+        <span className="order-last w-full text-[calc(12px*var(--text-scale,1))] text-muted sm:order-none sm:w-auto sm:min-w-0 sm:flex-1 sm:truncate">
           {payment.label}
         </span>
       )}
@@ -497,7 +520,7 @@ function PaymentLine({
       </span>
 
       {payment.note && (
-        <span className="w-full text-[calc(12px*var(--text-scale,1))] text-faint">
+        <span className="order-last w-full text-[calc(12px*var(--text-scale,1))] text-faint">
           {payment.note}
         </span>
       )}
