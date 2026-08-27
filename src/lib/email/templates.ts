@@ -39,7 +39,7 @@ const NOTE_LABEL: Record<Locale, string> = {
 
 const FOOTER: Record<Locale, string> = {
   en: "Sent by Kagusoftware. You're getting this because you have a client account on KaguOs.",
-  ar: "أُرسلت من كاغو سوفتوير. وصلتكم هذه الرسالة لأن لديكم حساب عميل على KaguOs.",
+  ar: "وصلتكم هذه الرسالة من كاغو سوفتوير لأنّ لديكم حساب عميل على KaguOs.",
 };
 
 /** The producer's own words, appended after the numbers rather than instead of them. */
@@ -83,15 +83,15 @@ export function inputsReminderEmail(input: InputsReminderInput): ClientEmail {
   const ar = locale === "ar";
 
   const subject = ar
-    ? `${projectName}: ما زالت هناك إجابات ناقصة`
+    ? `${projectName}: أسئلة ما زالت بانتظار إجاباتكم`
     : `${projectName}: your input pack is still open`;
 
   const heading = ar
-    ? `بقيت بضعة أسئلة في ${projectName}`
+    ? `بقيت بضعة أسئلة دون إجابة في ${projectName}`
     : `A few answers are still open on ${projectName}`;
 
   const intro = ar
-    ? "حزمة المدخلات هي الأسئلة التي يقوم عليها البناء — ماذا تقدّمون، ولمن، وكيف تريدونه أن يعمل. ما يكون فيها عند البدء هو ما نبني عليه."
+    ? "حزمة المدخلات هي الأسئلة التي يقوم عليها البناء: ماذا تقدّمون، ولمن، وكيف تريدون أن يعمل. وما نجده فيها يوم نبدأ هو ما نبني عليه."
     : "Your input pack is the set of questions the build runs on — what you sell, who it's for, and how you want it to work. Whatever's in there when we start is what we build from.";
 
   const blocks: EmailBlock[] = [{ kind: "paragraph", text: intro }];
@@ -101,7 +101,7 @@ export function inputsReminderEmail(input: InputsReminderInput): ClientEmail {
   if (total > 0) {
     blocks.push({
       kind: "meter",
-      label: ar ? "تمت الإجابة" : "Answered",
+      label: ar ? "نسبة الإجابة" : "Answered",
       pct: Math.round((done / total) * 100),
       caption: ar
         ? arPlural(
@@ -116,7 +116,10 @@ export function inputsReminderEmail(input: InputsReminderInput): ClientEmail {
   }
 
   if (shown.length > 0) {
-    blocks.push({ kind: "paragraph", text: ar ? "ما زال مفتوحًا:" : "Still open:" });
+    blocks.push({
+      kind: "paragraph",
+      text: ar ? "الأقسام التي لم تكتمل بعد:" : "Still open:",
+    });
     blocks.push({
       kind: "list",
       items: [
@@ -145,12 +148,12 @@ export function inputsReminderEmail(input: InputsReminderInput): ClientEmail {
     ...renderEmail({
       locale,
       preheader: ar
-        ? `${done} من أصل ${total} — أكملوا ما تبقّى في بوابتكم.`
+        ? `مُجاب ${done} من أصل ${total} — أكملوا ما تبقّى في بوابتكم.`
         : `${done} of ${total} answered — finish the rest in your portal.`,
       heading,
       blocks,
       cta: {
-        label: ar ? "افتحوا حزمة المدخلات" : "Open your input pack",
+        label: ar ? "افتحوا حزمة مدخلاتكم" : "Open your input pack",
         href: url,
       },
       footer: FOOTER[locale],
@@ -186,14 +189,14 @@ export function progressUpdateEmail(input: ProgressUpdateInput): ClientEmail {
   const ar = locale === "ar";
 
   const subject = ar
-    ? `${projectName} — تحديث على سير العمل`
+    ? `${projectName} — تحديث سير العمل`
     : `${projectName} — progress updated`;
 
   const blocks: EmailBlock[] = [
     {
       kind: "paragraph",
       text: ar
-        ? "هذا الملخّص السريع. الخطة الكاملة، بكل مرحلة وتواريخها، موجودة في بوابتكم."
+        ? "هذا باختصار ما استجدّ. أما الخطة الكاملة، بمراحلها وتواريخها، فتجدونها في بوابتكم."
         : "Here's the short version. The full plan — every phase, with its dates — is in your portal.",
     },
     {
@@ -228,7 +231,7 @@ export function progressUpdateEmail(input: ProgressUpdateInput): ClientEmail {
   if (blocked.length > 0) {
     blocks.push({
       kind: "paragraph",
-      text: ar ? "متوقّف حاليًا:" : "Currently blocked:",
+      text: ar ? "المراحل المتوقّفة حاليًا:" : "Currently blocked:",
     });
     blocks.push({ kind: "list", items: blocked });
   }
@@ -240,9 +243,9 @@ export function progressUpdateEmail(input: ProgressUpdateInput): ClientEmail {
     ...renderEmail({
       locale,
       preheader: ar
-        ? `${projectName} عند ${Math.round(pct)}% — اطّلعوا على الخطة الكاملة.`
+        ? `${projectName} بلغ ${Math.round(pct)}٪ — اطّلعوا على الخطة الكاملة.`
         : `${projectName} is at ${Math.round(pct)}% — see the full plan.`,
-      heading: ar ? `حدّثنا وضع ${projectName}` : `We've updated where ${projectName} stands`,
+      heading: ar ? `إليكم أين وصل ${projectName}` : `We've updated where ${projectName} stands`,
       blocks,
       cta: {
         label: ar ? "اطّلعوا على الخطة الكاملة" : "See the full plan",

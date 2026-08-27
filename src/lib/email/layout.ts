@@ -22,25 +22,50 @@ import { dirFor } from "@/lib/locale";
  * once to sRGB hex. If the palette moves in `globals.css`, it has to be moved
  * here too; that duplication is the price of the medium.
  *
- * ── Why dark ───────────────────────────────────────────────────────────────
+ * ── Why light, when the portal it links to is dark ─────────────────────────
  *
- * Because the link goes to a dark portal, and an email that flashes white
- * before handing the reader a black page reads as two different companies. Dark
- * is also the safer direction: a dark-mode client leaves a dark email alone,
- * where a light one gets its colours inverted by whichever heuristic the client
- * happens to use that month.
+ * This shipped dark, on the reasoning that it should match the portal and that
+ * a dark-mode client would leave a dark email alone. The first real send
+ * disproved the second half: Gmail's Android app runs its own colour transform
+ * on every message when the device is in dark mode, and it inverted the lot —
+ * the mint button came out forest green, the near-black label came out white,
+ * the dark card came out pale grey. It does not read the `color-scheme` meta
+ * below (Apple Mail and Outlook.com do; Gmail does not), and there is no
+ * supported way to opt out.
+ *
+ * So the choice is not "dark or light", it is "which input to Gmail's inverter
+ * produces something we would sign off". A light email inverted comes out a
+ * clean dark; a dark email inverted comes out the muddle above. Light is
+ * therefore the more predictable design, which is the whole reason to prefer
+ * one — matching the portal is worth less than being legible in the client most
+ * customers actually read mail in.
+ *
+ * ── The greens are not the app's greens, and that is deliberate ────────────
+ *
+ * `--primary` is `oklch(0.86 0.14 160)` — a mint built to sit on a near-black
+ * page. On white it is nearly invisible: a filled button in it fails contrast
+ * against any label, and a progress bar in it disappears into its own track.
+ * The accent here keeps the brand HUE (160) and drops the lightness to 0.52,
+ * which is the same colour reasoned about against a different background.
+ *
+ * Every value below is contrast-checked against the surface it sits on: body
+ * 7.36, captions 4.84, the button's white label 5.07, and the meter's fill
+ * against its track 4.2 — over the 4.5 that text needs and the 3.0 that a
+ * meaningful graphic does. Changing one means re-checking it.
  */
 
 const C = {
-  page: "#070d0a",
-  card: "#111815",
-  line: "#1d2521",
-  ink: "#ebf0ed",
-  muted: "#b1bab5",
-  faint: "#8d9490",
-  primary: "#73edb1",
-  primaryInk: "#021109",
-  track: "#1d2521",
+  page: "#f4f8f6",
+  card: "#ffffff",
+  line: "#dfe4e2",
+  ink: "#0d1f16",
+  muted: "#4c5951",
+  faint: "#6a746e",
+  /** Brand hue 160, at the lightness a white background needs. */
+  primary: "#007f4e",
+  /** The button's label. White, not the app's near-black — see the note above. */
+  primaryInk: "#ffffff",
+  track: "#e8ecea",
 } as const;
 
 /**
@@ -128,7 +153,7 @@ function meterHtml(
     <td style="padding:0 0 8px;font-size:13px;color:${C.faint};text-align:${align};">${escapeHtml(label)}</td>
   </tr>
   <tr>
-    <td style="padding:0 0 8px;font-size:28px;font-weight:700;line-height:1.1;color:${C.ink};text-align:${align};">${filled}%</td>
+    <td style="padding:0 0 8px;font-size:28px;font-weight:700;line-height:1.1;color:${C.ink};text-align:${align};">${filled}${rtl ? "٪" : "%"}</td>
   </tr>
   <tr>
     <td>
@@ -151,7 +176,7 @@ function noteHtml(label: string, text: string, align: string, rtl: boolean): str
   return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 20px;">
   <tr>
     <td style="${side}:2px solid ${C.primary};${pad}">
-      <p style="margin:0 0 6px;font-size:12px;letter-spacing:0.04em;text-transform:uppercase;color:${C.faint};text-align:${align};">${escapeHtml(label)}</p>
+      <p style="margin:0 0 6px;font-size:12px;${rtl ? "" : "letter-spacing:0.04em;text-transform:uppercase;"}color:${C.faint};text-align:${align};">${escapeHtml(label)}</p>
       <p style="margin:0;font-size:15px;line-height:1.6;color:${C.ink};text-align:${align};white-space:pre-wrap;">${escapeHtml(text)}</p>
     </td>
   </tr>
@@ -181,12 +206,12 @@ function blockHtml(block: EmailBlock, align: string, rtl: boolean): string {
   }
 }
 
-function blockText(block: EmailBlock): string {
+function blockText(block: EmailBlock, rtl: boolean): string {
   switch (block.kind) {
     case "paragraph":
       return block.text;
     case "meter":
-      return `${block.label}: ${Math.round(block.pct)}%${block.caption ? `\n${block.caption}` : ""}`;
+      return `${block.label}: ${Math.round(block.pct)}${rtl ? "٪" : "%"}${block.caption ? `\n${block.caption}` : ""}`;
     case "note":
       return `${block.label}:\n${block.text}`;
     case "list":
@@ -224,8 +249,12 @@ export function renderEmail(shell: EmailShell): RenderedEmail {
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="color-scheme" content="dark">
-<meta name="supported-color-schemes" content="dark">
+<!-- Declares the email light-only, so a client that HONOURS this (Apple Mail,
+     Outlook.com) leaves it alone instead of applying a dark treatment. Gmail
+     ignores it and inverts anyway; that case is handled by the design, not by
+     the tag. -->
+<meta name="color-scheme" content="light">
+<meta name="supported-color-schemes" content="light">
 <title>${escapeHtml(shell.heading)}</title>
 </head>
 <body style="margin:0;padding:0;background-color:${C.page};" bgcolor="${C.page}">
@@ -284,7 +313,7 @@ export function renderEmail(shell: EmailShell): RenderedEmail {
   const text = [
     shell.heading,
     "",
-    ...shell.blocks.map(blockText),
+    ...shell.blocks.map((block) => blockText(block, rtl)),
     "",
     `${shell.cta.label}: ${shell.cta.href}`,
     "",
