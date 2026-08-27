@@ -538,6 +538,8 @@ export type RecurringItem = {
   amount: number;
   currency: Currency;
   cadence: RecurringCadence;
+  /** Day of month the charge lands (1–31). Null = the day it started. */
+  billing_day: number | null;
   started_on: string;
   canceled_on: string | null;
   notes: string | null;

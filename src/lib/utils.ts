@@ -213,6 +213,15 @@ export function addMonths(date: string, months: number) {
 }
 
 /**
+ * An inclusive span of plain `YYYY-MM-DD` dates — both ends counted.
+ *
+ * Deliberately strings, not Dates: every date-only column in this schema is a
+ * plain calendar day, and `from <= day && day <= to` on `YYYY-MM-DD` strings is
+ * both correct and timezone-proof, which `new Date(...)` comparisons are not.
+ */
+export type DateRange = { from: string; to: string };
+
+/**
  * Compact relative time ("3h ago", "2d ago"). Snapshot at render time.
  *
  * English by design — this is what the `(app)` shell calls. It is the `"en"`

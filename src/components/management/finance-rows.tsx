@@ -11,7 +11,14 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button, ConfirmButton } from "@/components/ui/button";
 import { useAction } from "@/lib/use-action";
-import { monthlyAmount, formatTRY, toTRY, type FxRates } from "@/lib/finance";
+import {
+  billingScheduleLabel,
+  monthlyAmount,
+  nextBillingOn,
+  formatTRY,
+  toTRY,
+  type FxRates,
+} from "@/lib/finance";
 import { cn, formatDate, formatMoney } from "@/lib/utils";
 import type { RecurringItem, Transaction } from "@/lib/types";
 
@@ -107,6 +114,7 @@ export function RecurringRow({
   const income = item.type === "income";
   const active = item.canceled_on === null;
   const monthlyTRY = toTRY(monthlyAmount(item), item.currency, rates);
+  const nextBill = nextBillingOn(item);
 
   return (
     <li className={cn("px-4 py-3", !active && "opacity-60")}>
@@ -115,7 +123,7 @@ export function RecurringRow({
           <p className="text-sm font-medium text-ink">{item.name}</p>
           <p className="mt-0.5 text-xs text-faint">
             {item.counterparty && `${item.counterparty} · `}
-            {item.cadence} · since {formatDate(item.started_on)}
+            {billingScheduleLabel(item)} · since {formatDate(item.started_on)}
             {!active && ` · canceled ${formatDate(item.canceled_on)}`}
           </p>
         </div>
@@ -131,6 +139,19 @@ export function RecurringRow({
         </span>
         <span className="w-24 text-right font-mono text-xs text-muted">
           {monthlyTRY !== null ? `${formatTRY(monthlyTRY)}/mo` : "no rate"}
+        </span>
+        {/* The date the money next leaves, next to the amount that leaves —
+            the pair is the question this list gets asked. A canceled item has
+            no next bill, and says so rather than showing a date that will
+            never happen. */}
+        <span className="w-28 whitespace-nowrap text-right text-xs text-faint">
+          {nextBill ? (
+            <>
+              next <span className="text-muted">{formatDate(nextBill)}</span>
+            </>
+          ) : (
+            "—"
+          )}
         </span>
         <Badge tone={active ? "green" : "faint"}>{active ? "active" : "canceled"}</Badge>
         <Link
