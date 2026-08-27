@@ -18,7 +18,13 @@ import { ProgressMeter } from "@/components/portal/progress-meter";
 import { Money, MilestoneBadge } from "@/components/portal/bits";
 import { LOCALE_COOKIE, parseLocale } from "@/lib/locale";
 import { dict, milestoneStatusLabel } from "@/lib/i18n";
-import { cn, formatDate, formatRelative, todayInIstanbul } from "@/lib/utils";
+import {
+  cn,
+  formatDateIn,
+  formatRelativeIn,
+  isolate,
+  todayInIstanbul,
+} from "@/lib/utils";
 
 /**
  * `generateMetadata` rather than a static `metadata`, because the tab title is
@@ -59,15 +65,30 @@ export async function generateMetadata(): Promise<Metadata> {
  * comma-and list with a leading capital and Arabic wants neither, so a join
  * written in this file would have to know both.
  *
- * The arrows carry `rtl:rotate-180`: a "keep going" arrow that points left on
- * a right-to-left page reads as "back".
+ * The arrows carry `rtl:rotate-180` and `rtl:translate-x-1`: a "keep going"
+ * arrow that points left on a right-to-left page reads as "back", and one that
+ * mirrors its glyph but keeps sliding left-to-right on hover reads as broken.
+ *
+ * Dates, percentages and elapsed time go through the locale-aware formatters
+ * rather than the plain ones, and every staff-typed string — a business name, a
+ * milestone title — is wrapped in `<bdi>` with its separators emitted as their
+ * own nodes. A `·` or `—` left as leading or trailing text beside an Arabic run
+ * is bidi-neutral, so it takes the paragraph direction and lands on the wrong
+ * side of the phrase it was meant to separate.
  */
 export default async function PortalDashboardPage() {
   const portal = await loadPortal();
   const today = todayInIstanbul();
   const locale = parseLocale((await cookies()).get(LOCALE_COOKIE)?.value);
   const t = dict(locale);
-  const firstName = (portal.ctx.profile.full_name || "").trim().split(" ")[0];
+  // Greeted by the WHOLE name, not the first word of it. The split was written
+  // for "Sarah Ahmed" and is wrong for most of the people this portal is for:
+  // "عبد الرحمن" is one name in two words, and taking the first leaves "عبد" —
+  // "servant of", a fragment nobody is called — in the largest text on the page.
+  // Arabic has no reliable way to find the given name by splitting on spaces
+  // (عبد ال…، أبو…، and compound names all break it), so the honest greeting is
+  // the name as its owner typed it.
+  const greetingName = (portal.ctx.profile.full_name || "").trim();
 
   const businesses = portal.projects.map((project) => {
     const milestones = portal.milestonesByProject.get(project.id) ?? [];
@@ -124,7 +145,7 @@ export default async function PortalDashboardPage() {
       />
 
       <PageHeader
-        title={firstName ? t.hello(firstName) : t.yourDashboard}
+        title={greetingName ? t.hello(greetingName) : t.yourDashboard}
         description={t.headline(packsOpen.length, overdueCount, blockedCount)}
       />
 
@@ -152,16 +173,19 @@ export default async function PortalDashboardPage() {
                     <ClipboardList className="size-4 shrink-0 text-amber" aria-hidden />
                     <span className="min-w-0 flex-1 text-[calc(13px*var(--text-scale,1))] text-ink">
                       {portal.projects.length > 1 && (
-                        <span className="text-muted">{entry.project.name} — </span>
+                        <>
+                          <bdi className="text-muted">{entry.project.name}</bdi>
+                          <span className="text-muted" aria-hidden> — </span>
+                        </>
                       )}
                       {entry.packPct === 0
                         ? t.packNotStarted
                         : t.packFilledIn(entry.packPct)}
                     </span>
-                    <span className="flex shrink-0 items-center gap-1.5 font-mono text-xs text-amber">
+                    <span className="flex shrink-0 items-center gap-1.5 font-mono text-xs text-amber rtl:font-sans">
                       {t.finishIt}
                       <ArrowRight
-                        className="size-3.5 -translate-x-1 opacity-0 transition-[opacity,transform] duration-200 ease-mac group-hover:translate-x-0 group-hover:opacity-100 rtl:rotate-180"
+                        className="size-3.5 -translate-x-1 opacity-0 transition-[opacity,transform] duration-200 ease-mac group-hover:translate-x-0 group-hover:opacity-100 rtl:translate-x-1 rtl:rotate-180"
                         aria-hidden
                       />
                     </span>
@@ -179,10 +203,10 @@ export default async function PortalDashboardPage() {
                     <span className="min-w-0 flex-1 text-[calc(13px*var(--text-scale,1))] text-ink">
                       {t.invoicesOverdue(overdueCount)}
                     </span>
-                    <span className="flex shrink-0 items-center gap-1.5 font-mono text-xs text-danger">
+                    <span className="flex shrink-0 items-center gap-1.5 font-mono text-xs text-danger rtl:font-sans">
                       {t.seeFinance}
                       <ArrowRight
-                        className="size-3.5 -translate-x-1 opacity-0 transition-[opacity,transform] duration-200 ease-mac group-hover:translate-x-0 group-hover:opacity-100 rtl:rotate-180"
+                        className="size-3.5 -translate-x-1 opacity-0 transition-[opacity,transform] duration-200 ease-mac group-hover:translate-x-0 group-hover:opacity-100 rtl:translate-x-1 rtl:rotate-180"
                         aria-hidden
                       />
                     </span>
@@ -209,7 +233,7 @@ export default async function PortalDashboardPage() {
             {businesses.map((entry) => (
               <Panel key={entry.project.id} className="p-4">
                 <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-                  <h2 className="min-w-0 text-sm font-semibold text-ink">
+                  <h2 dir="auto" className="min-w-0 text-sm font-semibold text-ink">
                     {entry.project.name}
                   </h2>
                   {entry.build.next ? (
@@ -224,9 +248,9 @@ export default async function PortalDashboardPage() {
 
                 <dl className="mt-4 grid gap-3">
                   <div>
-                    <dt className="flex items-baseline justify-between gap-3 font-mono text-[calc(10px*var(--text-scale,1))] uppercase tracking-wider text-faint">
+                    <dt className="flex items-baseline justify-between gap-3 font-mono text-[calc(10px*var(--text-scale,1))] uppercase tracking-wider text-faint rtl:font-sans rtl:normal-case rtl:tracking-normal">
                       <span>{t.build}</span>
-                      <span className="tabular-nums">{entry.build.pct}%</span>
+                      <span className="tabular-nums">{t.percent(entry.build.pct)}</span>
                     </dt>
                     <dd className="mt-1.5">
                       <ProgressMeter
@@ -239,9 +263,9 @@ export default async function PortalDashboardPage() {
                   </div>
 
                   <div>
-                    <dt className="flex items-baseline justify-between gap-3 font-mono text-[calc(10px*var(--text-scale,1))] uppercase tracking-wider text-faint">
+                    <dt className="flex items-baseline justify-between gap-3 font-mono text-[calc(10px*var(--text-scale,1))] uppercase tracking-wider text-faint rtl:font-sans rtl:normal-case rtl:tracking-normal">
                       <span>{t.yourInputPack}</span>
-                      <span className="tabular-nums">{entry.packPct}%</span>
+                      <span className="tabular-nums">{t.percent(entry.packPct)}</span>
                     </dt>
                     <dd className="mt-1.5">
                       <ProgressMeter
@@ -254,13 +278,14 @@ export default async function PortalDashboardPage() {
                   </div>
 
                   <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-                    <dt className="font-mono text-[calc(10px*var(--text-scale,1))] uppercase tracking-wider text-faint">
+                    <dt className="font-mono text-[calc(10px*var(--text-scale,1))] uppercase tracking-wider text-faint rtl:font-sans rtl:normal-case rtl:tracking-normal">
                       {t.outstanding}
                     </dt>
                     <dd>
                       <Money
                         bucket={entry.totals.outstanding}
                         tone={entry.totals.overdueCount > 0 ? "danger" : "ink"}
+                        locale={locale}
                       />
                     </dd>
                   </div>
@@ -268,18 +293,23 @@ export default async function PortalDashboardPage() {
 
                 {entry.build.next && (
                   <p className="mt-4 border-t border-line pt-3 text-[calc(13px*var(--text-scale,1))] text-muted">
-                    <span className="text-faint">{t.nextUp} · </span>
-                    {entry.build.next.title}
+                    <span className="text-faint">{t.nextUp}</span>
+                    <span className="text-faint" aria-hidden> · </span>
+                    <bdi>{entry.build.next.title}</bdi>
                     {entry.build.next.target_on && (
-                      <span className="text-faint">
-                        {" "}
-                        · {t.targetOn(formatDate(entry.build.next.target_on))}
-                      </span>
+                      <>
+                        <span className="text-faint" aria-hidden> · </span>
+                        <span className="text-faint">
+                          {t.targetOn(
+                            isolate(formatDateIn(locale, entry.build.next.target_on))
+                          )}
+                        </span>
+                      </>
                     )}
                   </p>
                 )}
 
-                <div className="mt-4 flex flex-wrap gap-x-4 gap-y-1 font-mono text-[calc(11px*var(--text-scale,1))] uppercase tracking-wider">
+                <div className="mt-4 flex flex-wrap gap-x-4 gap-y-1 font-mono text-[calc(11px*var(--text-scale,1))] uppercase tracking-wider rtl:font-sans rtl:normal-case rtl:tracking-normal">
                   <Link
                     href={`/portal/inputs/${entry.project.id}`}
                     className="text-faint transition-colors duration-150 hover:text-ink"
@@ -324,15 +354,21 @@ export default async function PortalDashboardPage() {
                     />
                     <span className="min-w-0 flex-1 text-[calc(13px*var(--text-scale,1))] text-ink">
                       {parentTitle && (
-                        <span className="text-faint">{parentTitle} · </span>
+                        <>
+                          <bdi className="text-faint">{parentTitle}</bdi>
+                          <span className="text-faint" aria-hidden> · </span>
+                        </>
                       )}
-                      {milestone.title}
+                      <bdi>{milestone.title}</bdi>
                       {businesses.length > 1 && (
-                        <span className="text-faint"> · {projectName}</span>
+                        <>
+                          <span className="text-faint" aria-hidden> · </span>
+                          <bdi className="text-faint">{projectName}</bdi>
+                        </>
                       )}
                     </span>
-                    <span className="shrink-0 font-mono text-[calc(11px*var(--text-scale,1))] text-faint">
-                      {formatRelative(milestone.updated_at)}
+                    <span className="shrink-0 font-mono text-[calc(11px*var(--text-scale,1))] text-faint rtl:font-sans">
+                      {formatRelativeIn(locale, milestone.updated_at, t.justNow)}
                     </span>
                   </li>
                 ))}

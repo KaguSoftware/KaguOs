@@ -5,13 +5,8 @@ import { Badge, type BadgeTone } from "@/components/ui/badge";
 // and this one is imported by a client component (the progress columns), which
 // would drag it into the browser bundle and fail the build.
 import { moneyLines, type MoneyByCurrency } from "@/lib/money";
-import {
-  INVOICE_STATUS_LABELS,
-  MILESTONE_STATUS_LABELS,
-  type InvoiceStatus,
-  type MilestoneStatus,
-} from "@/lib/types";
-import { cn, formatMoney } from "@/lib/utils";
+import { type InvoiceStatus, type MilestoneStatus } from "@/lib/types";
+import { cn, formatMoneyIn } from "@/lib/utils";
 
 /**
  * The small shared pieces of the client portal.
@@ -37,11 +32,18 @@ export function Money({
   className,
   tone = "ink",
   size = "md",
+  locale = "en",
 }: {
   bucket: MoneyByCurrency;
   className?: string;
   tone?: "ink" | "danger" | "muted";
   size?: "md" | "lg";
+  /**
+   * Defaults to English because this is the one piece the team's own pages
+   * share: `(app)/work/projects/[id]/client/page.tsx` renders it and never
+   * reads the locale cookie. The portal passes the cookie's locale.
+   */
+  locale?: "en" | "ar";
 }) {
   const lines = moneyLines(bucket);
   if (lines.length === 0) {
@@ -62,7 +64,12 @@ export function Money({
             tone === "ink" && "text-ink"
           )}
         >
-          {formatMoney(line.amount, line.currency)}
+          {/* A currency run is Latin in both locales, so inside an Arabic
+              sentence it is a bidi island: without <bdi> the symbol or the
+              trailing code lands on the wrong side and reads as a wrong
+              figure. `font-mono tabular-nums` stays because the digits stay
+              Latin, and the Amount column depends on that alignment. */}
+          <bdi>{formatMoneyIn(locale, line.amount, line.currency)}</bdi>
         </span>
       ))}
     </span>
@@ -89,7 +96,11 @@ export function Stat({
 }) {
   return (
     <div className="min-w-0 rounded-lg border border-line bg-surface p-4">
-      <p className="font-mono text-[calc(10px*var(--text-scale,1))] uppercase tracking-wider text-faint">
+      {/* `tracking-wider` prises Arabic letters apart, breaking the cursive
+          joining the script needs, and Geist Mono has no Arabic glyphs at all.
+          Gating the reset on direction leaves the always-LTR `(app)` shell
+          byte-identical. */}
+      <p className="font-mono text-[calc(10px*var(--text-scale,1))] uppercase tracking-wider text-faint rtl:font-sans rtl:normal-case rtl:tracking-normal">
         {label}
       </p>
       <div className="mt-2">{children}</div>
@@ -122,15 +133,15 @@ export function MilestoneBadge({
 }: {
   status: MilestoneStatus;
   /**
-   * A translated word for the state. The default labels are English; the
-   * portal's Arabic pages resolve theirs from `dict(locale)` and pass them in,
-   * so the pill's colour and its word come from the same status either way.
+   * The word for the state, already resolved in the reader's language.
+   * Required rather than defaulted to English: every caller is a portal page
+   * that has a `dict(locale)` in hand, and this module cannot import one
+   * itself (see the header note). A required prop turns "someone forgot" into
+   * a compile error instead of an English pill on an Arabic page.
    */
-  label?: string;
+  label: string;
 }) {
-  return (
-    <Badge tone={MILESTONE_TONES[status]}>{label ?? MILESTONE_STATUS_LABELS[status]}</Badge>
-  );
+  return <Badge tone={MILESTONE_TONES[status]}>{label}</Badge>;
 }
 
 /** The dot down the left of the timeline. Shape carries the state, not colour alone. */
@@ -169,17 +180,22 @@ const INVOICE_TONES: Record<InvoiceStatus, BadgeTone> = {
  *
  * "Overdue" is not a stored status — it is `sent` plus a due date in the past —
  * and the pill says so rather than making the reader compare two columns. The
- * flag is computed by the caller, which has already read the clock once.
+ * flag is computed by the caller, which has already read the clock once, and
+ * survives here only to pick the tone: the word itself arrives resolved in
+ * `label`, from `invoiceStatusLabel(t, status, overdue)`, so the colour and the
+ * word can never disagree about which of the five states this is.
  */
 export function InvoiceBadge({
   status,
   overdue,
+  label,
 }: {
   status: InvoiceStatus;
   overdue?: boolean;
+  label: string;
 }) {
-  if (overdue && status === "sent") return <Badge tone="danger">Overdue</Badge>;
-  return <Badge tone={INVOICE_TONES[status]}>{INVOICE_STATUS_LABELS[status]}</Badge>;
+  if (overdue && status === "sent") return <Badge tone="danger">{label}</Badge>;
+  return <Badge tone={INVOICE_TONES[status]}>{label}</Badge>;
 }
 
 /* ── Navigation between businesses ────────────────────────────────────────── */
@@ -196,15 +212,18 @@ export function BusinessTabs({
   businesses,
   activeId,
   hrefFor,
+  label,
 }: {
   businesses: { id: string; name: string }[];
   activeId: string;
   hrefFor: (id: string) => string;
+  /** The nav's accessible name, in the reader's language. */
+  label: string;
 }) {
   if (businesses.length < 2) return null;
   return (
     <nav
-      aria-label="Your businesses"
+      aria-label={label}
       className="mb-6 flex flex-wrap gap-1.5 border-b border-line pb-3"
     >
       {businesses.map((business) => {
@@ -221,7 +240,11 @@ export function BusinessTabs({
                 : "text-muted hover:bg-raised/60 hover:text-ink"
             )}
           >
-            {business.name}
+            {/* Project names are typed by Kagu staff and have no Arabic
+                column, so `dir="auto"` takes the direction from the first
+                strong character: an English name still reads left-to-right
+                inside a right-to-left page. */}
+            <span dir="auto">{business.name}</span>
           </Link>
         );
       })}
@@ -247,7 +270,12 @@ export function BusinessHeading({
       id={id}
       className="mb-3 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 border-b border-line pb-2.5"
     >
-      <h2 className="text-[calc(16px*var(--text-scale,1))] font-semibold tracking-tight text-ink">
+      {/* `dir="auto"`, as in BusinessTabs: the name is staff-typed and may be
+          English on an Arabic page. */}
+      <h2
+        dir="auto"
+        className="text-[calc(16px*var(--text-scale,1))] font-semibold tracking-tight text-ink"
+      >
         {name}
       </h2>
       {action}

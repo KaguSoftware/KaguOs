@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 const fieldClasses =
-  "h-9 w-full rounded-md border border-line bg-raised pl-9 pr-3 text-sm text-ink placeholder:text-muted transition-colors duration-150 hover:border-line-strong focus-visible:border-line-strong disabled:pointer-events-none disabled:opacity-50";
+  "h-9 w-full rounded-md border border-line bg-raised ps-9 pe-3 text-sm text-ink placeholder:text-muted transition-colors duration-150 hover:border-line-strong focus-visible:border-line-strong disabled:pointer-events-none disabled:opacity-50";
 
 function IconShell({
   icon,
@@ -21,7 +21,7 @@ function IconShell({
     <div className={cn("relative", className)}>
       <span
         aria-hidden
-        className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-faint"
+        className="pointer-events-none absolute inset-y-0 start-3 flex items-center text-faint"
       >
         {icon}
       </span>

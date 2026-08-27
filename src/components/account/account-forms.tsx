@@ -7,6 +7,44 @@ import { Input } from "@/components/ui/input";
 import { Field } from "@/components/ui/field";
 import { cn } from "@/lib/utils";
 
+/**
+ * Both forms are rendered by two pages: the teammate account page, which has
+ * no locale and never will, and the client portal's, which does. So `labels`
+ * is OPTIONAL and defaults to the English these forms have always shown —
+ * the teammate page keeps compiling untouched and renders byte-identically,
+ * and the portal page passes a bundle of already-resolved strings. A client
+ * component can't take the Dict itself (it's a server-only object), which is
+ * the same reason PortalNavLabels exists.
+ */
+export type NameFormLabels = {
+  fullName: string;
+  placeholder: string;
+  save: string;
+};
+
+export type PasswordFormLabels = {
+  newPassword: string;
+  repeat: string;
+  submit: string;
+};
+
+const NAME_LABELS_EN: NameFormLabels = {
+  fullName: "Full name",
+  placeholder: "Your name",
+  save: "Save name",
+};
+
+const PASSWORD_LABELS_EN: PasswordFormLabels = {
+  newPassword: "New password",
+  repeat: "Repeat new password",
+  submit: "Change password",
+};
+
+/**
+ * `result.message` arrives already in the reader's language: the server action
+ * reads the locale cookie itself (lib/actions/account.ts), so there is nothing
+ * to translate on this side.
+ */
 function ResultNote({ result }: { result: ActionResult }) {
   if (!result) return null;
   return (
@@ -19,35 +57,45 @@ function ResultNote({ result }: { result: ActionResult }) {
   );
 }
 
-export function NameForm({ currentName }: { currentName: string | null }) {
+export function NameForm({
+  currentName,
+  labels = NAME_LABELS_EN,
+}: {
+  currentName: string | null;
+  labels?: NameFormLabels;
+}) {
   const [result, action] = useActionState(updateName, null);
 
   return (
     <form action={action} className="space-y-4 p-4">
-      <Field label="Full name" htmlFor="full_name">
+      <Field label={labels.fullName} htmlFor="full_name">
         <Input
           id="full_name"
           name="full_name"
           defaultValue={currentName ?? ""}
           maxLength={80}
           required
-          placeholder="Your name"
+          placeholder={labels.placeholder}
         />
       </Field>
       <div className="flex items-center gap-3">
-        <SubmitButton>Save name</SubmitButton>
+        <SubmitButton>{labels.save}</SubmitButton>
         <ResultNote result={result} />
       </div>
     </form>
   );
 }
 
-export function PasswordForm() {
+export function PasswordForm({
+  labels = PASSWORD_LABELS_EN,
+}: {
+  labels?: PasswordFormLabels;
+}) {
   const [result, action] = useActionState(updatePassword, null);
 
   return (
     <form action={action} className="space-y-4 p-4">
-      <Field label="New password" htmlFor="password">
+      <Field label={labels.newPassword} htmlFor="password">
         <Input
           id="password"
           name="password"
@@ -57,7 +105,7 @@ export function PasswordForm() {
           required
         />
       </Field>
-      <Field label="Repeat new password" htmlFor="confirm">
+      <Field label={labels.repeat} htmlFor="confirm">
         <Input
           id="confirm"
           name="confirm"
@@ -68,7 +116,7 @@ export function PasswordForm() {
         />
       </Field>
       <div className="flex items-center gap-3">
-        <SubmitButton>Change password</SubmitButton>
+        <SubmitButton>{labels.submit}</SubmitButton>
         <ResultNote result={result} />
       </div>
     </form>

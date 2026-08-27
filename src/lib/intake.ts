@@ -94,6 +94,16 @@ export type IntakeField = {
   labelAr?: string;
   kind: IntakeFieldKind;
   placeholder?: string;
+  /**
+   * The placeholder in Arabic. It is optional like every other `*Ar`, but
+   * unlike the labels it is almost entirely UNFILLED: 101 placeholders across
+   * the two packs, none of them written in Arabic yet. That is why an Arabic
+   * client on the otherwise fully-bilingual touch-padel pack still sees
+   * "Cappuccino" and "All courts" greyed into the boxes. The slot exists so the
+   * form can `pick` it today and start showing Arabic the moment someone writes
+   * the words; writing them is a content job, not a code one.
+   */
+  placeholderAr?: string;
   hint?: string;
   hintAr?: string;
   /** Counts toward the completion meter. Everything else is genuinely optional. */
@@ -117,6 +127,8 @@ export type IntakeColumn = {
   labelAr?: string;
   kind: "text" | "long" | "number" | "choice" | "multi";
   placeholder?: string;
+  /** Same gap as `IntakeField.placeholderAr`: the slot exists, nobody has filled it. */
+  placeholderAr?: string;
   /** A row counts as complete only once every required column is filled. */
   required?: boolean;
   span?: number;
@@ -136,8 +148,13 @@ type CardBase = {
    * the accountant", "needs help choosing". Shown next to the check as a note
    * rather than failing it: the question IS answered, the answer just carries
    * a follow-up.
+   *
+   * `note` is staff-written English and the client reads it too, in amber, in
+   * the review checklist right where they decide whether to send. `noteAr` is
+   * what they should read instead — and like `placeholderAr` it is a slot with
+   * nothing in it yet: all eleven flag notes in the two packs are English-only.
    */
-  flag?: { key: string; values: string[]; note: string };
+  flag?: { key: string; values: string[]; note: string; noteAr?: string };
 };
 
 export type IntakeCard = CardBase &
@@ -1440,8 +1457,40 @@ export type IntakeCheck = {
   due: IntakeDue;
   ok: boolean;
   note?: string;
+  /**
+   * Only ever set for a flag note, and only when the pack carries an Arabic one
+   * — the counted notes ("3 still to answer") arrive already in the caller's
+   * language via `CheckNotes`, so there is nothing to pick between. Same shape
+   * as `label`/`labelAr`: the renderer picks, this function does not.
+   */
+  noteAr?: string;
   /** Optional cards never move the meter, and are listed as "if it applies". */
   optional: boolean;
+};
+
+/**
+ * The three notes `buildChecks` has to MANUFACTURE rather than read out of a
+ * pack: they count rows and unanswered questions, so no static string can hold
+ * them.
+ *
+ * They are a parameter because `buildChecks` is one function serving two
+ * audiences — the client's form, which may be in Arabic, and the team's review
+ * screen, which is always English. It is a pure function over pack data and
+ * cannot import the dictionary without dragging the app's locale into the
+ * catalogue, so the caller resolves the three sentences and passes them in.
+ * Leave the argument off and you get today's English, which is exactly what
+ * every team-side call site wants.
+ */
+export type CheckNotes = {
+  lineCount: (n: number) => string;
+  linesIncomplete: (n: number) => string;
+  stillToAnswer: (n: number) => string;
+};
+
+const EN_CHECK_NOTES: CheckNotes = {
+  lineCount: (n) => `${n} ${n === 1 ? "line" : "lines"}`,
+  linesIncomplete: (n) => `${n} ${n === 1 ? "line is" : "lines are"} missing something`,
+  stillToAnswer: (n) => `${n} still to answer`,
 };
 
 /**
@@ -1455,7 +1504,8 @@ export type IntakeCheck = {
 export function buildChecks(
   pack: IntakePackDef,
   answers: AnswerMap,
-  rows: IntakeRow[]
+  rows: IntakeRow[],
+  notes: CheckNotes = EN_CHECK_NOTES
 ): IntakeCheck[] {
   const checks: IntakeCheck[] = [];
 
@@ -1478,14 +1528,12 @@ export function buildChecks(
         const complete = mine.filter((row) => rowComplete(card, row));
         const partial = mine.filter((row) => rowTouched(row) && !rowComplete(card, row));
         const minRows = card.minRows ?? 0;
-        const notes: string[] = [];
+        const rowNotes: string[] = [];
         if (complete.length > 0) {
-          notes.push(`${complete.length} ${complete.length === 1 ? "line" : "lines"}`);
+          rowNotes.push(notes.lineCount(complete.length));
         }
         if (partial.length > 0) {
-          notes.push(
-            `${partial.length} ${partial.length === 1 ? "line is" : "lines are"} missing something`
-          );
+          rowNotes.push(notes.linesIncomplete(partial.length));
         }
         checks.push({
           ...base,
@@ -1493,7 +1541,7 @@ export function buildChecks(
           ok:
             complete.length >= Math.max(minRows, 1) ||
             (minRows === 0 && mine.length === 0),
-          note: notes.join(" · ") || undefined,
+          note: rowNotes.join(" · ") || undefined,
         });
         continue;
       }
@@ -1522,8 +1570,9 @@ export function buildChecks(
         note: flagged
           ? card.flag!.note
           : missing.length > 0
-            ? `${missing.length} still to answer`
+            ? notes.stillToAnswer(missing.length)
             : undefined,
+        noteAr: flagged ? card.flag!.noteAr : undefined,
       });
     }
   }

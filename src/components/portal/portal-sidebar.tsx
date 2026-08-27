@@ -134,7 +134,7 @@ function Badge({ count, tone }: { count: number; tone: PortalNavItem["tone"] }) 
   return (
     <span
       className={cn(
-        "ml-auto rounded-full px-1.5 font-mono text-[calc(11px*var(--text-scale,1))] font-medium",
+        "ms-auto rounded-full px-1.5 font-mono text-[calc(11px*var(--text-scale,1))] font-medium",
         tone === "urgent"
           ? "bg-danger/15 text-danger"
           : "bg-amber/15 text-amber"
@@ -319,7 +319,7 @@ function MobileSheet({
               aria-label={labels.signOut}
               className="rounded-md border border-line p-3 text-muted transition-[color,border-color,transform] duration-150 ease-mac hover:border-danger/40 hover:text-danger active:scale-95"
             >
-              <LogOut className="size-4" aria-hidden />
+              <LogOut className="size-4 rtl:-scale-x-100" aria-hidden />
             </button>
           </form>
         </div>
@@ -359,7 +359,7 @@ export function PortalSidebar({
 
   return (
     <>
-      <aside className="sticky top-0 z-30 hidden h-dvh w-56 shrink-0 flex-col border-r border-line bg-surface md:flex">
+      <aside className="sticky top-0 z-30 hidden h-dvh w-56 shrink-0 flex-col border-e border-line bg-surface md:flex">
         <div className="px-4 pb-5 pt-5">
           <Link
             href="/portal"
@@ -397,7 +397,7 @@ export function PortalSidebar({
               aria-label={labels.signOut}
               className="rounded-md p-2 text-muted transition-colors duration-150 hover:bg-raised hover:text-ink"
             >
-              <LogOut className="size-4" aria-hidden />
+              <LogOut className="size-4 rtl:-scale-x-100" aria-hidden />
             </button>
           </form>
         </div>

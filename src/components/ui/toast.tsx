@@ -91,7 +91,19 @@ const TONE_META: Record<
   },
 };
 
-export function ToastProvider({ children }: { children: React.ReactNode }) {
+export function ToastProvider({
+  children,
+  dismissLabel = "Dismiss",
+}: {
+  children: React.ReactNode;
+  /**
+   * Accessible name for each toast's X button — the provider's only own text.
+   * Optional with the English default because (app)/layout.tsx mounts this same
+   * provider for the teammate shell, which never reads a locale cookie; only
+   * the client portal passes a translated one.
+   */
+  dismissLabel?: string;
+}) {
   const [toasts, setToasts] = useState<Toast[]>([]);
   const timers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
   const counter = useRef(0);
@@ -226,7 +238,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   return (
     <ToastContext.Provider value={api}>
       {children}
-      <ToastViewport toasts={toasts} onDismiss={dismiss} />
+      <ToastViewport toasts={toasts} onDismiss={dismiss} dismissLabel={dismissLabel} />
     </ToastContext.Provider>
   );
 }
@@ -234,9 +246,11 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
 function ToastViewport({
   toasts,
   onDismiss,
+  dismissLabel,
 }: {
   toasts: Toast[];
   onDismiss: (id: string) => void;
+  dismissLabel: string;
 }) {
   return (
     <div
@@ -270,11 +284,17 @@ function ToastViewport({
             ) : (
               <p className="min-w-0 flex-1 text-[calc(13px*var(--text-scale,1))] leading-snug text-ink">{t.message}</p>
             )}
+            {/*
+              -me-1, not -mr-1: the negative margin bleeds the X outward into the
+              toast's own padding. Under RTL the button sits at the row's visual
+              left, so a physical right margin would pull it inward over the
+              message instead.
+            */}
             <button
               type="button"
               onClick={() => onDismiss(t.id)}
-              className="-mr-1 -mt-0.5 shrink-0 rounded p-0.5 text-faint transition-colors hover:text-ink"
-              aria-label="Dismiss"
+              className="-me-1 -mt-0.5 shrink-0 rounded p-0.5 text-faint transition-colors hover:text-ink"
+              aria-label={dismissLabel}
             >
               <X className="size-3.5" aria-hidden />
             </button>

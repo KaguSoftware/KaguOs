@@ -1,11 +1,14 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { canAccess, getUserId, getSessionContext } from "@/lib/data/session";
 import { notifyChatTeam } from "@/lib/actions/notify";
 import { isValidColorKey } from "@/lib/colors";
+import { dict } from "@/lib/i18n";
+import { LOCALE_COOKIE, parseLocale } from "@/lib/locale";
 import { STATUS_KINDS, STATUS_PRESETS, type StatusKind } from "@/lib/types";
 
 /**
@@ -48,27 +51,41 @@ export async function signOut() {
   redirect("/login");
 }
 
+/**
+ * Rename yourself. Rendered by ResultNote on BOTH /account and the client
+ * portal's /portal/account, which is why the messages are resolved from the
+ * dictionary against the request's own locale cookie: only the portal ever
+ * WRITES `kagu-locale` (lib/locale.ts), so a teammate has no cookie,
+ * parseLocale answers "en", and the team-side page is unchanged to the byte.
+ */
 export async function updateName(
   _prev: ActionResult,
   formData: FormData
 ): Promise<ActionResult> {
+  const t = dict(parseLocale((await cookies()).get(LOCALE_COOKIE)?.value));
   const fullName = String(formData.get("full_name") ?? "").trim();
   if (fullName.length < 1 || fullName.length > 80) {
-    return { ok: false, message: "Name must be 1–80 characters." };
+    return { ok: false, message: t.accountNameLength };
   }
 
   const supabase = await createClient();
   const userId = await getUserId(supabase);
-  if (!userId) return { ok: false, message: "Not signed in." };
+  if (!userId) return { ok: false, message: t.accountNotSignedIn };
 
   const { error } = await supabase
     .from("profiles")
     .update({ full_name: fullName })
     .eq("id", userId);
-  if (error) return { ok: false, message: error.message };
+  // Postgres/PostgREST wording names the table and the constraint that refused
+  // the write, which is not something an outside client account should be
+  // shown. The real message stays in the server log; the caller gets a sentence.
+  if (error) {
+    console.error("updateName", error);
+    return { ok: false, message: t.actionSaveFailed };
+  }
 
   revalidatePath("/", "layout");
-  return { ok: true, message: "Name updated." };
+  return { ok: true, message: t.accountNameSaved };
 }
 
 export async function updateMyColor(colorKey: string): Promise<ActionResult> {
@@ -170,22 +187,35 @@ export async function updateMyStatus(fields: {
   return { ok: true, message: "Status updated." };
 }
 
+/**
+ * Change your own password. Shared with /portal/account exactly as updateName
+ * is, and localised the same way and for the same reason.
+ */
 export async function updatePassword(
   _prev: ActionResult,
   formData: FormData
 ): Promise<ActionResult> {
+  const t = dict(parseLocale((await cookies()).get(LOCALE_COOKIE)?.value));
   const password = String(formData.get("password") ?? "");
   const confirm = String(formData.get("confirm") ?? "");
   if (password.length < 8) {
-    return { ok: false, message: "Password must be at least 8 characters." };
+    return { ok: false, message: t.accountPasswordShort };
   }
   if (password !== confirm) {
-    return { ok: false, message: "Passwords don't match." };
+    return { ok: false, message: t.accountPasswordMismatch };
   }
 
   const supabase = await createClient();
   const { error } = await supabase.auth.updateUser({ password });
-  if (error) return { ok: false, message: error.message };
+  // Supabase writes these in English and in provider-internal terms ("New
+  // password should be different from the old password"), so forwarding one
+  // verbatim puts untranslated auth-vendor copy in front of an end customer.
+  // Logged in full, answered generically. Trade-off: the specific reasons —
+  // reused password, rejected as too weak — are no longer distinguishable.
+  if (error) {
+    console.error("updatePassword", error);
+    return { ok: false, message: t.actionSaveFailed };
+  }
 
-  return { ok: true, message: "Password changed." };
+  return { ok: true, message: t.accountPasswordSaved };
 }

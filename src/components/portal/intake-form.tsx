@@ -22,7 +22,7 @@ import {
 } from "@/lib/actions/intake";
 import { Button } from "@/components/ui/button";
 import { Input, Textarea } from "@/components/ui/input";
-import { DatePicker } from "@/components/ui/date-picker";
+import { DatePicker, type DatePickerLabels } from "@/components/ui/date-picker";
 import { Panel } from "@/components/ui/panel";
 import { ProgressMeter } from "@/components/portal/progress-meter";
 import { useAction } from "@/lib/use-action";
@@ -36,6 +36,7 @@ import {
   tableKey,
   visibleFields,
   type AnswerMap,
+  type CheckNotes,
   type IntakeCard,
   type IntakeChoice,
   type IntakeColumn,
@@ -45,8 +46,8 @@ import {
   type IntakeRow,
 } from "@/lib/intake";
 import { dict } from "@/lib/i18n";
-import { pick, type Locale } from "@/lib/locale";
-import { cn, formatRelative } from "@/lib/utils";
+import { isArabicText, pick, type Locale } from "@/lib/locale";
+import { cn, formatRelativeIn, isolate } from "@/lib/utils";
 
 /**
  * The client's input pack.
@@ -143,18 +144,24 @@ function ControlLabel({
   id,
   required,
   requiredLabel,
+  lang,
 }: {
   text: string;
   htmlFor?: string;
   id?: string;
   required?: boolean;
   requiredLabel: string;
+  /** `"ar"` only when `text` really came back Arabic — see `isArabicText`. */
+  lang?: string;
 }) {
   const classes =
     "mb-1.5 block text-[calc(15px*var(--text-scale,1))] font-medium leading-snug text-ink";
   const inner = (
     <>
-      {text}
+      {/* `lang` sits on the question text, not on the whole label, so the
+          required marker's aria-label — always in the interface language — is
+          not dragged into the pack string's language with it. */}
+      <span lang={lang}>{text}</span>
       {required && (
         <span className="ms-1 text-primary-dim" aria-label={requiredLabel}>
           *
@@ -179,11 +186,14 @@ function Chip({
   active,
   onClick,
   disabled,
+  lang,
 }: {
   label: string;
   active: boolean;
   onClick: () => void;
   disabled?: boolean;
+  /** `"ar"` only when `label` really came back Arabic — see `isArabicText`. */
+  lang?: string;
 }) {
   return (
     <button
@@ -191,6 +201,7 @@ function Chip({
       aria-pressed={active}
       disabled={disabled}
       onClick={onClick}
+      lang={lang}
       className={cn(
         // Bigger than it was (px-3 py-1.5 at 13px): these are the primary
         // controls on several sections and they are tapped on a tablet.
@@ -235,6 +246,7 @@ function ChoiceChips({
         <Chip
           key={option.value}
           label={pick(locale, option.label, option.labelAr)}
+          lang={isArabicText(locale, option.labelAr) ? "ar" : undefined}
           active={value === option.value}
           onClick={() => onPick(option.value)}
         />
@@ -272,6 +284,7 @@ function MultiChips({
           <Chip
             key={option.value}
             label={pick(locale, option.label, option.labelAr)}
+            lang={isArabicText(locale, option.labelAr) ? "ar" : undefined}
             active={active}
             onClick={() =>
               onChange(
@@ -336,6 +349,9 @@ export function IntakeForm({
   initialSubmittedAt,
   locale,
   intro,
+  dateLabels,
+  checkNotes,
+  toastGeneric,
 }: {
   projectId: string;
   projectName: string;
@@ -346,6 +362,17 @@ export function IntakeForm({
   initialSubmittedAt: string | null;
   locale: Locale;
   intro: string;
+  /**
+   * Three bundles of already-resolved strings, built by the page that reads the
+   * locale cookie. This is a `"use client"` component and cannot call `dict()`
+   * itself, and the three places below sit BELOW this file — inside the date
+   * picker, inside `buildChecks`, inside `useAction`'s catch — so each needs
+   * its words handed down rather than looked up. Same shape as `intro`.
+   */
+  dateLabels: DatePickerLabels;
+  checkNotes: CheckNotes;
+  /** For `useAction`'s catch-all, which is the one error path here that has no server message to show. */
+  toastGeneric: string;
 }) {
   const t = dict(locale);
   const { run, pending, toast } = useAction();
@@ -360,8 +387,8 @@ export function IntakeForm({
   const topRef = useRef<HTMLDivElement>(null);
 
   const checks = useMemo(
-    () => buildChecks(pack, answers, rows),
-    [pack, answers, rows]
+    () => buildChecks(pack, answers, rows, checkNotes),
+    [pack, answers, rows, checkNotes]
   );
   const progress = useMemo(() => progressOf(checks), [checks]);
 
@@ -401,6 +428,7 @@ export function IntakeForm({
       // toasted the reason, and leaving the indicator on "Saving…" forever
       // would be the one lie this control can tell.
       rollback: () => setSaveState("idle"),
+      fallbackError: toastGeneric,
     });
   }
 
@@ -454,6 +482,7 @@ export function IntakeForm({
         setSaveState("idle");
         setRows((prev) => [...prev, row].sort((a, b) => a.sort - b.sort));
       },
+      fallbackError: toastGeneric,
     });
   }
 
@@ -464,11 +493,18 @@ export function IntakeForm({
     const id = `f-${card.key}-${field.key}`;
     const chips = field.kind === "choice" || field.kind === "multi";
     const hint = pick(locale, field.hint ?? "", field.hintAr);
+    // No pack fills `placeholderAr` yet, so this resolves to the English
+    // placeholder today — but the leak closes the moment one does, and until
+    // then `pick` falls back cleanly. `|| undefined` matters: an empty string
+    // would render `placeholder=""`, which is not the same as no placeholder.
+    const placeholder =
+      pick(locale, field.placeholder ?? "", field.placeholderAr) || undefined;
 
     return (
       <div key={field.key} className={cn("min-w-0", span(field.span))}>
         <ControlLabel
           text={pick(locale, field.label, field.labelAr)}
+          lang={isArabicText(locale, field.labelAr) ? "ar" : undefined}
           htmlFor={chips ? undefined : id}
           id={chips ? `${id}-label` : undefined}
           required={field.required}
@@ -495,7 +531,7 @@ export function IntakeForm({
           <Textarea
             id={id}
             defaultValue={value}
-            placeholder={field.placeholder}
+            placeholder={placeholder}
             maxLength={8000}
             lang={field.rtl ? "ar" : undefined}
             dir={field.rtl ? "rtl" : undefined}
@@ -510,6 +546,8 @@ export function IntakeForm({
             name={id}
             id={id}
             defaultValue={value}
+            locale={locale}
+            labels={dateLabels}
             onChange={(iso) => setAnswer(card.key, field.key, iso)}
           />
         ) : (
@@ -517,7 +555,7 @@ export function IntakeForm({
             id={id}
             inputMode={field.kind === "number" ? "decimal" : undefined}
             defaultValue={value}
-            placeholder={field.placeholder}
+            placeholder={placeholder}
             maxLength={2000}
             lang={field.rtl ? "ar" : undefined}
             dir={field.rtl ? "rtl" : undefined}
@@ -536,7 +574,10 @@ export function IntakeForm({
         )}
 
         {hint && (
-          <p className="mt-2 text-[calc(13px*var(--text-scale,1))] leading-relaxed text-muted">
+          <p
+            lang={isArabicText(locale, field.hintAr) ? "ar" : undefined}
+            className="mt-2 text-[calc(13px*var(--text-scale,1))] leading-relaxed text-muted"
+          >
             {hint}
           </p>
         )}
@@ -548,11 +589,15 @@ export function IntakeForm({
     const id = `c-${row.id}-${column.key}`;
     const cell = row.data[column.key] ?? "";
     const chips = column.kind === "choice" || column.kind === "multi";
+    /** Same unfilled-slot fallback as `renderField`'s placeholder. */
+    const placeholder =
+      pick(locale, column.placeholder ?? "", column.placeholderAr) || undefined;
 
     return (
       <div key={column.key} className={cn("min-w-0", span(column.span))}>
         <ControlLabel
           text={pick(locale, column.label, column.labelAr)}
+          lang={isArabicText(locale, column.labelAr) ? "ar" : undefined}
           htmlFor={chips ? undefined : id}
           id={chips ? `${id}-label` : undefined}
           required={column.required}
@@ -578,7 +623,7 @@ export function IntakeForm({
           <Textarea
             id={id}
             defaultValue={cell}
-            placeholder={column.placeholder}
+            placeholder={placeholder}
             maxLength={2000}
             lang={column.rtl ? "ar" : undefined}
             dir={column.rtl ? "rtl" : undefined}
@@ -592,7 +637,7 @@ export function IntakeForm({
             id={id}
             inputMode={column.kind === "number" ? "decimal" : undefined}
             defaultValue={cell}
-            placeholder={column.placeholder}
+            placeholder={placeholder}
             maxLength={2000}
             lang={column.rtl ? "ar" : undefined}
             dir={column.rtl ? "rtl" : undefined}
@@ -614,6 +659,11 @@ export function IntakeForm({
   function renderCard(card: IntakeCard) {
     const title = pick(locale, card.title, card.titleAr);
     const hint = pick(locale, card.hint ?? "", card.hintAr);
+    // Tagged only when `pick` actually handed back the Arabic half. An Arabic
+    // client on the general pack reads English cards, and `lang="ar"` on those
+    // would have a screen reader say them with Arabic phonemes.
+    const titleLang = isArabicText(locale, card.titleAr) ? "ar" : undefined;
+    const hintLang = isArabicText(locale, card.hintAr) ? "ar" : undefined;
 
     // A prose panel — the "this is the biggest risk of the phase" warning the
     // recipes section opens with. Carries its own edge colour because the whole
@@ -631,10 +681,15 @@ export function IntakeForm({
             {card.tone === "warning" && (
               <TriangleAlert className="mt-0.5 size-4 shrink-0 text-amber" aria-hidden />
             )}
-            <span className="min-w-0">{title}</span>
+            <span lang={titleLang} className="min-w-0">
+              {title}
+            </span>
           </h3>
           {hint && (
-            <p className="mt-3 max-w-[70ch] text-[calc(15px*var(--text-scale,1))] leading-relaxed text-muted">
+            <p
+              lang={hintLang}
+              className="mt-3 max-w-[70ch] text-[calc(15px*var(--text-scale,1))] leading-relaxed text-muted"
+            >
               {hint}
             </p>
           )}
@@ -647,11 +702,17 @@ export function IntakeForm({
 
     return (
       <Panel key={card.key} className="p-5">
-        <h3 className="text-[calc(17px*var(--text-scale,1))] font-semibold tracking-tight text-ink">
+        <h3
+          lang={titleLang}
+          className="text-[calc(17px*var(--text-scale,1))] font-semibold tracking-tight text-ink"
+        >
           {title}
         </h3>
         {hint && (
-          <p className="mt-2 max-w-[70ch] text-[calc(14px*var(--text-scale,1))] leading-relaxed text-muted">
+          <p
+            lang={hintLang}
+            className="mt-2 max-w-[70ch] text-[calc(14px*var(--text-scale,1))] leading-relaxed text-muted"
+          >
             {hint}
           </p>
         )}
@@ -665,7 +726,14 @@ export function IntakeForm({
         ) : (
           <div className="mt-5">
             {mine.length === 0 ? (
-              <p className="rounded-md border border-dashed border-line px-4 py-6 text-center text-[calc(14px*var(--text-scale,1))] text-muted">
+              <p
+                lang={
+                  card.emptyHint && isArabicText(locale, card.emptyHintAr)
+                    ? "ar"
+                    : undefined
+                }
+                className="rounded-md border border-dashed border-line px-4 py-6 text-center text-[calc(14px*var(--text-scale,1))] text-muted"
+              >
                 {card.emptyHint
                   ? pick(locale, card.emptyHint, card.emptyHintAr)
                   : t.nothingYet}
@@ -707,7 +775,9 @@ export function IntakeForm({
               )}
             >
               <Plus className="size-4" aria-hidden />
-              {pick(locale, card.addLabel, card.addLabelAr)}
+              <span lang={isArabicText(locale, card.addLabelAr) ? "ar" : undefined}>
+                {pick(locale, card.addLabel, card.addLabelAr)}
+              </span>
             </button>
           </div>
         )}
@@ -745,7 +815,10 @@ export function IntakeForm({
         >
           {finished ? <Check className="size-3 [stroke-width:3]" aria-hidden /> : s.num}
         </span>
-        <span className="min-w-0 flex-1 truncate text-[calc(14px*var(--text-scale,1))]">
+        <span
+          lang={isArabicText(locale, s.titleAr) ? "ar" : undefined}
+          className="min-w-0 flex-1 truncate text-[calc(14px*var(--text-scale,1))]"
+        >
           {pick(locale, s.title, s.titleAr)}
         </span>
         <span
@@ -768,7 +841,14 @@ export function IntakeForm({
           all-on-one-page layout lost the moment you scrolled. */}
       <div className="sticky top-[57px] z-20 -mx-4 mb-6 md:top-0 border-b border-line bg-bg/95 px-4 py-3 backdrop-blur-md md:-mx-8 md:px-8">
         <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-          <p className="min-w-0 truncate text-[calc(16px*var(--text-scale,1))] font-semibold text-ink">
+          {/* `dir="auto"`, like every other staff-typed string in the portal:
+              the name has no Arabic column, so on an Arabic page it is a Latin
+              run that must keep its own direction — and `truncate` has to clip
+              the end of the NAME, not the end of the page. */}
+          <p
+            dir="auto"
+            className="min-w-0 truncate text-[calc(16px*var(--text-scale,1))] font-semibold text-ink"
+          >
             {projectName}
           </p>
           <p className="flex items-center gap-2 font-mono text-[calc(12px*var(--text-scale,1))] tabular-nums text-faint">
@@ -807,10 +887,25 @@ export function IntakeForm({
         <nav aria-label={t.sectionsNav} className="lg:sticky lg:top-[9.5rem] lg:self-start">
           <details className="group rounded-lg border border-line bg-surface lg:hidden">
             <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-[calc(14px*var(--text-scale,1))] text-ink">
+              {/* Three elements rather than one template string. Concatenated,
+                  the Latin numeral and the bidi-neutral middot take the
+                  paragraph's direction and swap to the far side of an Arabic
+                  title — the same reason the desktop header below keeps its
+                  number in its own span. */}
               <span className="min-w-0 truncate font-medium">
-                {section
-                  ? `${section.num} · ${pick(locale, section.title, section.titleAr)}`
-                  : t.reviewTitle}
+                {section ? (
+                  <>
+                    <bdi>{section.num}</bdi>
+                    <span aria-hidden className="mx-1.5 text-faint">
+                      ·
+                    </span>
+                    <bdi lang={isArabicText(locale, section.titleAr) ? "ar" : undefined}>
+                      {pick(locale, section.title, section.titleAr)}
+                    </bdi>
+                  </>
+                ) : (
+                  t.reviewTitle
+                )}
               </span>
               <span className="shrink-0 font-mono text-[calc(11px*var(--text-scale,1))] text-faint">
                 {t.stepOf(step + 1, reviewStep + 1)}
@@ -823,7 +918,7 @@ export function IntakeForm({
           </details>
 
           <div className="hidden lg:grid lg:gap-0.5">
-            <p className="mb-1 px-2.5 font-mono text-[calc(11px*var(--text-scale,1))] uppercase tracking-wider text-faint">
+            <p className="mb-1 px-2.5 font-mono text-[calc(11px*var(--text-scale,1))] uppercase tracking-wider text-faint rtl:font-sans rtl:normal-case rtl:tracking-normal">
               {t.sections}
             </p>
             {pack.sections.map((_, i) => railItem(i))}
@@ -840,7 +935,10 @@ export function IntakeForm({
                   <span className="font-mono text-[calc(13px*var(--text-scale,1))] tracking-wider text-primary-dim">
                     {section.num}
                   </span>
-                  <h2 className="text-[calc(22px*var(--text-scale,1))] font-semibold tracking-tight text-ink">
+                  <h2
+                    lang={isArabicText(locale, section.titleAr) ? "ar" : undefined}
+                    className="text-[calc(22px*var(--text-scale,1))] font-semibold tracking-tight text-ink"
+                  >
                     {pick(locale, section.title, section.titleAr)}
                   </h2>
                   <span className="ms-auto shrink-0 rounded-full border border-line px-2.5 py-0.5 font-mono text-[calc(11px*var(--text-scale,1))] text-faint">
@@ -848,7 +946,10 @@ export function IntakeForm({
                   </span>
                 </div>
                 {(section.blurb || section.blurbAr) && (
-                  <p className="mt-2.5 max-w-[70ch] text-[calc(15px*var(--text-scale,1))] leading-relaxed text-muted">
+                  <p
+                    lang={isArabicText(locale, section.blurbAr) ? "ar" : undefined}
+                    className="mt-2.5 max-w-[70ch] text-[calc(15px*var(--text-scale,1))] leading-relaxed text-muted"
+                  >
                     {pick(locale, section.blurb ?? "", section.blurbAr)}
                   </p>
                 )}
@@ -925,7 +1026,7 @@ export function IntakeForm({
                 : "border-line-strong text-faint"
           )}
         >
-          <Send className="size-2.5" aria-hidden />
+          <Send className="size-2.5 rtl:-scale-x-100" aria-hidden />
         </span>
         <span className="min-w-0 flex-1 truncate text-[calc(14px*var(--text-scale,1))]">
           {t.reviewTitle}
@@ -953,7 +1054,7 @@ export function IntakeForm({
               if (group.length === 0) return null;
               return (
                 <div key={due}>
-                  <p className="mb-2.5 font-mono text-[calc(12px*var(--text-scale,1))] uppercase tracking-wider text-faint">
+                  <p className="mb-2.5 font-mono text-[calc(12px*var(--text-scale,1))] uppercase tracking-wider text-faint rtl:font-sans rtl:normal-case rtl:tracking-normal">
                     {t.weekShort(WEEK_NUM[due])}
                   </p>
                   <ul className="grid">
@@ -986,6 +1087,7 @@ export function IntakeForm({
                               "text-start text-[calc(14px*var(--text-scale,1))] underline-offset-2 hover:underline",
                               check.ok ? "text-ink" : "text-muted hover:text-ink"
                             )}
+                            lang={isArabicText(locale, check.labelAr) ? "ar" : undefined}
                           >
                             {pick(locale, check.label, check.labelAr)}
                           </button>
@@ -995,9 +1097,16 @@ export function IntakeForm({
                               {t.optionalIfApplies}
                             </span>
                           )}
+                          {/* The amber flag note. `noteAr` is a slot no pack
+                              fills yet, so `pick` resolves to the English note
+                              today — reading it through `pick` is what makes
+                              the Arabic half reachable the moment one lands. */}
                           {check.note && (
-                            <span className="block text-[calc(13px*var(--text-scale,1))] text-amber">
-                              {check.note}
+                            <span
+                              lang={isArabicText(locale, check.noteAr) ? "ar" : undefined}
+                              className="block text-[calc(13px*var(--text-scale,1))] text-amber"
+                            >
+                              {pick(locale, check.note, check.noteAr)}
                             </span>
                           )}
                         </span>
@@ -1014,7 +1123,13 @@ export function IntakeForm({
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
                 <p className="min-w-0 flex-1 text-[calc(14px*var(--text-scale,1))] leading-relaxed text-muted">
                   <span className="text-primary-dim">
-                    {t.sentLine(formatRelative(sentAt))}
+                    {/* Was `formatRelative(sentAt)`, which pinned the time to
+                        English and built the sentence "أُرسل 3 days ago." —
+                        translated wrapper, untranslated middle. `isolate`
+                        because the result lands INSIDE an Arabic sentence and
+                        carries a Latin digit, so without FSI/PDI the neutrals
+                        around it take the paragraph's direction. */}
+                    {t.sentLine(isolate(formatRelativeIn(locale, sentAt, t.justNow)))}
                   </span>{" "}
                   {t.sentAfter}
                 </p>
@@ -1027,10 +1142,11 @@ export function IntakeForm({
                       success: t.toastReopened,
                       optimistic: () => setSentAt(null),
                       rollback: () => setSentAt(sentAt),
+                      fallbackError: toastGeneric,
                     })
                   }
                 >
-                  <Undo2 className="size-4" aria-hidden />
+                  <Undo2 className="size-4 rtl:-scale-x-100" aria-hidden />
                   {t.reopenButton}
                 </Button>
               </div>
@@ -1052,10 +1168,11 @@ export function IntakeForm({
                       success: t.toastSent,
                       optimistic: () => setSentAt(now),
                       rollback: () => setSentAt(null),
+                      fallbackError: toastGeneric,
                     });
                   }}
                 >
-                  <Send className="size-4" aria-hidden />
+                  <Send className="size-4 rtl:-scale-x-100" aria-hidden />
                   {t.sendButton}
                 </Button>
               </div>

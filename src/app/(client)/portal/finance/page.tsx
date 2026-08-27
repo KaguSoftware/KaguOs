@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { cookies } from "next/headers";
 import { Building2, CalendarClock, Receipt } from "lucide-react";
 import {
   hasMoney,
@@ -20,14 +21,34 @@ import {
 } from "@/components/portal/bits";
 import { Badge } from "@/components/ui/badge";
 import {
-  PAYMENT_CADENCE_PER,
+  cadencePerLabel,
+  dict,
+  installmentStatusLabel,
+  invoiceStatusLabel,
+  planKindLabel,
+  type PortalDict,
+} from "@/lib/i18n";
+import { LOCALE_COOKIE, parseLocale, type Locale } from "@/lib/locale";
+import {
   type InvoiceCurrency,
   type ProjectInvoice,
   type ProjectPaymentInstallment,
 } from "@/lib/types";
-import { cn, formatDate, formatMoney, todayInIstanbul } from "@/lib/utils";
+import {
+  cn,
+  formatDateIn,
+  formatMoneyIn,
+  isolate,
+  todayInIstanbul,
+} from "@/lib/utils";
 
-export const metadata: Metadata = { title: "Finance" };
+// A static `metadata` export cannot read a cookie, so the tab title was
+// structurally incapable of following the client's language. `generateMetadata`
+// runs per request and can.
+export async function generateMetadata(): Promise<Metadata> {
+  const locale = parseLocale((await cookies()).get(LOCALE_COOKIE)?.value);
+  return { title: dict(locale).navFinance };
+}
 
 /**
  * The statement.
@@ -49,9 +70,19 @@ export const metadata: Metadata = { title: "Finance" };
  * converted figure would put a number on this page that they cannot reconcile
  * against anything, computed with an assumption they never agreed to. Two lines
  * is the honest answer.
+ *
+ * ── Why the figures stay in Latin digits in Arabic ─────────────────────────
+ *
+ * Because this page's job is reconciliation, and the invoice PDF and the wire
+ * confirmation the client is holding both carry Latin digits (lib/utils.ts's
+ * `formatMoneyIn`). The Amount column is set in Geist Mono for the same reason:
+ * Arabic-Indic digits have no glyphs there and would fall back to a
+ * proportional face, destroying the alignment that makes a column scannable.
  */
 export default async function PortalFinancePage() {
   const portal = await loadPortal();
+  const locale = parseLocale((await cookies()).get(LOCALE_COOKIE)?.value);
+  const t = dict(locale);
   const today = todayInIstanbul();
 
   // Every business's invoices, and the totals across all of them. Computed in
@@ -104,17 +135,14 @@ export default async function PortalFinancePage() {
         ]}
       />
 
-      <PageHeader
-        title="Finance"
-        description="What you have been invoiced, what is scheduled next, and where each of them stands. Drafts aren't shown — an invoice appears here once it's been sent."
-      />
+      <PageHeader title={t.navFinance} description={t.financeBlurb} />
 
       {portal.projects.length === 0 ? (
         <div className="rounded-lg border border-line bg-surface">
           <EmptyState
             icon={Building2}
-            title="Nothing shared with you yet"
-            hint="As soon as Kagu shares a project with your account, its invoices appear here."
+            title={t.nothingSharedTitle}
+            hint={t.financeNothingSharedHint}
           />
         </div>
       ) : (
@@ -126,39 +154,51 @@ export default async function PortalFinancePage() {
             )}
           >
             <Stat
-              label="Outstanding"
+              label={t.outstanding}
               note={
                 overdueCount > 0
-                  ? `${overdueCount} past due`
+                  ? t.pastDueCount(overdueCount)
                   : hasMoney(overall.outstanding)
-                    ? "Nothing overdue"
-                    : "Nothing owed right now"
+                    ? t.nothingOverdue
+                    : t.nothingOwedNow
               }
               tone={overdueCount > 0 ? "danger" : undefined}
             >
-              <Money bucket={overall.outstanding} size="lg" />
+              <Money bucket={overall.outstanding} size="lg" locale={locale} />
             </Stat>
-            <Stat label="Overdue" note={overdueCount > 0 ? "Please settle when you can" : undefined}>
+            <Stat
+              label={t.overdueLabel}
+              note={overdueCount > 0 ? t.settleWhenYouCan : undefined}
+            >
               <Money
                 bucket={overall.overdue}
                 size="lg"
                 tone={hasMoney(overall.overdue) ? "danger" : "ink"}
+                locale={locale}
               />
             </Stat>
-            <Stat label="Paid to date">
-              <Money bucket={overall.paid} size="lg" tone="muted" />
+            <Stat label={t.paidToDate}>
+              <Money bucket={overall.paid} size="lg" tone="muted" locale={locale} />
             </Stat>
             {nextPayment && (
+              /* The note needs no dictionary key: it is a date and a
+                 staff-typed plan title, with no English word between them.
+                 Both halves are isolated because the `·` between them is
+                 bidi-neutral and would otherwise take the paragraph's
+                 direction and jump to the wrong end of the line. */
               <Stat
-                label="Next scheduled payment"
-                note={`${formatDate(nextPayment.payment.due_on)} · ${nextPayment.plan.plan.title}`}
+                label={t.nextScheduledPayment}
+                note={`${isolate(formatDateIn(locale, nextPayment.payment.due_on))} · ${isolate(nextPayment.plan.plan.title)}`}
                 tone={nextPayment.payment.due_on < today ? "danger" : undefined}
               >
                 <span className="font-mono text-[calc(22px*var(--text-scale,1))] font-medium tabular-nums text-ink">
-                  {formatMoney(
-                    nextPayment.payment.amount,
-                    nextPayment.plan.plan.currency
-                  )}
+                  <bdi>
+                    {formatMoneyIn(
+                      locale,
+                      nextPayment.payment.amount,
+                      nextPayment.plan.plan.currency
+                    )}
+                  </bdi>
                 </span>
               </Stat>
             )}
@@ -168,8 +208,8 @@ export default async function PortalFinancePage() {
             <div className="rounded-lg border border-line bg-surface">
               <EmptyState
                 icon={Receipt}
-                title="No invoices yet"
-                hint="Nothing has been billed for your projects, and no payment plan has been agreed. When either happens, it shows up here with its dates."
+                title={t.noInvoicesTitle}
+                hint={t.noInvoicesHint}
               />
             </div>
           ) : (
@@ -187,10 +227,11 @@ export default async function PortalFinancePage() {
                     name={project.name}
                     action={
                       <span className="flex items-baseline gap-2 text-[calc(12px*var(--text-scale,1))] text-faint">
-                        outstanding
+                        {t.outstandingInline}
                         <Money
                           bucket={totals.outstanding}
                           tone={totals.overdueCount > 0 ? "danger" : "muted"}
+                          locale={locale}
                         />
                       </span>
                     }
@@ -203,7 +244,13 @@ export default async function PortalFinancePage() {
                   {plans.length > 0 && (
                     <div className="mb-6 grid gap-4">
                       {plans.map((plan) => (
-                        <PlanPanel key={plan.plan.id} summary={plan} today={today} />
+                        <PlanPanel
+                          key={plan.plan.id}
+                          summary={plan}
+                          today={today}
+                          t={t}
+                          locale={locale}
+                        />
                       ))}
                     </div>
                   )}
@@ -211,11 +258,16 @@ export default async function PortalFinancePage() {
                   {invoices.length === 0 ? (
                     <p className="text-[calc(13px*var(--text-scale,1))] text-faint">
                       {plans.length > 0
-                        ? "Nothing invoiced yet — the payments above are the schedule, and each one gets an invoice when it comes due."
-                        : "Nothing invoiced for this one yet."}
+                        ? t.nothingInvoicedWithPlan
+                        : t.nothingInvoicedYet}
                     </p>
                   ) : (
-                    <InvoiceTable invoices={invoices} today={today} />
+                    <InvoiceTable
+                      invoices={invoices}
+                      today={today}
+                      t={t}
+                      locale={locale}
+                    />
                   )}
                 </section>
               ))}
@@ -223,9 +275,7 @@ export default async function PortalFinancePage() {
           )}
 
           <p className="mt-8 max-w-[70ch] text-[calc(13px*var(--text-scale,1))] text-faint">
-            Something here look wrong? Tell whoever you normally speak to at
-            Kagu — this page is a copy of our records, not a place to dispute
-            them, and we would rather fix it at the source.
+            {t.financeDisputeNote}
           </p>
         </>
       )}
@@ -240,25 +290,46 @@ export default async function PortalFinancePage() {
  * column — which date, which amount, which is late — and a stack of cards makes
  * that impossible. It scrolls inside its own container rather than widening the
  * page, so a phone gets a swipeable table instead of a broken layout.
+ *
+ * It takes the Dict itself rather than a bundle of resolved strings: this is a
+ * server component in the same module as the page, so there is no client
+ * boundary to serialise across — the `labels` indirection the portal uses
+ * elsewhere only exists for `"use client"` files.
  */
 function InvoiceTable({
   invoices,
   today,
+  t,
+  locale,
 }: {
   invoices: ProjectInvoice[];
   today: string;
+  t: PortalDict;
+  locale: Locale;
 }) {
   return (
     <>
       <div className="overflow-x-auto rounded-md border border-line">
-        <table className="w-full min-w-[38rem] border-collapse text-left">
+        {/* `text-start`, not `text-left`: the cells follow the writing
+            direction, so an Arabic table is not force-aligned to the left edge
+            of a right-aligned page. */}
+        <table className="w-full min-w-[38rem] border-collapse text-start">
           <thead>
             <tr className="border-b border-line bg-raised/40">
-              {["Invoice", "Issued", "Due", "Amount", "Status"].map((heading) => (
+              {[
+                t.invoiceColInvoice,
+                t.invoiceColIssued,
+                t.invoiceColDue,
+                t.invoiceColAmount,
+                t.invoiceColStatus,
+              ].map((heading, index) => (
                 <th
-                  key={heading}
+                  // The index, not the heading: keying on the display string
+                  // changes every cell's identity when the language does, which
+                  // remounts the whole thead for no reason.
+                  key={index}
                   scope="col"
-                  className="whitespace-nowrap px-3 py-2 font-mono text-[calc(10px*var(--text-scale,1))] font-normal uppercase tracking-wider text-faint"
+                  className="whitespace-nowrap px-3 py-2 font-mono text-[calc(10px*var(--text-scale,1))] font-normal uppercase tracking-wider text-faint rtl:font-sans rtl:normal-case rtl:tracking-normal"
                 >
                   {heading}
                 </th>
@@ -281,45 +352,64 @@ function InvoiceTable({
                       {invoice.number}
                     </span>
                     {invoice.title && (
-                      <span className="block text-[calc(13px*var(--text-scale,1))] text-ink">
+                      <span
+                        dir="auto"
+                        className="block text-[calc(13px*var(--text-scale,1))] text-ink"
+                      >
                         {invoice.title}
                       </span>
                     )}
                     {/* The note is the one place Kagu writes a sentence to the
                         client on this page — a payment reference, what a partial
                         payment covered. Under the title rather than in its own
-                        column, which would be empty for most rows. */}
+                        column, which would be empty for most rows. `dir="auto"`
+                        because it is staff-typed and may be English on an
+                        Arabic page, or the other way round. */}
                     {invoice.note && (
-                      <span className="mt-0.5 block max-w-[40ch] text-[calc(12px*var(--text-scale,1))] text-faint">
+                      <span
+                        dir="auto"
+                        className="mt-0.5 block max-w-[40ch] text-[calc(12px*var(--text-scale,1))] text-faint"
+                      >
                         {invoice.note}
                       </span>
                     )}
                   </td>
-                  <td className="whitespace-nowrap px-3 py-2.5 align-top font-mono text-[calc(12px*var(--text-scale,1))] text-muted">
-                    {formatDate(invoice.issued_on)}
+                  {/* `rtl:font-sans` on the date cells: an Arabic date carries a
+                      month name, and Geist Mono has no Arabic glyphs — left as
+                      mono the line ends up set in two typefaces. `tabular-nums`
+                      stays; the digits are Latin either way. */}
+                  <td className="whitespace-nowrap px-3 py-2.5 align-top font-mono text-[calc(12px*var(--text-scale,1))] text-muted rtl:font-sans">
+                    {formatDateIn(locale, invoice.issued_on)}
                   </td>
                   <td
                     className={cn(
-                      "whitespace-nowrap px-3 py-2.5 align-top font-mono text-[calc(12px*var(--text-scale,1))]",
+                      "whitespace-nowrap px-3 py-2.5 align-top font-mono text-[calc(12px*var(--text-scale,1))] rtl:font-sans",
                       overdue ? "text-danger" : "text-muted"
                     )}
                   >
-                    {invoice.due_on ? formatDate(invoice.due_on) : "—"}
+                    {formatDateIn(locale, invoice.due_on)}
                   </td>
                   <td className="whitespace-nowrap px-3 py-2.5 align-top font-mono text-[calc(13px*var(--text-scale,1))] tabular-nums text-ink">
                     <AmountCell
                       amount={invoice.amount}
                       currency={invoice.currency}
                       struck={invoice.status === "void"}
+                      locale={locale}
                     />
                     {invoice.paid_on && (
                       <span className="mt-0.5 block text-[calc(11px*var(--text-scale,1))] text-primary-dim">
-                        paid {formatDate(invoice.paid_on)}
+                        {t.invoicePaidOn(
+                          isolate(formatDateIn(locale, invoice.paid_on))
+                        )}
                       </span>
                     )}
                   </td>
                   <td className="px-3 py-2.5 align-top">
-                    <InvoiceBadge status={invoice.status} overdue={overdue} />
+                    <InvoiceBadge
+                      status={invoice.status}
+                      overdue={overdue}
+                      label={invoiceStatusLabel(t, invoice.status, overdue)}
+                    />
                   </td>
                 </tr>
               );
@@ -332,7 +422,7 @@ function InvoiceTable({
           a phone reads as a broken page rather than as a swipeable one. One
           line says which it is, below `sm` — above it the 38rem floor fits. */}
       <p className="mt-1.5 text-[calc(11px*var(--text-scale,1))] text-faint sm:hidden">
-        Swipe the table sideways for the amount and status.
+        {t.swipeTableHint}
       </p>
     </>
   );
@@ -343,14 +433,19 @@ function AmountCell({
   amount,
   currency,
   struck,
+  locale,
 }: {
   amount: number;
   currency: InvoiceCurrency;
   struck: boolean;
+  locale: Locale;
 }) {
   return (
     <span className={cn(struck && "text-faint line-through")}>
-      {formatMoney(amount, currency)}
+      {/* <bdi> for the same reason `Money` uses one: a currency run is Latin in
+          both locales, so inside a right-to-left column the symbol or the
+          trailing code would otherwise land on the wrong side of the figure. */}
+      <bdi>{formatMoneyIn(locale, amount, currency)}</bdi>
     </span>
   );
 }
@@ -376,32 +471,58 @@ function AmountCell({
  * The wording throughout is careful about one distinction: a scheduled payment
  * that has slipped past its date is LATE, not overdue — nobody has invoiced it,
  * so nobody has been dunned. The invoice table below is where "overdue" means
- * what it says.
+ * what it says. Arabic keeps the distinction with two different words:
+ * `installmentStatusLate` (تجاوزت موعدها) here, `invoiceStatusOverdue`
+ * (متأخرة السداد) up there.
  */
-function PlanPanel({ summary, today }: { summary: PlanSummary; today: string }) {
+function PlanPanel({
+  summary,
+  today,
+  t,
+  locale,
+}: {
+  summary: PlanSummary;
+  today: string;
+  t: PortalDict;
+  locale: Locale;
+}) {
   const { plan, payments } = summary;
+  // Whole sentences from the dictionary rather than a template assembled here:
+  // English quotes a retainer as a fraction ("$1,200 / month") and Arabic as an
+  // adverb ("1,200 $ شهريًا"), so the slash itself is a translatable decision.
   const headline = plan.amount_each
     ? plan.kind === "recurring"
-      ? `${formatMoney(plan.amount_each, plan.currency)} / ${PAYMENT_CADENCE_PER[plan.cadence]}`
-      : `${summary.count} × ${formatMoney(plan.amount_each, plan.currency)}`
-    : `${summary.count} ${summary.count === 1 ? "payment" : "payments"}`;
+      ? t.planRecurringHeadline(
+          formatMoneyIn(locale, plan.amount_each, plan.currency),
+          cadencePerLabel(t, plan.cadence)
+        )
+      : t.planInstalmentsHeadline(
+          summary.count,
+          formatMoneyIn(locale, plan.amount_each, plan.currency)
+        )
+    : t.planPaymentCount(summary.count);
 
   return (
     <Panel className="p-4">
       <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
         <h3 className="flex min-w-0 items-center gap-2 text-[calc(14px*var(--text-scale,1))] font-semibold text-ink">
           <CalendarClock className="size-4 shrink-0 text-faint" aria-hidden />
-          {plan.title}
+          <span dir="auto">{plan.title}</span>
         </h3>
-        <span className="font-mono text-[calc(13px*var(--text-scale,1))] tabular-nums text-muted">
+        <span className="font-mono text-[calc(13px*var(--text-scale,1))] tabular-nums text-muted rtl:font-sans">
           {headline}
         </span>
       </div>
 
+      {/* One dictionary call rather than four fragments, so Arabic can supply
+          its own من/إلى and its own "ongoing" tail. `planKindLabel` also covers
+          `custom`, which the old two-way ternary mislabelled as instalments. */}
       <p className="mt-1 text-[calc(12px*var(--text-scale,1))] text-faint">
-        {plan.kind === "recurring" ? "Recurring" : "Instalments"} from{" "}
-        {formatDate(plan.starts_on)}
-        {plan.ends_on ? ` to ${formatDate(plan.ends_on)}` : " — ongoing"}
+        {t.planRange(
+          planKindLabel(t, plan.kind),
+          isolate(formatDateIn(locale, plan.starts_on)),
+          plan.ends_on ? isolate(formatDateIn(locale, plan.ends_on)) : null
+        )}
       </p>
 
       <div className="mt-3">
@@ -409,23 +530,33 @@ function PlanPanel({ summary, today }: { summary: PlanSummary; today: string }) 
           pct={summary.pct}
           done={summary.paidCount}
           total={summary.count}
-          caption={`${summary.paidCount}/${summary.count}`}
-          label={`${plan.title} — payments made`}
+          caption={t.paymentsMade(summary.paidCount, summary.count)}
+          label={t.planPaymentsAria(plan.title)}
         />
-        <p className="mt-1.5 font-mono text-[calc(11px*var(--text-scale,1))] tabular-nums text-faint">
-          {formatMoney(summary.paid, plan.currency)} paid ·{" "}
-          {formatMoney(summary.remaining, plan.currency)} to come
+        <p className="mt-1.5 font-mono text-[calc(11px*var(--text-scale,1))] tabular-nums text-faint rtl:font-sans">
+          {t.paidAndToCome(
+            isolate(formatMoneyIn(locale, summary.paid, plan.currency)),
+            isolate(formatMoneyIn(locale, summary.remaining, plan.currency))
+          )}
           {summary.overdueCount > 0 && (
-            <span className="text-danger">
-              {" "}
-              · {summary.overdueCount} past its date
-            </span>
+            <>
+              {/* The separator is its own element rather than leading text on
+                  the red span: a bidi-neutral `·` at the start of a node takes
+                  the paragraph direction and jumps to the far end of the line. */}
+              <span aria-hidden> · </span>
+              <span className="text-danger">
+                {t.pastItsDateCount(summary.overdueCount)}
+              </span>
+            </>
           )}
         </p>
       </div>
 
       {plan.note && (
-        <p className="mt-3 max-w-[70ch] whitespace-pre-wrap text-[calc(13px*var(--text-scale,1))] leading-relaxed text-muted">
+        <p
+          dir="auto"
+          className="mt-3 max-w-[70ch] whitespace-pre-wrap text-[calc(13px*var(--text-scale,1))] leading-relaxed text-muted"
+        >
           {plan.note}
         </p>
       )}
@@ -439,6 +570,8 @@ function PlanPanel({ summary, today }: { summary: PlanSummary; today: string }) 
               currency={plan.currency}
               next={summary.next?.id === payment.id}
               today={today}
+              t={t}
+              locale={locale}
             />
           ))}
         </ul>
@@ -453,12 +586,16 @@ function PaymentLine({
   currency,
   next,
   today,
+  t,
+  locale,
 }: {
   payment: ProjectPaymentInstallment;
   currency: InvoiceCurrency;
   /** The soonest one still to be paid — the only row anybody has to act on. */
   next: boolean;
   today: string;
+  t: PortalDict;
+  locale: Locale;
 }) {
   const settled = payment.status === "paid" || payment.status === "waived";
   const late = !settled && payment.due_on < today;
@@ -478,13 +615,18 @@ function PaymentLine({
         settled && "opacity-70"
       )}
     >
+      {/* The date column was a flat `w-24`, which fits "3 Sep 2026" but not the
+          spelled-out Arabic month beside the same digits — `3 نوفمبر 2026`
+          overruns it and either wraps or collides with the amount in the
+          `sm:flex` line above. A floor on a phone, a wider fixed column from
+          `sm` up, where the flex row needs the columns to line up. */}
       <span
         className={cn(
-          "col-start-1 row-start-1 w-24 shrink-0 font-mono text-[calc(12px*var(--text-scale,1))] tabular-nums",
+          "col-start-1 row-start-1 min-w-24 shrink-0 font-mono text-[calc(12px*var(--text-scale,1))] tabular-nums rtl:font-sans sm:w-28",
           late ? "text-danger" : "text-muted"
         )}
       >
-        {formatDate(payment.due_on)}
+        {formatDateIn(locale, payment.due_on)}
       </span>
 
       <span
@@ -493,37 +635,51 @@ function PaymentLine({
           payment.status === "waived" ? "text-faint line-through" : "text-ink"
         )}
       >
-        {formatMoney(payment.amount, currency)}
+        <bdi>{formatMoneyIn(locale, payment.amount, currency)}</bdi>
       </span>
 
       {/* It wraps on a phone rather than truncating: the column is wide enough
           for most labels, and half of "on delivery and written acceptance" is
           worth less than the line it saves. */}
       {payment.label && (
-        <span className="col-start-2 row-start-2 text-[calc(12px*var(--text-scale,1))] text-muted sm:min-w-0 sm:flex-1 sm:truncate">
+        <span
+          dir="auto"
+          className="col-start-2 row-start-2 text-[calc(12px*var(--text-scale,1))] text-muted sm:min-w-0 sm:flex-1 sm:truncate"
+        >
           {payment.label}
         </span>
       )}
 
-      <span className="col-start-2 row-start-1 ml-auto flex items-center gap-2">
-        {next && !late && <Badge tone="info">Next</Badge>}
+      {/* `ms-auto`, not `ml-auto`: the margin has to follow the writing
+          direction the way the `col-start-*` placements beside it already do. */}
+      <span className="col-start-2 row-start-1 ms-auto flex items-center gap-2">
+        {next && !late && <Badge tone="info">{t.installmentNext}</Badge>}
+        {/* Two of these five pills are derived rather than stored — a paid row
+            says when it was paid, and a scheduled row past its date says so —
+            which is why the stored four go through `installmentStatusLabel` and
+            those two read their own keys. */}
         {payment.status === "paid" ? (
           <Badge tone="green">
-            {payment.paid_on ? `Paid ${formatDate(payment.paid_on)}` : "Paid"}
+            {payment.paid_on
+              ? t.installmentPaidOn(isolate(formatDateIn(locale, payment.paid_on)))
+              : installmentStatusLabel(t, payment.status)}
           </Badge>
         ) : payment.status === "waived" ? (
-          <Badge tone="faint">Waived</Badge>
+          <Badge tone="faint">{installmentStatusLabel(t, payment.status)}</Badge>
         ) : late ? (
-          <Badge tone="danger">Past its date</Badge>
+          <Badge tone="danger">{t.installmentStatusLate}</Badge>
         ) : payment.status === "invoiced" ? (
-          <Badge tone="info">Invoiced</Badge>
+          <Badge tone="info">{installmentStatusLabel(t, payment.status)}</Badge>
         ) : (
-          <Badge tone="faint">Scheduled</Badge>
+          <Badge tone="faint">{installmentStatusLabel(t, payment.status)}</Badge>
         )}
       </span>
 
       {payment.note && (
-        <span className="col-span-2 w-full text-[calc(12px*var(--text-scale,1))] text-faint">
+        <span
+          dir="auto"
+          className="col-span-2 w-full text-[calc(12px*var(--text-scale,1))] text-faint"
+        >
           {payment.note}
         </span>
       )}

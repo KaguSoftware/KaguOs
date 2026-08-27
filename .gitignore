@@ -32,6 +32,9 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+# ...except the example, which is the only documentation of what the app
+# needs to boot. It carries names and comments, never a value.
+!.env.example
 
 # vercel
 .vercel

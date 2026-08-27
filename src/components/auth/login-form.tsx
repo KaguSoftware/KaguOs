@@ -9,7 +9,31 @@ import { Input } from "@/components/ui/input";
 import { Field } from "@/components/ui/field";
 import { EmailInput } from "@/components/ui/typed-inputs";
 
-export function LoginForm() {
+/**
+ * /login is the one route teammates and clients share, so this form has to be
+ * able to speak either language — but it stays a plain English component and
+ * takes the words as a prop. The locale decision lives entirely in the page,
+ * which is a server component and can read the cookie; a `"use client"` file
+ * can't take the Dict. Defaulting to today's English means a caller that
+ * passes nothing renders exactly what it always did.
+ */
+export type LoginFormLabels = {
+  email: string;
+  emailPlaceholder: string;
+  password: string;
+  submit: string;
+  wrongCredentials: string;
+};
+
+const LOGIN_LABELS_EN: LoginFormLabels = {
+  email: "Email",
+  emailPlaceholder: "you@kagusoftware.com",
+  password: "Password",
+  submit: "Sign in",
+  wrongCredentials: "Wrong email or password.",
+};
+
+export function LoginForm({ labels = LOGIN_LABELS_EN }: { labels?: LoginFormLabels }) {
   const router = useRouter();
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -27,7 +51,7 @@ export function LoginForm() {
     });
 
     if (signInError) {
-      setError("Wrong email or password.");
+      setError(labels.wrongCredentials);
       setPending(false);
       return;
     }
@@ -38,16 +62,16 @@ export function LoginForm() {
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
-      <Field label="Email" htmlFor="email">
+      <Field label={labels.email} htmlFor="email">
         <EmailInput
           id="email"
           name="email"
           required
           autoFocus
-          placeholder="you@kagusoftware.com"
+          placeholder={labels.emailPlaceholder}
         />
       </Field>
-      <Field label="Password" htmlFor="password" error={error}>
+      <Field label={labels.password} htmlFor="password" error={error}>
         <Input
           id="password"
           name="password"
@@ -64,7 +88,7 @@ export function LoginForm() {
         aria-busy={pending}
       >
         {pending && <Loader2 className="size-3.5 animate-spin" aria-hidden />}
-        Sign in
+        {labels.submit}
       </Button>
     </form>
   );

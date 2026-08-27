@@ -63,6 +63,7 @@ export default async function PortalInputsPage({
         businesses={portal.projects}
         activeId={projectId}
         hrefFor={(id) => `/portal/inputs/${id}`}
+        label={t.yourBusinesses}
       />
 
       <IntakeForm
@@ -74,6 +75,26 @@ export default async function PortalInputsPage({
         initialSubmittedAt={pack.header?.submitted_at ?? null}
         locale={locale}
         intro={t.packBlurb}
+        // Three bundles of already-resolved words, built here because this is
+        // where the cookie is read. The date picker, buildChecks and
+        // useAction's catch all sit below the form and take plain strings, so
+        // the words have to be handed down rather than looked up — same reason
+        // `intro` above is a string and not a dictionary key.
+        dateLabels={{
+          placeholder: t.datePlaceholder,
+          clearDate: t.dateClearAria,
+          calendar: t.dateCalendarAria,
+          prevMonth: t.datePrevMonth,
+          nextMonth: t.dateNextMonth,
+          today: t.dateToday,
+          clear: t.dateClear,
+        }}
+        checkNotes={{
+          lineCount: t.lineCount,
+          linesIncomplete: t.linesIncomplete,
+          stillToAnswer: t.stillToAnswer,
+        }}
+        toastGeneric={t.toastGeneric}
       />
     </>
   );

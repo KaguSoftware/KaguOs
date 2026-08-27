@@ -13,6 +13,15 @@ type RunOptions = {
   rollback?: () => void;
   /** Called after a successful result (e.g. close an overlay). */
   onSuccess?: () => void;
+  /**
+   * Shown when the action THROWS rather than returning a failure — the one
+   * message on this path the server never got to write. A returned
+   * `result.message` is already resolved server-side in the reader's language;
+   * this catch-all is not, so the portal passes its translated `t.toastGeneric`.
+   * Optional with the English default because this hook is the single toast
+   * path for the teammate shell too, which stays English.
+   */
+  fallbackError?: string;
 };
 
 /**
@@ -41,7 +50,7 @@ export function useAction() {
         opts.onSuccess?.();
       } catch {
         opts.rollback?.();
-        toast.error("Something went wrong. Please try again.");
+        toast.error(opts.fallbackError ?? "Something went wrong. Please try again.");
       }
     });
   }

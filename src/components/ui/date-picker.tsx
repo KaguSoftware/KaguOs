@@ -1,15 +1,33 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { CalendarDays, ChevronLeft, ChevronRight, X } from "lucide-react";
 import { usePopoverSide } from "@/lib/use-popover-side";
-import { cn, formatDate } from "@/lib/utils";
+import { cn, formatDateIn } from "@/lib/utils";
 
-const WEEKDAYS = ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"];
-const MONTHS = [
-  "January", "February", "March", "April", "May", "June",
-  "July", "August", "September", "October", "November", "December",
-];
+/** The picker's own words. Every `(app)` form gets these and passes nothing. */
+export type DatePickerLabels = {
+  placeholder: string;
+  clearDate: string;
+  calendar: string;
+  prevMonth: string;
+  nextMonth: string;
+  today: string;
+  clear: string;
+};
+
+/** The app's own two-letter column heads, Monday-first. See `weekdays` below. */
+const EN_WEEKDAYS = ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"];
+
+const EN_LABELS: DatePickerLabels = {
+  placeholder: "Pick a date…",
+  clearDate: "Clear date",
+  calendar: "Calendar",
+  prevMonth: "Previous month",
+  nextMonth: "Next month",
+  today: "Today",
+  clear: "Clear",
+};
 
 function toISO(year: number, month: number, day: number) {
   return `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
@@ -23,22 +41,31 @@ function todayISO() {
 /**
  * KaguOs custom calendar date picker (Monday-first). Carries an ISO date
  * through a hidden input so plain FormData forms work.
+ *
+ * Shared with seventeen `(app)` forms that are English-only and never read a
+ * locale cookie, so `locale` and `labels` are both optional and default to
+ * exactly the English this shipped with.
  */
 export function DatePicker({
   name,
   id,
   defaultValue = "",
-  placeholder = "Pick a date…",
+  placeholder,
   onChange,
   className,
+  locale = "en",
+  labels = EN_LABELS,
 }: {
   name: string;
   id?: string;
   defaultValue?: string;
+  /** Overrides `labels.placeholder` where a form wants its own wording ("No deadline"). */
   placeholder?: string;
   /** Notified with the ISO date ("" when cleared); FormData still works as before. */
   onChange?: (iso: string) => void;
   className?: string;
+  locale?: "en" | "ar";
+  labels?: DatePickerLabels;
 }) {
   const [value, setRawValue] = useState(defaultValue);
   function setValue(iso: string) {
@@ -53,6 +80,39 @@ export function DatePicker({
   // The calendar is ~320px tall; flip it above the field when the field sits
   // too close to the bottom of the window.
   const side = usePopoverSide(rootRef, open, 320);
+
+  // Month and weekday names come from Intl, not from the dictionary, so the
+  // calendar header can never disagree with the date `formatDateIn` writes
+  // back into the trigger — both read the same locale data.
+  const months = useMemo(
+    () =>
+      Array.from({ length: 12 }, (_, m) =>
+        new Intl.DateTimeFormat(locale, { month: "long" }).format(new Date(2021, m, 1))
+      ),
+    [locale]
+  );
+  // 2021-03-01 was a Monday, so probing seven days from it matches the
+  // Monday-first grid below.
+  //
+  // The English header is NOT derived. Intl's `short` for en is "Mon Tue Wed",
+  // and swapping the app's own two-letter set for it would widen the column
+  // heads in all seventeen `(app)` forms — a visible change to a shell that is
+  // supposed to be untouched by any of this.
+  //
+  // Arabic takes `narrow` rather than `short` for the same reason in the other
+  // direction: `short` returns the full names (الاثنين، الثلاثاء), which are
+  // four to seven characters and burst a seven-column grid sized for two.
+  const weekdays = useMemo(
+    () =>
+      locale === "en"
+        ? EN_WEEKDAYS
+        : Array.from({ length: 7 }, (_, i) =>
+            new Intl.DateTimeFormat(locale, { weekday: "narrow" }).format(
+              new Date(2021, 2, 1 + i)
+            )
+          ),
+    [locale]
+  );
 
   useEffect(() => {
     if (!open) return;
@@ -110,17 +170,19 @@ export function DatePicker({
         aria-haspopup="dialog"
         aria-expanded={open}
         className={cn(
-          "flex h-9 w-full items-center justify-between gap-2 rounded-md border border-line bg-raised px-3 text-left text-sm transition-colors duration-150 hover:border-line-strong",
+          "flex h-9 w-full items-center justify-between gap-2 rounded-md border border-line bg-raised px-3 text-start text-sm transition-colors duration-150 hover:border-line-strong",
           value ? "text-ink" : "text-muted"
         )}
       >
-        <span className="truncate">{value ? formatDate(value) : placeholder}</span>
+        <span className="truncate">
+          {value ? formatDateIn(locale, value) : (placeholder ?? labels.placeholder)}
+        </span>
         <span className="flex items-center gap-1">
           {value && (
             <span
               role="button"
               tabIndex={0}
-              aria-label="Clear date"
+              aria-label={labels.clearDate}
               onClick={(event) => {
                 event.stopPropagation();
                 setValue("");
@@ -143,7 +205,7 @@ export function DatePicker({
       {open && (
         <div
           role="dialog"
-          aria-label="Calendar"
+          aria-label={labels.calendar}
           className={cn(
             "absolute z-10 w-[min(16rem,calc(100vw-2rem))] animate-pop-in rounded-md border border-line bg-raised/90 p-3 shadow-lg shadow-black/40 backdrop-blur-md",
             side === "top"
@@ -151,31 +213,40 @@ export function DatePicker({
               : "top-full mt-1 origin-top"
           )}
         >
+          {/* Under dir="rtl" the row reverses, so the two buttons swap sides
+              while their glyphs would keep pointing the old way — hence
+              `rtl:rotate-180` on both chevrons. */}
           <div className="mb-2 flex items-center justify-between">
             <button
               type="button"
               onClick={() => shiftMonth(-1)}
-              aria-label="Previous month"
+              aria-label={labels.prevMonth}
               className="rounded-md p-1 text-muted transition-colors duration-150 hover:bg-surface hover:text-ink"
             >
-              <ChevronLeft className="size-4" aria-hidden />
+              <ChevronLeft className="size-4 rtl:rotate-180" aria-hidden />
             </button>
             <p className="text-sm font-medium text-ink">
-              {MONTHS[viewMonth]} {viewYear}
+              {months[viewMonth]} {viewYear}
             </p>
             <button
               type="button"
               onClick={() => shiftMonth(1)}
-              aria-label="Next month"
+              aria-label={labels.nextMonth}
               className="rounded-md p-1 text-muted transition-colors duration-150 hover:bg-surface hover:text-ink"
             >
-              <ChevronRight className="size-4" aria-hidden />
+              <ChevronRight className="size-4 rtl:rotate-180" aria-hidden />
             </button>
           </div>
 
           <div className="grid grid-cols-7 gap-y-0.5 text-center">
-            {WEEKDAYS.map((day) => (
-              <span key={day} className="py-1 text-[calc(11px*var(--text-scale,1))] font-medium text-faint">
+            {weekdays.map((day, index) => (
+              // Keyed by index, not by the string: the column is identified by
+              // its position in the week, and a translated abbreviation is not
+              // guaranteed to be unique across every locale.
+              <span
+                key={index}
+                className="py-1 text-[calc(11px*var(--text-scale,1))] font-medium text-faint"
+              >
                 {day}
               </span>
             ))}
@@ -218,14 +289,14 @@ export function DatePicker({
               }}
               className="rounded-md px-2 py-1 text-[calc(13px*var(--text-scale,1))] text-primary-dim transition-colors duration-150 hover:bg-surface"
             >
-              Today
+              {labels.today}
             </button>
             <button
               type="button"
               onClick={() => setValue("")}
               className="rounded-md px-2 py-1 text-[calc(13px*var(--text-scale,1))] text-muted transition-colors duration-150 hover:bg-surface hover:text-ink"
             >
-              Clear
+              {labels.clear}
             </button>
           </div>
         </div>

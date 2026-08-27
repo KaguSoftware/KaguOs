@@ -73,7 +73,7 @@ export default async function ClientLayout({
   const t = dict(locale);
 
   return (
-    <ToastProvider>
+    <ToastProvider dismissLabel={t.toastDismiss}>
       <style>{textScaleCss(textSize)}</style>
 
       <a
@@ -126,7 +126,7 @@ export default async function ClientLayout({
           </main>
 
           <footer className="border-t border-line px-4 py-5 md:px-8">
-            <div className="mx-auto flex w-full max-w-5xl flex-wrap items-center justify-between gap-2 font-mono text-[calc(11px*var(--text-scale,1))] uppercase tracking-wider text-faint">
+            <div className="mx-auto flex w-full max-w-5xl flex-wrap items-center justify-between gap-2 font-mono text-[calc(11px*var(--text-scale,1))] uppercase tracking-wider text-faint rtl:font-sans rtl:normal-case rtl:tracking-normal">
               <span>{t.footerOwner}</span>
               <span>{t.footerWhat}</span>
             </div>

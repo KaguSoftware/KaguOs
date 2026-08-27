@@ -21,6 +21,7 @@ import {
   MilestonesPanel,
 } from "@/components/work/client-portal-editor";
 import { PaymentPlansPanel } from "@/components/work/payment-plan-editor";
+import { SendClientEmail } from "@/components/work/send-client-email";
 import { todayInIstanbul } from "@/lib/utils";
 
 export const metadata: Metadata = { title: "Client view" };
@@ -198,6 +199,15 @@ export default async function ProjectClientViewPage({
         <MilestonesPanel projectId={id} milestones={milestones} />
         <PaymentPlansPanel projectId={id} summaries={summaries} today={today} />
         <InvoicesPanel projectId={id} invoices={invoices} />
+
+        {/* Last, because the order on this page is the order of the job:
+            publish the change, then tell them about it. A send box above the
+            editors would invite announcing a plan you were still rearranging —
+            and the email quotes the same `milestoneProgress` the Stat above
+            does, so whatever it sends is whatever is published at that moment. */}
+        {canEdit && (
+          <SendClientEmail projectId={id} variant="progress" people={people} />
+        )}
       </div>
     </>
   );

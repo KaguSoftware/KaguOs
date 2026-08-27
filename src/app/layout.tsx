@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Geist, Geist_Mono, Noto_Sans_Arabic } from "next/font/google";
 import { cookies } from "next/headers";
+import { dict } from "@/lib/i18n";
 import { LOCALE_COOKIE, dirFor, parseLocale } from "@/lib/locale";
 import "./globals.css";
 
@@ -14,13 +15,52 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
-export const metadata: Metadata = {
-  title: {
-    default: "KaguOs",
-    template: "%s · KaguOs",
-  },
-  description: "Kagu's internal system",
-};
+/**
+ * Neither Geist face has a single Arabic glyph, so before this an Arabic
+ * portal page fell through to whatever the OS happened to pick — Geeza Pro on
+ * a Mac, Segoe UI on Windows, something else again on Android — and was set in
+ * a different typeface from its English twin, at a different apparent size.
+ *
+ * The variable only PUBLISHES the family; where it actually enters the font
+ * stack is decided in globals.css, behind `[dir="rtl"]`. That gate is not
+ * belt-and-braces: next/font asks Google for a family and gets back @font-face
+ * blocks for every subset that family publishes — latin, math and symbols
+ * included — regardless of `subsets` below, which only chooses what gets
+ * preloaded. Left ungated in the shared stack, Noto's symbols face would sit
+ * ahead of system-ui in the always-English `(app)` shell and restyle
+ * characters like → and ▲ there.
+ *
+ * No `weight` and no `axes`: it is a variable font, and next/font's default
+ * for one is the weight axis alone. The family also carries a `wdth` axis,
+ * deliberately left out — it would enlarge the file for a width nothing here
+ * asks for.
+ */
+const notoArabic = Noto_Sans_Arabic({
+  variable: "--font-arabic",
+  subsets: ["arabic"],
+});
+
+/**
+ * `generateMetadata` rather than a static `metadata`, for the reason the
+ * dashboard's own copy of this gives: the tab title and the description are
+ * chrome like everything else, and a client reading Arabic should not be left
+ * with an English one. Reading the cookie here costs nothing — the layout
+ * below already reads it on the same request.
+ *
+ * `title.template` stays Latin on purpose. It is a brand join, and "%s ·
+ * KaguOs" reads correctly in both directions because the browser lays the tab
+ * title out with the document's own direction.
+ */
+export async function generateMetadata(): Promise<Metadata> {
+  const locale = parseLocale((await cookies()).get(LOCALE_COOKIE)?.value);
+  return {
+    title: {
+      default: "KaguOs",
+      template: "%s · KaguOs",
+    },
+    description: dict(locale).appDescription,
+  };
+}
 
 /**
  * There was no viewport export at all, so `interactive-widget` fell back to
@@ -67,7 +107,7 @@ export default async function RootLayout({
     <html
       lang={locale}
       dir={dirFor(locale)}
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      className={`${geistSans.variable} ${geistMono.variable} ${notoArabic.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">{children}</body>
     </html>

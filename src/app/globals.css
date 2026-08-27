@@ -39,6 +39,12 @@
    * rather than a missing value: the login page and the client portal never
    * set it, and text there must still have a size. */
   --text-scale: 1;
+
+  /* The tail of the sans stack, swapped by direction (see the [dir="rtl"] rule
+   * further down). The left-to-right value repeats Geist on purpose: a family
+   * already earlier in a font stack can never be reached twice, so the English
+   * stack computes to exactly what it did before this variable existed. */
+  --font-arabic-tail: var(--font-geist-sans);
 }
 
 @theme inline {
@@ -86,7 +92,21 @@
   --color-amber: var(--amber);
   --color-danger: var(--danger);
   --color-info: var(--info);
-  --font-sans: var(--font-geist-sans);
+  /* Geist stays FIRST, so Latin is untouched; Arabic falls through to the tail,
+   * which only names Noto Sans Arabic under dir="rtl".
+   *
+   * Why gated rather than simply appended: next/font asks Google for a family
+   * and gets back @font-face blocks for EVERY subset that family publishes,
+   * not just the one it was asked for — Noto Sans Arabic ships latin, math and
+   * symbols faces too, and the symbols one really does carry glyphs for
+   * → ▲ ▼ ⚠ and friends. Appended unconditionally it would sit in the
+   * always-English (app) shell's stack and quietly restyle those characters.
+   *
+   * And it has to be the theme variable rather than a `[dir=rtl] body` rule,
+   * because `@theme inline` compiles this value straight into `.font-sans` —
+   * which is what the RTL fixes elsewhere use to pull Arabic out of Geist
+   * Mono, and a rule on `body` would never reach them. */
+  --font-sans: var(--font-geist-sans), var(--font-arabic-tail);
   --font-mono: var(--font-geist-mono);
 
   /* macOS-feel motion: Apple's sheet curve + soft entrances for transient surfaces */
@@ -277,6 +297,16 @@
     opacity: 0;
     transform: translateY(6px) scale(0.98);
   }
+}
+
+/* The one place the Arabic face enters the stack. `dir` is set on <html> from
+ * the locale cookie (see app/layout.tsx), and only the client portal ever
+ * writes that cookie — so this rule is inert for the teammate app. Noto Sans
+ * Arabic covers the script Geist has no glyph for at all; without it an Arabic
+ * page was set in whatever the OS happened to pick, which differed per
+ * machine and rarely matched the English page's weight or size. */
+[dir="rtl"] {
+  --font-arabic-tail: var(--font-arabic);
 }
 
 html {

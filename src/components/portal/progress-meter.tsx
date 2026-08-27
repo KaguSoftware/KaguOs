@@ -24,7 +24,14 @@ export function ProgressMeter({
   pct: number;
   done: number;
   total: number;
-  label?: string;
+  /**
+   * The bar's accessible name. Required, and with no English default: this is
+   * the only text this component says, and it lives solely in the accessibility
+   * tree — so a forgotten one is invisible in review and an English default
+   * would ship silently to an Arabic reader. Making it required turns "someone
+   * forgot" into a compile error, the same guarantee Dict gives the dictionary.
+   */
+  label: string;
   /**
    * Replaces the `done/total` count beside the bar.
    *
@@ -44,7 +51,7 @@ export function ProgressMeter({
         aria-valuenow={pct}
         aria-valuemin={0}
         aria-valuemax={100}
-        aria-label={label ?? "Input pack completion"}
+        aria-label={label}
       >
         <div
           className={cn(

@@ -3,7 +3,7 @@ import Link from "next/link";
 import { cookies } from "next/headers";
 import { notFound } from "next/navigation";
 import { ArrowLeft, UserRound } from "lucide-react";
-import { requireSection } from "@/lib/data/session";
+import { canWrite, requireSection } from "@/lib/data/session";
 import { rowsOrThrow, selectOrThrow } from "@/lib/data/query";
 import { getIntakePack } from "@/lib/data/intake";
 import { PageHeader } from "@/components/shell/page-header";
@@ -12,6 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { IntakeExport } from "@/components/work/intake-export";
 import { IntakeReview } from "@/components/work/intake-review";
 import { IntakeLangToggle } from "@/components/work/intake-lang-toggle";
+import { SendClientEmail } from "@/components/work/send-client-email";
 import { INTAKE_LANG_COOKIE, parseIntakeLang } from "@/lib/intake-lang";
 import { formatRelative } from "@/lib/utils";
 
@@ -76,6 +77,12 @@ export default async function ProjectIntakePage({
 
   const sent = pack.header?.submitted_at ?? null;
 
+  // The same pair of arms the send action checks server-side, and the same pair
+  // the portal's RLS carries (0074 §3): mailing a customer is publishing to
+  // them. A view-only member sees the pack and no send box, rather than a
+  // button that refuses.
+  const canSend = canWrite(ctx, "work") || canWrite(ctx, "management");
+
   return (
     <>
       {/* The client types into this page from the other side of the app. A
@@ -123,6 +130,16 @@ export default async function ProjectIntakePage({
           <>Filled in by {people.join(", ")}</>
         )}
       </p>
+
+      {/* Above the review for the same reason the export is: the two things a
+          producer opens this page to DO are get the data out and chase what is
+          missing, and both would otherwise sit behind a page of recipe tables.
+          A pack that has already been sent needs no nudge. */}
+      {canSend && !sent && (
+        <div className="mb-8">
+          <SendClientEmail projectId={id} variant="inputs" people={people} />
+        </div>
+      )}
 
       {/* Above the review, not below it: the reason a producer opens this
           page late in a build is to get the data OUT, and putting the export

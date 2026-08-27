@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { after } from "next/server";
+import { cookies } from "next/headers";
 import { createServiceClient } from "@/lib/supabase/service";
 import {
   blockIfNotMyProject,
@@ -15,6 +16,8 @@ import {
   isKnownAnswerKey,
   sanitizeRow,
 } from "@/lib/intake";
+import { dict } from "@/lib/i18n";
+import { LOCALE_COOKIE, parseLocale } from "@/lib/locale";
 import type { ActionResult } from "@/lib/actions/account";
 
 /**
@@ -27,7 +30,26 @@ import type { ActionResult } from "@/lib/actions/account";
  * anything. The database says the same thing independently (0072 §4) — this
  * exists so a refusal arrives as a sentence rather than as an RLS error, and so
  * the wrong caller is stopped before a round-trip.
+ *
+ * Every message below reaches the client as a toast, so each action resolves
+ * its own from the dictionary against the request's locale cookie rather than
+ * writing English inline. These actions are portal-only, but the same rule
+ * holds anyway: only the portal writes `kagu-locale` (lib/locale.ts), so a
+ * Work member editing a pack has no cookie and reads the English unchanged.
+ *
+ * A failed write NEVER forwards the driver's own message. PostgREST names the
+ * table, the column and the constraint that refused the row, which is schema
+ * detail an outside account should not be handed; the original goes to the
+ * server log instead and the caller gets one translated sentence.
  */
+
+/**
+ * Ceiling on lines in one repeating table. Named rather than inline because the
+ * refusal quotes the number back to the client, and the dictionary sentence is
+ * interpolated with this same constant — so the cap and the message it explains
+ * cannot drift apart.
+ */
+const MAX_TABLE_ROWS = 500;
 
 type Guarded =
   | { ctx: SessionContext; stop?: undefined }
@@ -42,7 +64,8 @@ type Guarded =
  * cannot see and do not know exists.
  */
 async function guard(projectId: string): Promise<Guarded> {
-  if (!projectId) return { stop: { ok: false, message: "Missing project." } };
+  const t = dict(parseLocale((await cookies()).get(LOCALE_COOKIE)?.value));
+  if (!projectId) return { stop: { ok: false, message: t.actionMissingProject } };
 
   const ctx = await getSessionContext();
 
@@ -94,13 +117,14 @@ export async function saveIntakeAnswer(
   key: string,
   value: string
 ): Promise<ActionResult> {
+  const t = dict(parseLocale((await cookies()).get(LOCALE_COOKIE)?.value));
   const { ctx, stop } = await guard(projectId);
   if (stop) return stop;
 
   // The catalogue decides what a legal key is. Server actions are reachable by
   // direct POST, so without this the answers table is an open key-value store.
   if (!isKnownAnswerKey(key)) {
-    return { ok: false, message: "That question isn't part of the pack." };
+    return { ok: false, message: t.actionUnknownQuestion };
   }
 
   const clean = String(value ?? "").slice(0, 8000);
@@ -115,10 +139,13 @@ export async function saveIntakeAnswer(
     },
     { onConflict: "project_id,key" }
   );
-  if (error) return { ok: false, message: error.message };
+  if (error) {
+    console.error("saveIntakeAnswer", error);
+    return { ok: false, message: t.actionSaveFailed };
+  }
 
   revalidatePack(projectId);
-  return { ok: true, message: "Saved." };
+  return { ok: true, message: t.actionSaved };
 }
 
 /** Add an empty line to one of the pack's repeating tables. */
@@ -126,11 +153,12 @@ export async function addIntakeRow(
   projectId: string,
   tableKey: string
 ): Promise<ActionResult> {
+  const t = dict(parseLocale((await cookies()).get(LOCALE_COOKIE)?.value));
   const { ctx, stop } = await guard(projectId);
   if (stop) return stop;
 
   const card = findTable(tableKey);
-  if (!card) return { ok: false, message: "That table isn't part of the pack." };
+  if (!card) return { ok: false, message: t.actionUnknownTable };
 
   // Append: read the current tail rather than counting rows, so a deleted line
   // in the middle doesn't put the new one on top of an existing sort value.
@@ -150,11 +178,8 @@ export async function addIntakeRow(
     .select("id", { count: "exact", head: true })
     .eq("project_id", projectId)
     .eq("table_key", tableKey);
-  if ((count ?? 0) >= 500) {
-    return {
-      ok: false,
-      message: "That's 500 lines — send us the rest as a spreadsheet instead.",
-    };
+  if ((count ?? 0) >= MAX_TABLE_ROWS) {
+    return { ok: false, message: t.actionTooManyLines(MAX_TABLE_ROWS) };
   }
 
   const { data, error } = await ctx.supabase
@@ -168,10 +193,13 @@ export async function addIntakeRow(
     })
     .select("id")
     .maybeSingle();
-  if (error) return { ok: false, message: error.message };
+  if (error) {
+    console.error("addIntakeRow", error);
+    return { ok: false, message: t.actionSaveFailed };
+  }
 
   revalidatePack(projectId);
-  return { ok: true, message: "Line added.", id: data?.id };
+  return { ok: true, message: t.actionLineAdded, id: data?.id };
 }
 
 /**
@@ -185,11 +213,12 @@ export async function saveIntakeRow(
   tableKey: string,
   data: Record<string, unknown>
 ): Promise<ActionResult> {
+  const t = dict(parseLocale((await cookies()).get(LOCALE_COOKIE)?.value));
   const { ctx, stop } = await guard(projectId);
   if (stop) return stop;
 
   const card = findTable(tableKey);
-  if (!card) return { ok: false, message: "That table isn't part of the pack." };
+  if (!card) return { ok: false, message: t.actionUnknownTable };
 
   const { error } = await ctx.supabase
     .from("project_intake_rows")
@@ -201,16 +230,20 @@ export async function saveIntakeRow(
     // project that isn't.
     .eq("project_id", projectId)
     .eq("table_key", tableKey);
-  if (error) return { ok: false, message: error.message };
+  if (error) {
+    console.error("saveIntakeRow", error);
+    return { ok: false, message: t.actionSaveFailed };
+  }
 
   revalidatePack(projectId);
-  return { ok: true, message: "Saved." };
+  return { ok: true, message: t.actionSaved };
 }
 
 export async function deleteIntakeRow(
   projectId: string,
   rowId: string
 ): Promise<ActionResult> {
+  const t = dict(parseLocale((await cookies()).get(LOCALE_COOKIE)?.value));
   const { ctx, stop } = await guard(projectId);
   if (stop) return stop;
 
@@ -219,10 +252,13 @@ export async function deleteIntakeRow(
     .delete()
     .eq("id", rowId)
     .eq("project_id", projectId);
-  if (error) return { ok: false, message: error.message };
+  if (error) {
+    console.error("deleteIntakeRow", error);
+    return { ok: false, message: t.actionSaveFailed };
+  }
 
   revalidatePack(projectId);
-  return { ok: true, message: "Line removed." };
+  return { ok: true, message: t.actionLineRemoved };
 }
 
 /**
@@ -239,6 +275,7 @@ export async function deleteIntakeRow(
  * nobody. The team's screen shows exactly what's missing.
  */
 export async function submitIntake(projectId: string): Promise<ActionResult> {
+  const t = dict(parseLocale((await cookies()).get(LOCALE_COOKIE)?.value));
   const { ctx, stop } = await guard(projectId);
   if (stop) return stop;
 
@@ -250,19 +287,20 @@ export async function submitIntake(projectId: string): Promise<ActionResult> {
     },
     { onConflict: "project_id" }
   );
-  if (error) return { ok: false, message: error.message };
+  if (error) {
+    console.error("submitIntake", error);
+    return { ok: false, message: t.actionSaveFailed };
+  }
 
   notifyTeamOfIntake(ctx, projectId);
 
   revalidatePack(projectId);
-  return {
-    ok: true,
-    message: "Sent to Kagu — we'll come back to you on anything unclear.",
-  };
+  return { ok: true, message: t.actionSentDetail };
 }
 
 /** Take it back off the team's desk while you rework it. */
 export async function reopenIntake(projectId: string): Promise<ActionResult> {
+  const t = dict(parseLocale((await cookies()).get(LOCALE_COOKIE)?.value));
   const { ctx, stop } = await guard(projectId);
   if (stop) return stop;
 
@@ -270,10 +308,13 @@ export async function reopenIntake(projectId: string): Promise<ActionResult> {
     .from("project_intake")
     .update({ submitted_at: null, submitted_by: null })
     .eq("project_id", projectId);
-  if (error) return { ok: false, message: error.message };
+  if (error) {
+    console.error("reopenIntake", error);
+    return { ok: false, message: t.actionSaveFailed };
+  }
 
   revalidatePack(projectId);
-  return { ok: true, message: "Reopened — it's yours again." };
+  return { ok: true, message: t.toastReopened };
 }
 
 /**

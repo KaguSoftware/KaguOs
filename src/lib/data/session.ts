@@ -1,7 +1,10 @@
 import { cache } from "react";
 import { after } from "next/server";
+import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { dict } from "@/lib/i18n";
+import { LOCALE_COOKIE, parseLocale } from "@/lib/locale";
 import {
   SECTION_LABELS,
   type Profile,
@@ -289,17 +292,26 @@ export async function requireClientProject(
  * whole job is section access, which a client can never have. Two guards that
  * look alike and answer different questions is exactly how the wrong one gets
  * called.
+ *
+ * Both refusals reach a real client as a toast (via guard() in
+ * lib/actions/intake.ts), so they come from the dictionary rather than being
+ * written here in English. Reading the locale cookie is safe even though this
+ * guard is shared with the team-side call path: only the client portal ever
+ * WRITES `kagu-locale` (see the invariant at lib/locale.ts), so a teammate has
+ * no cookie, parseLocale falls back to DEFAULT_LOCALE = "en", and the English
+ * they see is byte-identical to what it was before.
  */
 export async function blockIfNotMyProject(
   projectId: string
 ): Promise<{ ok: false; message: string } | null> {
+  const t = dict(parseLocale((await cookies()).get(LOCALE_COOKIE)?.value));
   const ctx = await getSessionContext();
   if (!isClient(ctx)) {
-    return { ok: false, message: "That isn't something your account can do." };
+    return { ok: false, message: t.actionNotYourAccount };
   }
   return ctx.clientProjectIds.includes(projectId)
     ? null
-    : { ok: false, message: "That project isn't shared with your account." };
+    : { ok: false, message: t.actionProjectNotShared };
 }
 
 /**

@@ -43,20 +43,26 @@ const dateFmt = new Intl.DateTimeFormat("en-GB", {
   year: "numeric",
 });
 
+const relFmt = new Intl.RelativeTimeFormat("en", { numeric: "auto" });
+
 export function formatDate(value: string | Date | null | undefined) {
   if (!value) return "—";
   return dateFmt.format(typeof value === "string" ? new Date(value) : value);
 }
 
 /**
- * The same date in the portal's language.
+ * The same date in the portal's language, and the head of the `*In` family:
+ * `formatRelativeIn` sits just below, `formatMoneyIn` beside `formatMoney`.
+ * The client portal calls those three; `formatDate`, `formatRelative` and
+ * `formatMoney` stay English for the team's own `(app)` pages.
  *
  * `formatDate` is deliberately fixed to en-GB for the team's own pages, where
  * everyone reads English. The client portal renders Arabic sentences, and an
  * English month name dropped into one ("اكتملت 3 Sep 2026") reads as a bug.
  * Western digits are kept in both — they are what Touch's own bills use, and
  * mixing numbering systems between the date and the percentages beside it is
- * worse than either alone.
+ * worse than either alone, which is why every `*In` helper passes
+ * `numberingSystem: "latn"` rather than taking the locale's default.
  */
 const localeDateFmts: Record<"en" | "ar", Intl.DateTimeFormat> = {
   en: dateFmt,
@@ -76,6 +82,49 @@ export function formatDateIn(
   return localeDateFmts[locale].format(
     typeof value === "string" ? new Date(value) : value
   );
+}
+
+// `ar-u-nu-latn`, not a `numberingSystem` option: TypeScript's
+// `RelativeTimeFormatOptions` has no such field (unlike the DateTimeFormat one
+// above), and the `-u-nu-` locale extension is the standard equivalent. Left
+// to its default, `ar` formats "قبل ٣ أيام" in Arabic-Indic digits.
+const localeRelFmts: Record<"en" | "ar", Intl.RelativeTimeFormat> = {
+  en: relFmt,
+  ar: new Intl.RelativeTimeFormat("ar-u-nu-latn", { numeric: "auto" }),
+};
+
+/**
+ * Compact relative time in the portal's language ("3h ago", "قبل 3 أيام").
+ *
+ * `justNow` is a PARAMETER, not a lookup: `Intl.RelativeTimeFormat` has no
+ * branch for "under a minute", and this module must not import the portal's
+ * dictionary — `(app)` imports it from a dozen places and would pull the whole
+ * dictionary in behind it. Callers in the portal pass `t.justNow`.
+ *
+ * `formatRelative` below delegates here so the unit thresholds cannot drift
+ * apart from the English ones.
+ */
+export function formatRelativeIn(
+  locale: "en" | "ar",
+  value: string | Date,
+  justNow: string,
+  now: Date = new Date()
+) {
+  const fmt = localeRelFmts[locale];
+  const then = typeof value === "string" ? new Date(value) : value;
+  const diffMs = then.getTime() - now.getTime();
+  const sec = Math.round(diffMs / 1000);
+  const abs = Math.abs(sec);
+  if (abs < 60) return justNow;
+  const min = Math.round(sec / 60);
+  if (Math.abs(min) < 60) return fmt.format(min, "minute");
+  const hr = Math.round(min / 60);
+  if (Math.abs(hr) < 24) return fmt.format(hr, "hour");
+  const day = Math.round(hr / 24);
+  if (Math.abs(day) < 30) return fmt.format(day, "day");
+  const mon = Math.round(day / 30);
+  if (Math.abs(mon) < 12) return fmt.format(mon, "month");
+  return fmt.format(Math.round(mon / 12), "year");
 }
 
 /**
@@ -163,24 +212,15 @@ export function addMonths(date: string, months: number) {
   return `${target.getFullYear()}-${month}-${day}`;
 }
 
-const relFmt = new Intl.RelativeTimeFormat("en", { numeric: "auto" });
-
-/** Compact relative time ("3h ago", "2d ago"). Snapshot at render time. */
+/**
+ * Compact relative time ("3h ago", "2d ago"). Snapshot at render time.
+ *
+ * English by design — this is what the `(app)` shell calls. It is the `"en"`
+ * case of `formatRelativeIn` with the English "just now" filled in, rather
+ * than a second copy of the same thresholds that could quietly diverge.
+ */
 export function formatRelative(value: string | Date, now: Date = new Date()) {
-  const then = typeof value === "string" ? new Date(value) : value;
-  const diffMs = then.getTime() - now.getTime();
-  const sec = Math.round(diffMs / 1000);
-  const abs = Math.abs(sec);
-  if (abs < 60) return "just now";
-  const min = Math.round(sec / 60);
-  if (Math.abs(min) < 60) return relFmt.format(min, "minute");
-  const hr = Math.round(min / 60);
-  if (Math.abs(hr) < 24) return relFmt.format(hr, "hour");
-  const day = Math.round(hr / 24);
-  if (Math.abs(day) < 30) return relFmt.format(day, "day");
-  const mon = Math.round(day / 30);
-  if (Math.abs(mon) < 12) return relFmt.format(mon, "month");
-  return relFmt.format(Math.round(mon / 12), "year");
+  return formatRelativeIn("en", value, "just now", now);
 }
 
 export function formatMoney(amount: number, currency: string) {
@@ -189,4 +229,58 @@ export function formatMoney(amount: number, currency: string) {
     currency,
     maximumFractionDigits: 2,
   }).format(amount);
+}
+
+// One formatter per locale+currency pair, kept for the life of the process.
+// `formatMoney` builds a fresh `Intl.NumberFormat` on every call, which the
+// invoice table would pay for once per row; the portal's tables are long
+// enough that it is worth not repeating that here.
+const moneyFmts = new Map<string, Intl.NumberFormat>();
+
+/**
+ * The same figure in the portal's language. `formatMoney` stays en-US for
+ * `(app)`.
+ *
+ * The `ar` locale tag lets Intl place the currency the way Arabic does, but
+ * the digits stay Latin: they are what Touch's own bills, the invoice PDF and
+ * the wire confirmation all carry, and the Amount column is set in Geist Mono,
+ * which has no Arabic-Indic digit glyphs — those digits would fall back to a
+ * proportional face and destroy the alignment that makes the column scannable.
+ */
+export function formatMoneyIn(
+  locale: "en" | "ar",
+  amount: number,
+  currency: string
+) {
+  const key = `${locale}:${currency}`;
+  let fmt = moneyFmts.get(key);
+  if (!fmt) {
+    fmt = new Intl.NumberFormat(locale === "ar" ? "ar" : "en-US", {
+      style: "currency",
+      currency,
+      numberingSystem: "latn",
+      maximumFractionDigits: 2,
+    });
+    moneyFmts.set(key, fmt);
+  }
+  return fmt.format(amount);
+}
+
+/**
+ * Isolate a formatted run — a date, a money figure, a staff-typed title — so
+ * the bidi algorithm cannot reorder it, or the neutral characters around it,
+ * when it is interpolated into an Arabic sentence. Without this a `·`, `/` or
+ * `—` sitting between an Arabic word and a Latin run takes the paragraph
+ * direction and lands on the wrong side, so the figure reads as corrupted
+ * rather than as a bidi artefact.
+ *
+ * U+2068 FIRST STRONG ISOLATE … U+2069 POP DIRECTIONAL ISOLATE rather than
+ * `<bdi>`, because the dictionary's interpolated strings are FUNCTIONS that
+ * return strings, not JSX — there is no element to wrap. Use `<bdi>` at the
+ * JSX call sites where you can, and this where you cannot. Both characters are
+ * invisible and inert in an LTR paragraph, so passing a value through this on
+ * the English side costs nothing.
+ */
+export function isolate(value: string) {
+  return `\u2068${value}\u2069`;
 }

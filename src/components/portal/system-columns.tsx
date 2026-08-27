@@ -82,9 +82,12 @@ export type SystemView = {
 export type SystemColumnsLabels = {
   systemsAria: string;
   whatThisIs: string;
+  /** "How far through this step" — and its whole-system twin, below. */
   stepProgress: string;
+  systemProgress: string;
   notStartedYet: string;
   closeStep: string;
+  closeSystem: string;
   late: string;
 };
 
@@ -179,7 +182,10 @@ function SystemColumn({
           keeps its role (a button flattens its children for assistive tech). */}
       <div className="p-4">
         <div className="flex items-baseline justify-between gap-3">
-          <h3 className="min-w-0 truncate text-[calc(13px*var(--text-scale,1))] font-medium text-ink">
+          <h3
+            dir="auto"
+            className="min-w-0 truncate text-[calc(13px*var(--text-scale,1))] font-medium text-ink"
+          >
             <button
               type="button"
               onClick={(e) => onOpenSystem(e.currentTarget)}
@@ -206,7 +212,7 @@ function SystemColumn({
           label={system.progressAria}
         />
         {system.shareLabel && (
-          <p className="mt-1.5 font-mono text-[calc(11px*var(--text-scale,1))] tabular-nums text-faint">
+          <p className="mt-1.5 font-mono text-[calc(11px*var(--text-scale,1))] tabular-nums text-faint rtl:font-sans">
             {system.shareLabel}
           </p>
         )}
@@ -231,6 +237,7 @@ function SystemColumn({
               >
                 <MilestoneDot status={step.status} />
                 <span
+                  dir="auto"
                   className={cn(
                     "min-w-0 flex-1 truncate text-[calc(13px*var(--text-scale,1))]",
                     step.status === "done" && "line-through decoration-line"
@@ -260,7 +267,10 @@ function SystemColumn({
 const CLOSE_MS = 180;
 
 /**
- * One step, explained.
+ * One step, explained — or one whole system, when the reader clicked the
+ * column's NAME rather than a row under it. `subject` is whichever of the two
+ * opened it, and the labels that talk ABOUT the subject pick their wording off
+ * `step === null` so a system's drawer does not call itself "this step".
  *
  * A side sheet rather than an inline expander: the explanation is a paragraph
  * or two, and opening it in place would push the other three columns around.
@@ -363,7 +373,7 @@ function StepDrawer({
         aria-modal="true"
         aria-labelledby="portal-step-title"
         className={cn(
-          "absolute inset-y-0 inset-e-0 flex w-full max-w-md flex-col border-s border-line-strong bg-raised/90 shadow-2xl backdrop-blur-md",
+          "absolute inset-y-0 end-0 flex w-full max-w-md flex-col border-s border-line-strong bg-raised/90 shadow-2xl backdrop-blur-md",
           closing
             ? "motion-safe:animate-[sheet-out_180ms_var(--ease-mac)_both] motion-safe:rtl:animate-[sheet-out-rtl_180ms_var(--ease-mac)_both]"
             : "motion-safe:animate-[sheet-in_220ms_var(--ease-mac)_both] motion-safe:rtl:animate-[sheet-in-rtl_220ms_var(--ease-mac)_both]"
@@ -373,6 +383,7 @@ function StepDrawer({
           <div className="min-w-0">
             <h2
               id="portal-step-title"
+              dir="auto"
               className="text-[calc(16px*var(--text-scale,1))] font-medium text-ink"
             >
               {subject.title}
@@ -387,7 +398,7 @@ function StepDrawer({
             ref={closeRef}
             type="button"
             onClick={close}
-            aria-label={labels.closeStep}
+            aria-label={step ? labels.closeStep : labels.closeSystem}
             className="grid size-9 shrink-0 place-items-center rounded-md border border-line text-muted transition-colors duration-150 hover:bg-raised hover:text-ink active:scale-[0.98]"
           >
             <X className="size-4" aria-hidden />
@@ -401,14 +412,14 @@ function StepDrawer({
               <Badge tone="amber">{labels.late}</Badge>
             )}
             {subject.shareLabel && (
-              <span className="font-mono text-[calc(11px*var(--text-scale,1))] tabular-nums text-faint">
+              <span className="font-mono text-[calc(11px*var(--text-scale,1))] tabular-nums text-faint rtl:font-sans">
                 {subject.shareLabel}
               </span>
             )}
             {step?.dateLine && (
               <span
                 className={cn(
-                  "font-mono text-[calc(11px*var(--text-scale,1))]",
+                  "font-mono text-[calc(11px*var(--text-scale,1))] rtl:font-sans",
                   step.status === "done"
                     ? "text-primary-dim"
                     : step.late
@@ -425,7 +436,7 @@ function StepDrawer({
               decoration for the same value, so it is hidden from assistive
               tech rather than read out a second time. */}
           <p className="mt-5 text-[calc(12px*var(--text-scale,1))] text-muted">
-            {labels.stepProgress}
+            {step ? labels.stepProgress : labels.systemProgress}
           </p>
           <div className="mt-1 flex items-baseline gap-3">
             <span
@@ -458,7 +469,10 @@ function StepDrawer({
               <p className="mt-6 text-[calc(12px*var(--text-scale,1))] text-muted">
                 {labels.whatThisIs}
               </p>
-              <p className="mt-1.5 whitespace-pre-wrap text-[calc(13px*var(--text-scale,1))] leading-relaxed text-ink">
+              <p
+                dir="auto"
+                className="mt-1.5 whitespace-pre-wrap text-[calc(13px*var(--text-scale,1))] leading-relaxed text-ink"
+              >
                 {subject.detail}
               </p>
             </>

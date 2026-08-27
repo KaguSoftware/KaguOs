@@ -11,7 +11,10 @@ import { LOCALE_COOKIE, parseLocale } from "@/lib/locale";
 import { TEXT_SIZE_COOKIE, parseTextSize } from "@/lib/text-size";
 import { dict } from "@/lib/i18n";
 
-export const metadata: Metadata = { title: "Your account" };
+export async function generateMetadata(): Promise<Metadata> {
+  const locale = parseLocale((await cookies()).get(LOCALE_COOKIE)?.value);
+  return { title: dict(locale).yourAccount };
+}
 
 /**
  * The client's account page — name, password, and how big the text is.
@@ -29,10 +32,16 @@ export const metadata: Metadata = { title: "Your account" };
  * likely to need larger text is the one filling in a nine-section form on a
  * tablet, not the developer with two monitors.
  *
- * The three forms are the teammate components, unchanged: `updateName` and
+ * The three forms are the teammate components, shared: `updateName` and
  * `updatePassword` act on the caller's OWN row and pass through no section
  * gate, and the text size is a cookie write with no server involved — so all
  * three are correct for either principal without a special case.
+ *
+ * All three are `"use client"`, so they cannot read the dictionary themselves.
+ * Each takes a `labels` bundle of strings already resolved here, on the server,
+ * against the cookie's locale — the same shape the sidebar's `PortalNavLabels`
+ * uses. The prop is optional and defaults to today's English, which is what
+ * keeps the teammate /account page rendering byte-identical with no edit.
  */
 export default async function PortalAccountPage() {
   const ctx = await requireClient();
@@ -54,15 +63,40 @@ export default async function PortalAccountPage() {
       <div className="grid max-w-2xl gap-6">
         <Panel>
           <PanelHeader title={t.accountName} />
-          <NameForm currentName={ctx.profile.full_name} />
+          <NameForm
+            currentName={ctx.profile.full_name}
+            labels={{
+              fullName: t.accountFullName,
+              placeholder: t.accountName,
+              save: t.accountSaveName,
+            }}
+          />
         </Panel>
         <Panel>
           <PanelHeader title={t.accountPassword} />
-          <PasswordForm />
+          <PasswordForm
+            labels={{
+              newPassword: t.accountNewPassword,
+              repeat: t.accountRepeatPassword,
+              submit: t.accountChangePassword,
+            }}
+          />
         </Panel>
         <Panel>
           <PanelHeader title={t.textSize} />
-          <TextSizeForm current={textSize} />
+          <TextSizeForm
+            current={textSize}
+            labels={{
+              group: t.textSize,
+              note: t.textSizeNote,
+              sizes: {
+                sm: t.textSizeSmall,
+                md: t.textSizeDefault,
+                lg: t.textSizeLarge,
+                xl: t.textSizeLargest,
+              },
+            }}
+          />
         </Panel>
       </div>
     </>

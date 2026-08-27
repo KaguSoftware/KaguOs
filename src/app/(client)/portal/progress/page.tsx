@@ -25,7 +25,7 @@ import {
 import { dict, milestoneStatusLabel, type PortalDict } from "@/lib/i18n";
 import { LOCALE_COOKIE, parseLocale, type Locale } from "@/lib/locale";
 import { milestoneTree, type ProjectMilestone } from "@/lib/types";
-import { cn, formatDateIn, todayInIstanbul } from "@/lib/utils";
+import { cn, formatDateIn, isolate, todayInIstanbul } from "@/lib/utils";
 
 export async function generateMetadata(): Promise<Metadata> {
   const locale = parseLocale((await cookies()).get(LOCALE_COOKIE)?.value);
@@ -66,6 +66,13 @@ export async function generateMetadata(): Promise<Metadata> {
  * dashboard's rule. The plan's titles and detail are the producer's text and
  * arrive in whatever language they were written; the chrome around them must
  * not be the thing that makes an Arabic page read as English.
+ *
+ * Which is also why every one of those producer-written runs is rendered with
+ * `dir="auto"` (or inside a `<bdi>`, which is the same thing plus isolation),
+ * and why a date handed to a dictionary function goes through `isolate()`
+ * first: an English title or a Latin date is a left-to-right island in a
+ * right-to-left paragraph, and the neutral characters touching it — a dash, a
+ * middot, a bracket — otherwise drift to the wrong end of the line.
  */
 export default async function PortalProgressPage() {
   const portal = await loadPortal();
@@ -120,11 +127,11 @@ export default async function PortalProgressPage() {
                   name={project.name}
                   action={
                     systems ? (
-                      <span className="font-mono text-xs tabular-nums text-faint">
+                      <span className="font-mono text-xs tabular-nums text-faint rtl:font-sans">
                         {t.stepsDone(stepDone, stepTotal)}
                       </span>
                     ) : build.total > 0 ? (
-                      <span className="font-mono text-xs tabular-nums text-faint">
+                      <span className="font-mono text-xs tabular-nums text-faint rtl:font-sans">
                         {t.phasesDone(build.done, build.total)}
                       </span>
                     ) : undefined
@@ -133,7 +140,7 @@ export default async function PortalProgressPage() {
 
                 <div className="mb-5 grid gap-3 sm:grid-cols-2">
                   <Panel className="p-4">
-                    <p className="font-mono text-[calc(10px*var(--text-scale,1))] uppercase tracking-wider text-faint">
+                    <p className="font-mono text-[calc(10px*var(--text-scale,1))] uppercase tracking-wider text-faint rtl:font-sans rtl:normal-case rtl:tracking-normal">
                       {t.build}
                     </p>
                     <p className="mt-1.5 text-[calc(19px*var(--text-scale,1))] font-medium tabular-nums text-ink">
@@ -148,7 +155,7 @@ export default async function PortalProgressPage() {
                     />
                     <p className="mt-2 text-[calc(12px*var(--text-scale,1))] text-faint">
                       {build.next
-                        ? t.nextIs(build.next.title)
+                        ? t.nextIs(isolate(build.next.title))
                         : build.total === 0
                           ? t.planNotShared
                           : t.everythingDone}
@@ -161,7 +168,7 @@ export default async function PortalProgressPage() {
                   </Panel>
 
                   <Panel className="p-4">
-                    <p className="font-mono text-[calc(10px*var(--text-scale,1))] uppercase tracking-wider text-faint">
+                    <p className="font-mono text-[calc(10px*var(--text-scale,1))] uppercase tracking-wider text-faint rtl:font-sans rtl:normal-case rtl:tracking-normal">
                       {t.yourInputPack}
                     </p>
                     <p className="mt-1.5 text-[calc(19px*var(--text-scale,1))] font-medium tabular-nums text-ink">
@@ -202,8 +209,19 @@ export default async function PortalProgressPage() {
                           key={milestone.id}
                           className="text-[calc(13px*var(--text-scale,1))] text-muted"
                         >
-                          <span className="text-ink">{milestone.title}</span>
-                          {milestone.detail && <> — {milestone.detail}</>}
+                          {/* Both halves are staff-typed and usually English
+                              inside an Arabic list, and the dash between them is
+                              bidi-neutral: glued onto the detail it takes the
+                              paragraph direction and jumps to the far end of the
+                              line. <bdi> isolates each run and leaves the dash a
+                              node of its own, between them. */}
+                          <bdi className="text-ink">{milestone.title}</bdi>
+                          {milestone.detail && (
+                            <>
+                              <span aria-hidden> — </span>
+                              <bdi>{milestone.detail}</bdi>
+                            </>
+                          )}
                         </li>
                       ))}
                     </ul>
@@ -221,8 +239,10 @@ export default async function PortalProgressPage() {
                       systemsAria: t.systemsAria,
                       whatThisIs: t.whatThisIs,
                       stepProgress: t.stepProgress,
+                      systemProgress: t.systemProgress,
                       notStartedYet: t.notStartedYet,
                       closeStep: t.closeStep,
+                      closeSystem: t.closeSystem,
                       late: t.late,
                     }}
                   />
@@ -316,9 +336,9 @@ function toSystems(
               : null,
           progressAria: t.stepProgressAria(step.title),
           dateLine: step.done_on
-            ? t.doneOn(formatDateIn(locale, step.done_on))
+            ? t.doneOn(isolate(formatDateIn(locale, step.done_on)))
             : step.target_on
-              ? t.targetOn(formatDateIn(locale, step.target_on))
+              ? t.targetOn(isolate(formatDateIn(locale, step.target_on)))
               : null,
           late,
         };
@@ -376,6 +396,7 @@ function Timeline({
             <div className="min-w-0 flex-1 pb-1">
               <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
                 <p
+                  dir="auto"
                   className={cn(
                     "min-w-0 text-[calc(14px*var(--text-scale,1))] font-medium",
                     milestone.status === "done" ? "text-muted" : "text-ink"
@@ -390,7 +411,10 @@ function Timeline({
               </div>
 
               {milestone.detail && (
-                <p className="mt-1 max-w-[70ch] whitespace-pre-wrap text-[calc(13px*var(--text-scale,1))] leading-relaxed text-muted">
+                <p
+                  dir="auto"
+                  className="mt-1 max-w-[70ch] whitespace-pre-wrap text-[calc(13px*var(--text-scale,1))] leading-relaxed text-muted"
+                >
                   {milestone.detail}
                 </p>
               )}
@@ -413,10 +437,18 @@ function Timeline({
               )}
 
               {build.weighted && Number(milestone.weight) > 0 && (
-                <p className="mt-1 font-mono text-[calc(11px*var(--text-scale,1))] tabular-nums text-faint">
-                  {t.ofTheProject(trim(milestone.weight))}
-                  {milestone.status !== "done" &&
-                    ` · ${t.countedSoFar(trim(build.share.get(milestone.id) ?? 0))}`}
+                /* Two sentences, two nodes. Built as one string with a " · "
+                   between them, the middot is bidi-neutral and welded into the
+                   Arabic text node, so it resolves to the paragraph direction
+                   and lands at the wrong end of the line with nothing able to
+                   reach in and fix it. The gap does the separating instead. */
+                <p className="mt-1 flex flex-wrap gap-x-2 font-mono text-[calc(11px*var(--text-scale,1))] tabular-nums text-faint rtl:font-sans">
+                  <span>{t.ofTheProject(trim(milestone.weight))}</span>
+                  {milestone.status !== "done" && (
+                    <span>
+                      {t.countedSoFar(trim(build.share.get(milestone.id) ?? 0))}
+                    </span>
+                  )}
                 </p>
               )}
 
@@ -431,6 +463,7 @@ function Timeline({
                       className="flex flex-wrap items-baseline gap-x-2"
                     >
                       <span
+                        dir="auto"
                         className={cn(
                           "text-[calc(13px*var(--text-scale,1))]",
                           step.status === "done"
@@ -441,7 +474,7 @@ function Timeline({
                         {step.title}
                       </span>
                       {step.status !== "done" && pctOf(step) > 0 && (
-                        <span className="font-mono text-[calc(11px*var(--text-scale,1))] tabular-nums text-faint">
+                        <span className="font-mono text-[calc(11px*var(--text-scale,1))] tabular-nums text-faint rtl:font-sans">
                           {t.percent(pctOf(step))}
                         </span>
                       )}
@@ -456,15 +489,15 @@ function Timeline({
                 </ul>
               )}
 
-              <p className="mt-1 flex flex-wrap gap-x-3 font-mono text-[calc(11px*var(--text-scale,1))] text-faint">
+              <p className="mt-1 flex flex-wrap gap-x-3 font-mono text-[calc(11px*var(--text-scale,1))] text-faint rtl:font-sans">
                 {milestone.done_on && (
                   <span className="text-primary-dim">
-                    {t.doneOn(formatDateIn(locale, milestone.done_on))}
+                    {t.doneOn(isolate(formatDateIn(locale, milestone.done_on)))}
                   </span>
                 )}
                 {milestone.target_on && !milestone.done_on && (
                   <span className={late ? "text-amber" : undefined}>
-                    {t.targetOn(formatDateIn(locale, milestone.target_on))}
+                    {t.targetOn(isolate(formatDateIn(locale, milestone.target_on)))}
                   </span>
                 )}
               </p>

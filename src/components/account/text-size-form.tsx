@@ -11,6 +11,33 @@ import {
 import { cn } from "@/lib/utils";
 
 /**
+ * The three strings this control shows, resolved by whoever renders it.
+ *
+ * `sizes` is keyed by TextSizeKey rather than being a list, because the ORDER
+ * and the SCALES still come from TEXT_SIZES — only the four names are
+ * translatable. That constant's `label` field stays English on purpose: the
+ * teammate account page reads it as its source of truth, so translating it in
+ * place would flip that page to Arabic. The keys sm/md/lg/xl are the join.
+ */
+export type TextSizeFormLabels = {
+  group: string;
+  note: string;
+  sizes: Record<TextSizeKey, string>;
+};
+
+/**
+ * Today's English, as the default — this control is shared with the teammate
+ * account page, which has no locale and passes nothing.
+ */
+const TEXT_SIZE_LABELS_EN: TextSizeFormLabels = {
+  group: "Text size",
+  note: "Applies everywhere in KaguOs, on this browser only — each device you sign in on has its own. For bigger than this, your browser's zoom scales the layout too.",
+  sizes: Object.fromEntries(
+    TEXT_SIZES.map((s) => [s.key, s.label])
+  ) as Record<TextSizeKey, string>,
+};
+
+/**
  * How big the interface reads. See lib/text-size.ts for why this is a cookie
  * and why it's per device.
  *
@@ -27,7 +54,13 @@ import { cn } from "@/lib/utils";
  * label alone. Reading "Aa" at four sizes is the actual decision — a row of
  * equal-sized radio labels would make you guess and then hunt.
  */
-export function TextSizeForm({ current }: { current: TextSizeKey }) {
+export function TextSizeForm({
+  current,
+  labels = TEXT_SIZE_LABELS_EN,
+}: {
+  current: TextSizeKey;
+  labels?: TextSizeFormLabels;
+}) {
   const [value, setValue] = useState(current);
 
   // useCallback, like the sidebar's setRail: writing document.cookie from a
@@ -43,7 +76,7 @@ export function TextSizeForm({ current }: { current: TextSizeKey }) {
     <div className="space-y-3 p-4">
       <div
         role="radiogroup"
-        aria-label="Text size"
+        aria-label={labels.group}
         className="grid grid-cols-4 gap-1.5"
       >
         {TEXT_SIZES.map((size) => {
@@ -64,7 +97,9 @@ export function TextSizeForm({ current }: { current: TextSizeKey }) {
               )}
             >
               {/* The sample, at the size it's selling. Its own --text-scale, so
-                  it stays honest whatever the page is currently set to. */}
+                  it stays honest whatever the page is currently set to. Latin
+                  "Aa" in both languages: it's a type specimen, and the sizes it
+                  sells are the page's, not this glyph's. */}
               <span
                 aria-hidden
                 style={{ "--text-scale": size.scale } as React.CSSProperties}
@@ -78,7 +113,7 @@ export function TextSizeForm({ current }: { current: TextSizeKey }) {
                 style={{ "--text-scale": 1 } as React.CSSProperties}
                 className="text-[calc(11px*var(--text-scale,1))]"
               >
-                {size.label}
+                {labels.sizes[size.key]}
               </span>
             </button>
           );
@@ -86,9 +121,7 @@ export function TextSizeForm({ current }: { current: TextSizeKey }) {
       </div>
 
       <p className="text-[calc(13px*var(--text-scale,1))] text-faint">
-        Applies everywhere in KaguOs, on this browser only — each device you
-        sign in on has its own. For bigger than this, your browser&apos;s zoom
-        scales the layout too.
+        {labels.note}
       </p>
     </div>
   );
