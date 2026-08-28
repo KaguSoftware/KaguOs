@@ -2,32 +2,42 @@
 
 import { selectOrThrow } from "@/lib/data/query";
 import type { SessionContext } from "@/lib/data/session";
-import { getIntakePack } from "@/lib/data/intake";
-import { getProjectMilestones, milestoneProgress } from "@/lib/data/portal";
 import { guard, text } from "@/lib/actions/portal-write";
 import type { ActionResult } from "@/lib/actions/account";
-import { parseLocale, pick, type Locale } from "@/lib/locale";
-import { absoluteUrl } from "@/lib/email/config";
+import { parseLocale } from "@/lib/locale";
+import { buildClientEmail, type MailableProject } from "@/lib/email/client-mail";
+import { CLIENT_EMAIL_TAGS, parseClientEmailKind } from "@/lib/email/kinds";
 import { clientRecipients } from "@/lib/email/recipients";
 import { sendEmails } from "@/lib/email/send";
-import { inputsReminderEmail, progressUpdateEmail } from "@/lib/email/templates";
 
 /**
- * The two emails KaguOs sends to a customer, both fired by hand from the
+ * The three emails KaguOs sends to a customer, all fired by hand from the
  * project's own pages.
  *
  * ── Why by hand, and not from a trigger on the row ─────────────────────────
  *
- * Because both of the obvious triggers are wrong. "Email on every milestone
- * update" fires while a producer is mid-edit and mails a client four times in a
- * minute about a plan that was being rearranged, not progressed. "Email when
- * the pack goes stale" needs a definition of stale that nobody has, and a
- * client who is deliberately waiting on their accountant gets nagged weekly for
- * it. The person who knows the update is worth sending is the person who made
- * it, and they are already looking at the page it happened on.
+ * Because the obvious triggers are all wrong. "Email on every milestone update"
+ * fires while a producer is mid-edit and mails a client four times in a minute
+ * about a plan that was being rearranged, not progressed. "Email when the pack
+ * goes stale" needs a definition of stale that nobody has, and a client who is
+ * deliberately waiting on their accountant gets nagged weekly for it. "Email
+ * when a payment falls due" would dun a customer for an invoice we had not got
+ * round to raising. The person who knows the message is worth sending is the
+ * person who made the change, and they are already looking at the page it
+ * happened on.
  *
  * What the button removes is the retyping, not the judgement: the numbers, the
  * link and the language come from the same data the page is rendering.
+ *
+ * ── One action, a kind on the wire ─────────────────────────────────────────
+ *
+ * It was two exported actions, one per email, back when the page decided which
+ * one you got. The send box now carries the choice (`lib/email/kinds.ts`), and
+ * a dial with three positions is one action with a narrowed argument rather
+ * than three endpoints the component has to keep a lookup table for. Everything
+ * that differs between the three lives in `email/client-mail.ts`; everything
+ * that is the same — who may send, who receives, what comes back in a toast —
+ * lives here and is written once.
  *
  * ── The guard ──────────────────────────────────────────────────────────────
  *
@@ -44,7 +54,7 @@ import { inputsReminderEmail, progressUpdateEmail } from "@/lib/email/templates"
  * ── Failure is reported, not swallowed ─────────────────────────────────────
  *
  * The opposite of `notify.ts` and `email/team.ts`, deliberately. Those fire
- * inside `after()` because nobody asked for them; these are somebody pressing
+ * inside `after()` because nobody asked for them; this is somebody pressing
  * Send and watching for a result, and "sent to 2 people" versus "the domain
  * isn't verified" is the difference between knowing and assuming a client was
  * told.
@@ -52,15 +62,6 @@ import { inputsReminderEmail, progressUpdateEmail } from "@/lib/email/templates"
 
 /** The note box, bounded. It reaches a customer verbatim, so it is trimmed and capped. */
 const MAX_NOTE = 1000;
-
-/**
- * A locale arrives from a client component, so it is a string until proven
- * otherwise — `parseLocale` narrows it to the two known keys exactly as the
- * portal's layout does with the cookie.
- */
-function localeOf(value: string): Locale {
-  return parseLocale(value);
-}
 
 /** "Sent to 2 people." — the toast, and the one sentence worth getting right. */
 function report(sent: number, failed: number, skipped: boolean, error: string | null): ActionResult {
@@ -93,7 +94,7 @@ type Opened =
   | {
       stop?: undefined;
       ctx: SessionContext;
-      project: { id: string; name: string; intake_pack: string | null };
+      project: MailableProject;
       recipients: { userId: string; email: string; name: string | null }[];
     };
 
@@ -128,22 +129,20 @@ async function open(projectId: string): Promise<Opened> {
     };
   }
 
-  return {
-    ctx,
-    project: project as { id: string; name: string; intake_pack: string | null },
-    recipients,
-  };
+  return { ctx, project: project as MailableProject, recipients };
 }
 
 /**
- * "Your input pack is still open" — sent from the project's Input pack page.
+ * Write one of the three, to every client account on the project.
  *
- * The outstanding list is built from the same `buildChecks` pass the client's
- * own checklist renders, so the email cannot name a section the portal thinks
- * is finished.
+ * `rawKind` and `rawLocale` arrive from a client component, so they are strings
+ * until proven otherwise — both are narrowed by their own parser exactly as the
+ * portal's layout narrows the locale cookie, because between them they decide
+ * which query runs and which words a customer reads.
  */
-export async function emailInputsReminder(
+export async function sendClientEmail(
   projectId: string,
+  rawKind: string,
   rawLocale: string,
   rawNote: string
 ): Promise<ActionResult> {
@@ -151,27 +150,11 @@ export async function emailInputsReminder(
   if (opened.stop) return opened.stop;
   const { ctx, project, recipients } = opened;
 
-  const locale = localeOf(rawLocale);
+  const kind = parseClientEmailKind(rawKind);
+  const locale = parseLocale(rawLocale);
   const note = text(rawNote, MAX_NOTE);
 
-  const pack = await getIntakePack(ctx, project.id, project.intake_pack);
-
-  // Optional cards are excluded from both the meter and this list, exactly as
-  // `progressOf` excludes them — a client should not be chased for the sub-
-  // recipes their business does not have.
-  const outstanding = pack.checks
-    .filter((check) => !check.ok && !check.optional)
-    .map((check) => pick(locale, check.label, check.labelAr));
-
-  const email = inputsReminderEmail({
-    locale,
-    projectName: project.name,
-    done: pack.progress.done,
-    total: pack.progress.total,
-    outstanding,
-    note,
-    url: absoluteUrl(`/portal/inputs/${project.id}`),
-  });
+  const email = await buildClientEmail(ctx, project, kind, locale, note);
 
   const { sent, failed, skipped, error } = await sendEmails(
     recipients.map((recipient) => ({
@@ -179,58 +162,7 @@ export async function emailInputsReminder(
       subject: email.subject,
       html: email.html,
       text: email.text,
-      tag: "inputs_reminder",
-    }))
-  );
-
-  return report(sent, failed, skipped, error);
-}
-
-/**
- * "Progress has been updated" — sent from the project's Client view page.
- *
- * Reads the same numbers the client's progress page will show them when they
- * follow the link: `milestoneProgress` over the CLIENT-VISIBLE phases only, so
- * an email can never quote a percentage that includes a phase the portal is
- * still hiding.
- */
-export async function emailProgressUpdate(
-  projectId: string,
-  rawLocale: string,
-  rawNote: string
-): Promise<ActionResult> {
-  const opened = await open(projectId);
-  if (opened.stop) return opened.stop;
-  const { ctx, project, recipients } = opened;
-
-  const locale = localeOf(rawLocale);
-  const note = text(rawNote, MAX_NOTE);
-
-  const milestones = await getProjectMilestones(ctx, [project.id]);
-  const visible = milestones.filter((milestone) => milestone.visible_to_client);
-  const progress = milestoneProgress(visible);
-
-  const email = progressUpdateEmail({
-    locale,
-    projectName: project.name,
-    pct: progress.pct,
-    done: progress.done,
-    total: progress.total,
-    // Phase titles are written once, in the language the plan was written in —
-    // unlike a pack question they carry no Arabic twin, so they travel as-is.
-    nextTitle: progress.next?.title ?? null,
-    blocked: progress.blocked.map((milestone) => milestone.title),
-    note,
-    url: absoluteUrl("/portal/progress"),
-  });
-
-  const { sent, failed, skipped, error } = await sendEmails(
-    recipients.map((recipient) => ({
-      to: recipient.email,
-      subject: email.subject,
-      html: email.html,
-      text: email.text,
-      tag: "progress_update",
+      tag: CLIENT_EMAIL_TAGS[kind],
     }))
   );
 

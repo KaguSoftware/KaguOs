@@ -206,7 +206,7 @@ export default async function ProjectClientViewPage({
             and the email quotes the same `milestoneProgress` the Stat above
             does, so whatever it sends is whatever is published at that moment. */}
         {canEdit && (
-          <SendClientEmail projectId={id} variant="progress" people={people} />
+          <SendClientEmail projectId={id} defaultKind="progress" people={people} />
         )}
       </div>
     </>

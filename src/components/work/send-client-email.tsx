@@ -2,15 +2,16 @@
 
 import { useId, useState } from "react";
 import { Mail, Send } from "lucide-react";
-import {
-  emailInputsReminder,
-  emailProgressUpdate,
-} from "@/lib/actions/client-email";
+import { sendClientEmail } from "@/lib/actions/client-email";
 import { Button } from "@/components/ui/button";
 import { Field } from "@/components/ui/field";
 import { Textarea } from "@/components/ui/input";
 import { Panel, PanelHeader } from "@/components/ui/panel";
 import { Segmented } from "@/components/ui/segmented";
+import {
+  CLIENT_EMAIL_KINDS,
+  type ClientEmailKind,
+} from "@/lib/email/kinds";
 import { LOCALES, DEFAULT_LOCALE, type Locale } from "@/lib/locale";
 import { useAction } from "@/lib/use-action";
 
@@ -20,11 +21,30 @@ import { useAction } from "@/lib/use-action";
  * ── Why it is a panel and not a button ─────────────────────────────────────
  *
  * A bare "Email the client" button is a thing you press by accident, and what
- * it does is unrecallable. Making it a panel forces the three facts a sender
- * needs into view before the press: WHO it goes to by name, WHICH LANGUAGE it
- * will be written in, and what — if anything — it will say in our own words.
- * The two-step confirm used elsewhere for deletes would only add a click; the
- * risk here isn't the second press, it's not knowing what the first one sends.
+ * it does is unrecallable. Making it a panel forces the four facts a sender
+ * needs into view before the press: WHICH of the three emails this is, WHO it
+ * goes to by name, WHICH LANGUAGE it will be written in, and what — if anything
+ * — it will say in our own words. The two-step confirm used elsewhere for
+ * deletes would only add a click; the risk here isn't the second press, it's
+ * not knowing what the first one sends.
+ *
+ * ── The kind dial ──────────────────────────────────────────────────────────
+ *
+ * It used to be fixed by the page: the input-pack page could only nudge about
+ * the pack, the client-view page could only announce progress, and the payment
+ * reminder did not exist because there was no page obviously "about" money to
+ * hang it off. That mapping was an accident of where the panel happened to sit,
+ * and it cost a producer a navigation every time the thing worth saying wasn't
+ * the thing the page they were on could say.
+ *
+ * So the page now sets the DEFAULT and the sender sets the kind. Three visible
+ * options rather than a dropdown, for the reason `Segmented` was extracted: the
+ * alternatives are the information — a producer who did not know a payment
+ * reminder existed finds out by looking at the box, not by opening a menu.
+ *
+ * The blurb, the placeholder and the button label all follow the dial, because
+ * a control that changed nothing visible except a hidden argument would be a
+ * control nobody trusted.
  *
  * ── The language toggle ────────────────────────────────────────────────────
  *
@@ -42,40 +62,57 @@ import { useAction } from "@/lib/use-action";
  * routine update.
  */
 
-const VARIANTS = {
+const KINDS: Record<
+  ClientEmailKind,
+  { tab: string; title: string; blurb: string; button: string; placeholder: string }
+> = {
   inputs: {
-    title: "Email the client",
+    tab: "Input pack",
+    title: "Remind them about the input pack",
     blurb: "A nudge with what's still open in the pack, and a link to it.",
     button: "Send reminder",
     placeholder:
       "Optional. Something like: we're starting on the menu next week, so the offerings table is the one to get in first.",
-    action: emailInputsReminder,
   },
   progress: {
-    title: "Email the client",
+    tab: "Progress",
+    title: "Tell them where the build is",
     blurb: "The headline percentage, what's next, and a link to the full plan.",
     button: "Send update",
     placeholder:
       "Optional. Something like: the design phase wrapped this week — the next thing you'll see from us is the staging link.",
-    action: emailProgressUpdate,
   },
-} as const;
+  finance: {
+    tab: "Payment",
+    title: "Remind them about a payment",
+    blurb:
+      "What's outstanding, which invoices are still open, the next scheduled payment, and a link to the statement.",
+    button: "Send payment reminder",
+    placeholder:
+      "Optional. Something like: no rush on this one — we're sending it now so it lands before your month-end run.",
+  },
+};
 
 export function SendClientEmail({
   projectId,
-  variant,
+  defaultKind,
   people,
 }: {
   projectId: string;
-  variant: keyof typeof VARIANTS;
+  /**
+   * Which of the three the dial opens on — the one the page it sits on is
+   * about. A default, not a lock: all three are always sendable from here.
+   */
+  defaultKind: ClientEmailKind;
   /** The client accounts on this project, by name — rendered so the sender sees them. */
   people: string[];
 }) {
   const { pending, run, toast } = useAction();
+  const [kind, setKind] = useState<ClientEmailKind>(defaultKind);
   const [locale, setLocale] = useState<Locale>(DEFAULT_LOCALE);
   const [note, setNote] = useState("");
   const noteId = useId();
-  const config = VARIANTS[variant];
+  const config = KINDS[kind];
 
   // Nobody to write to. Said here rather than by hiding the panel: a producer
   // wondering why they cannot email a client is better served by the reason
@@ -83,7 +120,7 @@ export function SendClientEmail({
   if (people.length === 0) {
     return (
       <Panel>
-        <PanelHeader title={config.title} />
+        <PanelHeader title="Email the client" />
         <p className="px-4 py-4 text-[calc(13px*var(--text-scale,1))] text-faint">
           Nobody has a client account on this project yet. Give someone one in
           Admin and share this project with them, and this becomes a send box.
@@ -95,7 +132,7 @@ export function SendClientEmail({
   return (
     <Panel>
       <PanelHeader
-        title={config.title}
+        title="Email the client"
         action={
           <Segmented
             label="Language of the email"
@@ -113,6 +150,28 @@ export function SendClientEmail({
       />
 
       <div className="space-y-4 p-4">
+        {/* Not a `Field`: that renders a `<label htmlFor>`, and the control
+            below is a group of buttons rather than one focusable input — a
+            label pointing at nothing is worse for a screen reader than no
+            label, which is why `Segmented` names itself with `aria-label`. */}
+        <div className="space-y-1.5">
+          <p className="text-[calc(13px*var(--text-scale,1))] font-medium text-muted">
+            What to send
+          </p>
+          <Segmented
+            label="What to send"
+            className="max-w-full"
+            options={CLIENT_EMAIL_KINDS.map((key) => ({
+              key,
+              label: KINDS[key].tab,
+              title: KINDS[key].title,
+            }))}
+            value={kind}
+            onChange={setKind}
+            disabled={pending}
+          />
+        </div>
+
         <p className="flex items-start gap-1.5 text-[calc(13px*var(--text-scale,1))] text-faint">
           <Mail className="mt-0.5 size-3.5 shrink-0" aria-hidden />
           <span>
@@ -143,7 +202,7 @@ export function SendClientEmail({
             onClick={() =>
               run(
                 async () => {
-                  const result = await config.action(projectId, locale, note);
+                  const result = await sendClientEmail(projectId, kind, locale, note);
                   // Toasted here rather than through `run`'s `success` option,
                   // which takes a fixed string. The sentence worth reading is
                   // the one the action wrote — "Sent to 2 people", or "Sent to

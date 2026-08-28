@@ -137,7 +137,7 @@ export default async function ProjectIntakePage({
           A pack that has already been sent needs no nudge. */}
       {canSend && !sent && (
         <div className="mb-8">
-          <SendClientEmail projectId={id} variant="inputs" people={people} />
+          <SendClientEmail projectId={id} defaultKind="inputs" people={people} />
         </div>
       )}
 
