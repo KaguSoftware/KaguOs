@@ -30,6 +30,19 @@ function parseAmount(value: FormDataEntryValue | null): number | null {
   return Number.isFinite(amount) && amount > 0 ? amount : null;
 }
 
+/**
+ * The day of the month a recurring item bills on, or null for "same day it
+ * started". Anything outside 1–31 falls back to null rather than erroring: the
+ * form can only submit valid days, so a bad value means a hand-built request,
+ * and inventing a schedule for it would be worse than leaving it unset.
+ */
+function parseBillingDay(value: FormDataEntryValue | null): number | null {
+  const raw = String(value ?? "").trim();
+  if (!raw) return null;
+  const day = Number(raw);
+  return Number.isInteger(day) && day >= 1 && day <= 31 ? day : null;
+}
+
 // ---------- FX rates ----------
 
 export async function setFxRate(
@@ -171,6 +184,7 @@ export async function updateRecurring(
       amount,
       currency: CURRENCIES.includes(currency) ? currency : "TRY",
       cadence: CADENCES.includes(cadence) ? cadence : "monthly",
+      billing_day: parseBillingDay(formData.get("billing_day")),
       started_on: String(formData.get("started_on") ?? "") || today(),
       notes: String(formData.get("notes") ?? "").trim() || null,
     })
@@ -219,6 +233,7 @@ export async function createRecurring(
     amount,
     currency: CURRENCIES.includes(currency) ? currency : "TRY",
     cadence: CADENCES.includes(cadence) ? cadence : "monthly",
+    billing_day: parseBillingDay(formData.get("billing_day")),
     started_on: String(formData.get("started_on") ?? "") || today(),
     notes: String(formData.get("notes") ?? "").trim() || null,
     created_by: ctx.userId,

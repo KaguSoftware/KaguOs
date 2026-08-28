@@ -8,6 +8,7 @@ import {
   updateTransaction,
 } from "@/lib/actions/management";
 import type { RecurringItem, Transaction } from "@/lib/types";
+import { ordinalDay } from "@/lib/finance";
 import { CreateForm } from "@/components/ui/create";
 import { Input, Textarea } from "@/components/ui/input";
 import { Field } from "@/components/ui/field";
@@ -24,6 +25,28 @@ const CURRENCY_OPTIONS = [
   { value: "TRY", label: "TRY — Turkish lira" },
   { value: "USD", label: "USD — US dollar" },
   { value: "EUR", label: "EUR — Euro" },
+];
+
+/**
+ * The day of the month a subscription charges on. "Same day it started" leads,
+ * because it's true of most rows and saves the extra decision; picking a day is
+ * for the common case where it isn't — a trial that converted on the 1st, a
+ * retainer invoiced every 15th.
+ *
+ * 29–31 are offered rather than hidden. They're real billing days, and the
+ * hint says what happens in the months that are shorter instead of making
+ * someone guess.
+ */
+const BILLING_DAY_OPTIONS = [
+  { value: "", label: "Same day it started" },
+  ...Array.from({ length: 31 }, (_, i) => {
+    const day = i + 1;
+    return {
+      value: String(day),
+      label: `The ${ordinalDay(day)}`,
+      hint: day > 28 ? "Shorter months bill on their last day" : undefined,
+    };
+  }),
 ];
 
 const STATUS_OPTIONS = [
@@ -198,14 +221,6 @@ export function NewRecurringForm({ item }: { item?: RecurringItem }) {
         </Field>
       </div>
       <div className="grid gap-4 sm:grid-cols-2">
-        <Field label="Counterparty" htmlFor="rec-counterparty" hint="Vendor or client.">
-          <Input
-            id="rec-counterparty"
-            name="counterparty"
-            maxLength={160}
-            defaultValue={item?.counterparty ?? ""}
-          />
-        </Field>
         <Field label="Started" htmlFor="rec-started" hint="Empty = today.">
           <DatePicker
             id="rec-started"
@@ -213,7 +228,30 @@ export function NewRecurringForm({ item }: { item?: RecurringItem }) {
             defaultValue={item?.started_on ?? ""}
           />
         </Field>
+        {/* Sits beside the start date because the two are read together: when
+            it began, and which day it charges from then on. */}
+        <Field
+          label="Bills on"
+          htmlFor="rec-billing-day"
+          hint="Which day the money actually moves."
+        >
+          <Dropdown
+            id="rec-billing-day"
+            name="billing_day"
+            defaultValue={item?.billing_day ? String(item.billing_day) : ""}
+            options={BILLING_DAY_OPTIONS}
+            searchPlaceholder="Day…"
+          />
+        </Field>
       </div>
+      <Field label="Counterparty" htmlFor="rec-counterparty" hint="Vendor or client.">
+        <Input
+          id="rec-counterparty"
+          name="counterparty"
+          maxLength={160}
+          defaultValue={item?.counterparty ?? ""}
+        />
+      </Field>
       <Field label="Notes" htmlFor="rec-notes">
         <Textarea id="rec-notes" name="notes" rows={3} defaultValue={item?.notes ?? ""} />
       </Field>

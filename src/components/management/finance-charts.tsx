@@ -16,8 +16,8 @@ import { formatTRY, type MonthPoint } from "@/lib/finance";
 // Chart marks — darker steps of the theme hues, validated with the dataviz
 // palette validator (L band 0.48–0.67 dark, CVD floor met with fixed bar
 // positions + legend as secondary encoding).
-const INCOME = "oklch(0.62 0.13 160)";
-const EXPENSE = "oklch(0.55 0.16 25)";
+export const INCOME = "oklch(0.62 0.13 160)";
+export const EXPENSE = "oklch(0.55 0.16 25)";
 
 // The two label sizes the charts use, as multiples of the text-size preference
 // rather than as bare numbers — a chart axis is text, and someone who turned

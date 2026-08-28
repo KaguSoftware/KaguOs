@@ -4,6 +4,7 @@ import { Plus, RefreshCcw } from "lucide-react";
 import { requireSection } from "@/lib/data/session";
 import { rowsOrThrow } from "@/lib/data/query";
 import { LinkButton } from "@/components/ui/link-button";
+import { TRANSACTION_PAGE } from "@/lib/finance";
 import { LiveRefresh } from "@/components/shell/live-refresh";
 import { TabbedPanels } from "@/components/shell/tabbed-panels";
 import { ContractsPanel, FinancePanel } from "@/components/management/panels";
@@ -21,7 +22,7 @@ export default async function ManagementPage() {
         .select("*")
         .eq("is_demo", ctx.showcase)
         .order("occurred_on", { ascending: false })
-        .limit(500),
+        .limit(TRANSACTION_PAGE),
       "transactions"
     ),
     rowsOrThrow(

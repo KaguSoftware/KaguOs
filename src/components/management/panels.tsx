@@ -9,15 +9,19 @@ import {
   RecurringBreakdown,
   type BreakdownItem,
 } from "@/components/management/finance-charts";
+import { SpendingComparison } from "@/components/management/finance-comparison";
 import { RecurringRow, TransactionRow } from "@/components/management/finance-rows";
 import { ExportButton } from "@/components/management/export-button";
 import {
   buildCashflowSeries,
   formatTRY,
+  billingDay,
   isActiveRecurring,
+  nextBillingOn,
   monthKey,
   monthlyAmount,
   toTRY,
+  TRANSACTION_PAGE,
   type FxRates,
 } from "@/lib/finance";
 import { cn, formatDate, todayInIstanbul } from "@/lib/utils";
@@ -86,7 +90,8 @@ export function FinancePanel({
   const settled = transactions.filter((t) => t.status === "paid");
 
   // This month, in TL
-  const thisMonth = monthKey(todayInIstanbul());
+  const today = todayInIstanbul();
+  const thisMonth = monthKey(today);
   let monthIncome = 0;
   let monthExpense = 0;
   const skipped = new Set<string>();
@@ -113,6 +118,15 @@ export function FinancePanel({
     if (item.type === "income") recurringIn += value;
     else recurringOut += value;
   }
+
+  // The transactions query is capped, so the oldest row that came back is the
+  // real floor of what any range can be measured against. Null when the ledger
+  // is small enough to have arrived whole — then nothing is missing and the
+  // year-on-year panel has no caveat to raise.
+  const oldestLoaded =
+    transactions.length >= TRANSACTION_PAGE
+      ? transactions[transactions.length - 1].occurred_on
+      : null;
 
   const { series, skippedCurrencies } = buildCashflowSeries(settled, rates);
   for (const c of skippedCurrencies) skipped.add(c);
@@ -157,6 +171,23 @@ export function FinancePanel({
         </div>
 
         <Panel>
+          <PanelHeader
+            title="Compare a range"
+            action={
+              <span className="text-[calc(12px*var(--text-scale,1))] text-faint">
+                TL equivalent, settled only
+              </span>
+            }
+          />
+          <SpendingComparison
+            transactions={settled}
+            rates={rates}
+            today={today}
+            oldestLoaded={oldestLoaded}
+          />
+        </Panel>
+
+        <Panel>
           <PanelHeader title="Cash flow" />
           {hasChartData ? (
             <CashflowChart data={series} />
@@ -190,13 +221,15 @@ export function FinancePanel({
             action={
               <ExportButton
                 filename="recurring-items.csv"
-                columns={["Name", "Type", "Amount", "Currency", "Cadence", "Counterparty", "Started", "Canceled"]}
+                columns={["Name", "Type", "Amount", "Currency", "Cadence", "Bills on", "Next bill", "Counterparty", "Started", "Canceled"]}
                 rows={recurring.map((r) => [
                   r.name,
                   r.type,
                   Number(r.amount),
                   r.currency,
                   r.cadence,
+                  billingDay(r),
+                  nextBillingOn(r) ?? "",
                   r.counterparty ?? "",
                   r.started_on,
                   r.canceled_on ?? "",

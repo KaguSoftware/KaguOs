@@ -49,8 +49,10 @@ function todayISO() {
 export function DatePicker({
   name,
   id,
+  value: controlledValue,
   defaultValue = "",
   placeholder,
+  ariaLabel,
   onChange,
   className,
   locale = "en",
@@ -58,16 +60,30 @@ export function DatePicker({
 }: {
   name: string;
   id?: string;
+  /**
+   * Makes the field controlled: the date shown is this one, and the parent is
+   * responsible for pushing the next one back through `onChange`. Leave it off
+   * for the ordinary form case, where the field owns its own value.
+   *
+   * The escape hatch a range picker needs — picking a "This month" preset has
+   * to move BOTH ends of the range at once, which an uncontrolled field would
+   * quietly ignore.
+   */
+  value?: string;
   defaultValue?: string;
   /** Overrides `labels.placeholder` where a form wants its own wording ("No deadline"). */
   placeholder?: string;
+  /** Names the field when the trigger has no associated <label> — a <button> is
+   *  not a labelable element, so `htmlFor` cannot reach it. */
+  ariaLabel?: string;
   /** Notified with the ISO date ("" when cleared); FormData still works as before. */
   onChange?: (iso: string) => void;
   className?: string;
   locale?: "en" | "ar";
   labels?: DatePickerLabels;
 }) {
-  const [value, setRawValue] = useState(defaultValue);
+  const [uncontrolled, setRawValue] = useState(defaultValue);
+  const value = controlledValue ?? uncontrolled;
   function setValue(iso: string) {
     setRawValue(iso);
     onChange?.(iso);
@@ -135,6 +151,9 @@ export function DatePicker({
   }, [open]);
 
   function openCalendar() {
+    // Re-read on every open, which is all a controlled value needs: the
+    // outside-pointerdown handler above closes the calendar the moment focus
+    // leaves this field, so nothing can move `value` while the grid is up.
     const base = value || todayISO();
     setViewYear(Number(base.slice(0, 4)));
     setViewMonth(Number(base.slice(5, 7)) - 1);
@@ -167,6 +186,7 @@ export function DatePicker({
         type="button"
         id={id}
         onClick={openCalendar}
+        aria-label={ariaLabel}
         aria-haspopup="dialog"
         aria-expanded={open}
         className={cn(
