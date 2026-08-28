@@ -1,5 +1,8 @@
 import { arPlural } from "@/lib/i18n";
 import type { Locale } from "@/lib/locale";
+import { hasMoney, moneyLines, type MoneyByCurrency } from "@/lib/money";
+import type { InvoiceCurrency } from "@/lib/types";
+import { formatDateIn, formatMoneyIn, isolate } from "@/lib/utils";
 import { renderEmail, type EmailBlock, type RenderedEmail } from "@/lib/email/layout";
 
 /**
@@ -249,6 +252,304 @@ export function progressUpdateEmail(input: ProgressUpdateInput): ClientEmail {
       blocks,
       cta: {
         label: ar ? "اطّلعوا على الخطة الكاملة" : "See the full plan",
+        href: url,
+      },
+      footer: FOOTER[locale],
+    }),
+  };
+}
+
+/* ── "A payment is due" ───────────────────────────────────────────────────── */
+
+/** One unpaid bill, as the statement lists it. */
+export type UnpaidInvoiceLine = {
+  number: string;
+  title: string | null;
+  amount: number;
+  currency: InvoiceCurrency;
+  dueOn: string | null;
+  /** Sent, dated, and that date has passed — derived by the caller, not stored. */
+  overdue: boolean;
+};
+
+export type FinanceReminderInput = {
+  locale: Locale;
+  projectName: string;
+  /** Invoiced, unpaid, not void — the number that answers "what do I owe?". */
+  outstanding: MoneyByCurrency;
+  /** The part of `outstanding` whose due date has already passed. */
+  overdue: MoneyByCurrency;
+  paid: MoneyByCurrency;
+  /** The unpaid bills themselves, soonest due first. Capped at five below. */
+  unpaid: UnpaidInvoiceLine[];
+  /**
+   * The client's live payment plan, scored by `planSummary`. Null when the
+   * project has no published plan — a client billed invoice by invoice.
+   */
+  plan: {
+    title: string;
+    currency: InvoiceCurrency;
+    pct: number;
+    paidCount: number;
+    count: number;
+    paid: number;
+    total: number;
+  } | null;
+  /** The soonest payment still to be made, across every published plan. */
+  next: {
+    amount: number;
+    currency: InvoiceCurrency;
+    dueOn: string;
+    label: string | null;
+    overdue: boolean;
+  } | null;
+  note: string | null;
+  url: string;
+};
+
+/**
+ * Money the way the portal's statement says it: one line per currency, never
+ * one converted figure.
+ *
+ * The same rule `invoiceTotals` is written to (lib/data/portal.ts) and for the
+ * same reason — Kagu's `fx_rates` are Kagu's own bookkeeping assumption, and a
+ * client billed in dinars who is mailed a lira figure has been handed a number
+ * they cannot check against their bank. `isolate` because these runs land in
+ * Arabic sentences, where the `+` between two of them is bidi-neutral and would
+ * otherwise jump to the wrong end of the line.
+ */
+function moneyText(locale: Locale, bucket: MoneyByCurrency): string {
+  return moneyLines(bucket)
+    .map((line) => isolate(formatMoneyIn(locale, line.amount, line.currency)))
+    .join(" + ");
+}
+
+/**
+ * The payment reminder. Sent by hand from the project's Client view page, and
+ * the third thing on the send box's dial.
+ *
+ * ── Why it chases INVOICES and merely mentions the schedule ────────────────
+ *
+ * `planSummary` is explicit that a payment whose date has passed is not the
+ * same event as a bill that has gone unpaid: the first is Kagu's own slippage —
+ * we agreed a date and have not raised the document — and the second is the
+ * only one a client can act on. The portal words the two differently on purpose
+ * and so does this, because an email that dunned somebody for an invoice nobody
+ * sent them is a worse mistake in a mailbox than on a page they chose to open.
+ *
+ * So the money that appears in bold is `outstanding`, which counts sent bills
+ * only; the schedule appears as a date to expect, never as a demand.
+ *
+ * ── Why "nothing is outstanding" is still a real email ─────────────────────
+ *
+ * Because a producer pressing Send on a settled account is telling the client
+ * something worth hearing — that we agree, and that the next thing is a date
+ * rather than a bill. An email that refused to render in that case would send
+ * them to the portal to find out nothing was wrong.
+ */
+export function financeReminderEmail(input: FinanceReminderInput): ClientEmail {
+  const { locale, projectName, outstanding, overdue, paid, unpaid, plan, next, note, url } =
+    input;
+  const ar = locale === "ar";
+
+  const anyOverdue = hasMoney(overdue);
+  const anyOutstanding = hasMoney(outstanding);
+  const overdueText = moneyText(locale, overdue);
+  const outstandingText = moneyText(locale, outstanding);
+
+  // Four subjects, because the four states are four different pieces of news
+  // and one subject line covering all of them would have to be vague enough to
+  // read as a circular. Past due first: it is the only one of the four that
+  // asks the reader to do something today.
+  const subject = anyOverdue
+    ? ar
+      ? `${projectName}: دفعة تجاوزت موعد استحقاقها`
+      : `${projectName}: a payment is past due`
+    : anyOutstanding
+      ? ar
+        ? `${projectName}: فاتورة بانتظار السداد`
+        : `${projectName}: an invoice is waiting to be paid`
+      : next
+        ? ar
+          ? `${projectName} — دفعتكم القادمة تقترب`
+          : `${projectName} — your next payment is coming up`
+        : ar
+          ? `${projectName} — ملخّص حسابكم`
+          : `${projectName} — where your account stands`;
+
+  const heading = anyOverdue
+    ? ar
+      ? `دفعة في ${projectName} تجاوزت موعد استحقاقها`
+      : `A payment on ${projectName} is past due`
+    : anyOutstanding
+      ? ar
+        ? `فاتورة في ${projectName} بانتظار السداد`
+        : `An invoice on ${projectName} is waiting to be paid`
+      : next
+        ? ar
+          ? `دفعتكم القادمة في ${projectName}`
+          : `Your next payment on ${projectName}`
+        : ar
+          ? `أين وصل حسابكم في ${projectName}`
+          : `Where your account on ${projectName} stands`;
+
+  const blocks: EmailBlock[] = [
+    {
+      kind: "paragraph",
+      text: ar
+        ? "هذا ملخّص حسابكم من جهتنا. كل فاتورة وكل دفعة مجدولة موجودة في بوابتكم بتواريخها كما اتُّفق عليها."
+        : "Here's the short version of where your account stands. Every invoice and every scheduled payment is in your portal, on the dates they were agreed.",
+    },
+  ];
+
+  // The plan's meter, and only the plan's. A "paid of billed" bar would have to
+  // add up two currencies to draw one number, which is the conversion this file
+  // refuses everywhere else.
+  if (plan && plan.total > 0) {
+    blocks.push({
+      kind: "meter",
+      // The plan's title is staff-typed and is usually English even on an
+      // Arabic plan ("Build fee"). Isolated, or the guillemets around it are
+      // bidi-neutral, take the paragraph's direction and swap ends — which
+      // reads as a typo rather than as a rendering artefact.
+      label: ar
+        ? `المدفوع من «${isolate(plan.title)}»`
+        : `Paid so far — ${plan.title}`,
+      pct: plan.pct,
+      caption: ar
+        ? `${arPlural(
+            plan.count,
+            `${plan.paidCount} من أصل دفعة واحدة`,
+            `${plan.paidCount} من أصل دفعتين`,
+            `${plan.paidCount} من أصل ${plan.count} دفعات`,
+            `${plan.paidCount} من أصل ${plan.count} دفعةً`
+          )} · ${isolate(formatMoneyIn(locale, plan.paid, plan.currency))} من ${isolate(formatMoneyIn(locale, plan.total, plan.currency))}`
+        : `${plan.paidCount} of ${plan.count} payments · ${formatMoneyIn(
+            locale,
+            plan.paid,
+            plan.currency
+          )} of ${formatMoneyIn(locale, plan.total, plan.currency)}`,
+    });
+  }
+
+  if (anyOutstanding) {
+    blocks.push({
+      kind: "paragraph",
+      text: ar
+        ? `المستحق حاليًا: ${outstandingText}.`
+        : `Outstanding right now: ${outstandingText}.`,
+    });
+    if (anyOverdue) {
+      blocks.push({
+        kind: "paragraph",
+        text: ar
+          ? `منها ${overdueText} تجاوزت تاريخ استحقاقها.`
+          : `Of that, ${overdueText} is past its due date.`,
+      });
+    }
+  } else {
+    // Said out loud rather than left as an absence. A client who opens a
+    // "payment" email and finds no figure in it assumes the figure is missing.
+    blocks.push({
+      kind: "paragraph",
+      text: hasMoney(paid)
+        ? ar
+          ? `لا شيء مستحق عليكم الآن — كل فاتورة أرسلناها تم سدادها، بمجموع ${moneyText(locale, paid)}. شكرًا لكم.`
+          : `Nothing is outstanding right now — every invoice we've sent has been paid, ${moneyText(locale, paid)} in total. Thank you.`
+        : ar
+          ? "لا شيء مستحق عليكم الآن — لم نُصدر أي فاتورة بعد."
+          : "Nothing is outstanding right now — we haven't invoiced anything yet.",
+    });
+  }
+
+  // Five, then a count, for the same reason the input pack's list stops at five:
+  // a wall of every bill ever sent reads as a demand letter rather than as a
+  // reminder, and the statement behind the button has all of them anyway.
+  const shown = unpaid.slice(0, 5);
+  const rest = unpaid.length - shown.length;
+  if (shown.length > 0) {
+    blocks.push({
+      kind: "paragraph",
+      text: ar ? "الفواتير التي لم تُسدَّد بعد:" : "Invoices still open:",
+    });
+    blocks.push({
+      kind: "list",
+      items: [
+        ...shown.map((invoice) => {
+          const amount = isolate(formatMoneyIn(locale, invoice.amount, invoice.currency));
+          const who = invoice.title ? ` — ${isolate(invoice.title)}` : "";
+          const due = invoice.dueOn
+            ? ar
+              ? ` · تستحق في ${isolate(formatDateIn(locale, invoice.dueOn))}`
+              : ` · due ${formatDateIn(locale, invoice.dueOn)}`
+            : "";
+          const late = invoice.overdue ? (ar ? " · متأخّرة" : " · past due") : "";
+          return `${isolate(`#${invoice.number}`)} · ${amount}${due}${late}${who}`;
+        }),
+        ...(rest > 0
+          ? [
+              ar
+                ? arPlural(
+                    rest,
+                    "وفاتورة واحدة أخرى",
+                    "وفاتورتان أخريان",
+                    `و${rest} فواتير أخرى`,
+                    `و${rest} فاتورةً أخرى`
+                  )
+                : `and ${rest} more`,
+            ]
+          : []),
+      ],
+    });
+  }
+
+  // The schedule, stated as a date and never as a demand — see the header.
+  if (next) {
+    const amount = isolate(formatMoneyIn(locale, next.amount, next.currency));
+    const when = isolate(formatDateIn(locale, next.dueOn));
+    // Isolated for the same reason as the plan title: an installment label is
+    // staff-typed, frequently English, and the em dash in front of it would
+    // otherwise jump to the far end of an Arabic line.
+    const what = next.label ? ` — ${isolate(next.label)}` : "";
+    blocks.push({
+      kind: "paragraph",
+      text: next.overdue
+        ? ar
+          ? `الدفعة التالية في جدولكم هي ${amount}، وكان موعدها ${when}${what}. إن لم تصلكم فاتورة بها بعد فلا شيء مطلوب منكم — سنرسلها.`
+          : `The next payment on your schedule is ${amount}, and its date was ${when}${what}. If you haven't had an invoice for it yet there's nothing for you to do — we'll send one.`
+        : ar
+          ? `الدفعة المجدولة القادمة: ${amount} بتاريخ ${when}${what}.`
+          : `Next scheduled payment: ${amount} on ${when}${what}.`,
+    });
+  }
+
+  blocks.push(...noteBlock(locale, note));
+
+  const preheader = anyOverdue
+    ? ar
+      ? `${overdueText} تجاوزت موعدها — يمكنكم مراجعة الكشف في بوابتكم.`
+      : `${overdueText} is past due — the full statement is in your portal.`
+    : anyOutstanding
+      ? ar
+        ? `${outstandingText} مستحقة — الكشف الكامل في بوابتكم.`
+        : `${outstandingText} outstanding — the full statement is in your portal.`
+      : next
+        ? ar
+          ? `الدفعة القادمة ${isolate(formatMoneyIn(locale, next.amount, next.currency))} بتاريخ ${isolate(formatDateIn(locale, next.dueOn))}.`
+          : `Next payment ${formatMoneyIn(locale, next.amount, next.currency)} on ${formatDateIn(locale, next.dueOn)}.`
+        : ar
+          ? "كشف حسابكم الكامل في بوابتكم."
+          : "Your full statement is in your portal.";
+
+  return {
+    subject,
+    ...renderEmail({
+      locale,
+      preheader,
+      heading,
+      blocks,
+      cta: {
+        label: ar ? "اطّلعوا على كشف حسابكم" : "See your statement",
         href: url,
       },
       footer: FOOTER[locale],
