@@ -273,3 +273,79 @@ export function percentChange(current: number, prior: number): number | null {
 export function formatRangeLabel(range: DateRange): string {
   return `${formatDate(range.from)} – ${formatDate(range.to)}`;
 }
+
+// ---------------------------------------------------------------------------
+// All time — "what has this company netted, ever"
+// ---------------------------------------------------------------------------
+
+/**
+ * Rows per page when reading the WHOLE settled ledger.
+ *
+ * Matches PostgREST's `max_rows` (supabase/config.toml). It has to: a page
+ * asked for in 2000s would come back silently clipped to 1000, the caller
+ * would see a short page, call it the end of the ledger, and the all-time net
+ * would quietly under-count by everything older. Asking for exactly the server
+ * cap makes "short page" mean "no more rows" again.
+ */
+export const LEDGER_PAGE = 1000;
+
+/**
+ * How many pages the all-time read will walk before giving up (20k settled
+ * rows). A ceiling, not a target — it exists so a runaway ledger can never turn
+ * one page render into an unbounded chain of round-trips. Hitting it is
+ * reported, never hidden: see `complete` on LifetimeTotals.
+ */
+export const LEDGER_MAX_PAGES = 20;
+
+/** The only three columns the all-time sum needs — the rest is payload weight. */
+export type LedgerEntry = Pick<Transaction, "type" | "amount" | "currency">;
+
+export type LifetimeTotals = RangeTotals & {
+  /**
+   * False when the read stopped at LEDGER_MAX_PAGES with rows still behind it.
+   * The tile then says so rather than printing a total it can't stand behind.
+   */
+  complete: boolean;
+};
+
+/**
+ * Income, expense and net across the entire settled ledger, in TL.
+ *
+ * Deliberately takes EVERY settled row rather than the page the table renders:
+ * the transactions query is capped at TRANSACTION_PAGE, so summing what the
+ * page already has would silently mean "net over the last 500 transactions"
+ * under a label that says all time. Rows in a currency with no rate are
+ * excluded and reported, exactly as everywhere else.
+ */
+export function sumLifetime(
+  entries: LedgerEntry[],
+  rates: FxRates,
+  complete = true
+): { totals: LifetimeTotals; skippedCurrencies: Set<string> } {
+  const skipped = new Set<string>();
+  let income = 0;
+  let expense = 0;
+  let count = 0;
+
+  for (const entry of entries) {
+    const converted = toTRY(Number(entry.amount), entry.currency, rates);
+    if (converted === null) {
+      skipped.add(entry.currency);
+      continue;
+    }
+    count++;
+    if (entry.type === "income") income += converted;
+    else expense += converted;
+  }
+
+  return {
+    totals: {
+      income: Math.round(income),
+      expense: Math.round(expense),
+      net: Math.round(income - expense),
+      count,
+      complete,
+    },
+    skippedCurrencies: skipped,
+  };
+}

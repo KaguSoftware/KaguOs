@@ -20,9 +20,11 @@ import {
   nextBillingOn,
   monthKey,
   monthlyAmount,
+  sumLifetime,
   toTRY,
   TRANSACTION_PAGE,
   type FxRates,
+  type LedgerEntry,
 } from "@/lib/finance";
 import { cn, formatDate, todayInIstanbul } from "@/lib/utils";
 import type {
@@ -45,14 +47,16 @@ function StatTile({
   value,
   sub,
   tone,
+  className,
 }: {
   label: string;
   value: string;
   sub?: string;
   tone?: "green" | "red";
+  className?: string;
 }) {
   return (
-    <div className="rounded-lg border border-line bg-surface p-4">
+    <div className={cn("rounded-lg border border-line bg-surface p-4", className)}>
       <p className="text-[calc(13px*var(--text-scale,1))] text-muted">{label}</p>
       <p
         className={cn(
@@ -72,10 +76,15 @@ export function FinancePanel({
   transactions,
   recurring,
   fxRates,
+  ledger,
+  ledgerComplete,
 }: {
   transactions: Transaction[];
   recurring: RecurringItem[];
   fxRates: FxRate[];
+  /** Every settled transaction, ever — the all-time tile's basis. */
+  ledger: LedgerEntry[];
+  ledgerComplete: boolean;
 }) {
   const rates: FxRates = {};
   let ratesUpdatedAt: string | null = null;
@@ -131,6 +140,16 @@ export function FinancePanel({
   const { series, skippedCurrencies } = buildCashflowSeries(settled, rates);
   for (const c of skippedCurrencies) skipped.add(c);
 
+  // All time. Off `ledger`, never off `transactions` — the latter is one capped
+  // page, and "net over the last 500 rows" under an all-time label is a lie the
+  // reader has no way to spot.
+  const { totals: lifetime, skippedCurrencies: skippedEver } = sumLifetime(
+    ledger,
+    rates,
+    ledgerComplete
+  );
+  for (const c of skippedEver) skipped.add(c);
+
   const breakdown: BreakdownItem[] = recurring
     .filter(isActiveRecurring)
     .map((item) => ({
@@ -154,7 +173,18 @@ export function FinancePanel({
       )}
 
       <div className="grid gap-6">
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
+          <StatTile
+            label="Total net, all time"
+            value={formatTRY(lifetime.net)}
+            sub={
+              lifetime.count === 0
+                ? "No settled transactions yet"
+                : `${formatTRY(lifetime.income)} in · ${formatTRY(lifetime.expense)} out${lifetime.complete ? ` · ${lifetime.count} settled` : " · partial, ledger past the read cap"}`
+            }
+            tone={lifetime.net >= 0 ? "green" : "red"}
+            className="col-span-2 lg:col-span-1"
+          />
           <StatTile label="This month in" value={formatTRY(monthIncome)} tone="green" />
           <StatTile label="This month out" value={formatTRY(monthExpense)} tone="red" />
           <StatTile
