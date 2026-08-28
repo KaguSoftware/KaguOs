@@ -150,7 +150,7 @@ export function FinancePanel({
   );
   for (const c of skippedEver) skipped.add(c);
 
-  const breakdown: BreakdownItem[] = recurring
+  const chartable: BreakdownItem[] = recurring
     .filter(isActiveRecurring)
     .map((item) => ({
       name: item.name,
@@ -158,8 +158,12 @@ export function FinancePanel({
       type: item.type,
     }))
     .filter((item) => item.value > 0)
-    .sort((a, b) => b.value - a.value)
-    .slice(0, 12);
+    .sort((a, b) => b.value - a.value);
+  // The chart caps its rows so the bars stay readable; the count of what fell
+  // off rides along so its total can say it is a top-N sum and not the truth
+  // about every subscription.
+  const breakdown = chartable.slice(0, 12);
+  const breakdownHidden = chartable.length - breakdown.length;
 
   const hasChartData = series.some((m) => m.income > 0 || m.expense > 0);
 
@@ -236,7 +240,7 @@ export function FinancePanel({
           <Panel>
             <PanelHeader title="Recurring, monthly TL" />
             {breakdown.length > 0 ? (
-              <RecurringBreakdown items={breakdown} />
+              <RecurringBreakdown items={breakdown} hiddenCount={breakdownHidden} />
             ) : (
               <p className="p-4 text-[calc(13px*var(--text-scale,1))] text-faint">
                 Active subscriptions and retainers chart here.
@@ -249,22 +253,41 @@ export function FinancePanel({
           <PanelHeader
             title={`Recurring items (${recurring.length})`}
             action={
-              <ExportButton
-                filename="recurring-items.csv"
-                columns={["Name", "Type", "Amount", "Currency", "Cadence", "Bills on", "Next bill", "Counterparty", "Started", "Canceled"]}
-                rows={recurring.map((r) => [
-                  r.name,
-                  r.type,
-                  Number(r.amount),
-                  r.currency,
-                  r.cadence,
-                  billingDay(r),
-                  nextBillingOn(r) ?? "",
-                  r.counterparty ?? "",
-                  r.started_on,
-                  r.canceled_on ?? "",
-                ])}
-              />
+              <div className="flex items-center gap-3">
+                {/* Active items only, in monthly-equivalent TL — the same basis
+                    as the tile and the chart, so the three never disagree. */}
+                <span className="font-mono text-[calc(12px*var(--text-scale,1))]">
+                  {recurringIn > 0 && (
+                    <span className="text-primary-dim">{formatTRY(recurringIn)} in</span>
+                  )}
+                  {recurringIn > 0 && recurringOut > 0 && (
+                    <span className="text-faint"> · </span>
+                  )}
+                  {recurringOut > 0 && (
+                    <span className="text-danger">{formatTRY(recurringOut)} out</span>
+                  )}
+                  {recurringIn === 0 && recurringOut === 0 && (
+                    <span className="text-faint">{formatTRY(0)}</span>
+                  )}
+                  <span className="text-faint"> / month</span>
+                </span>
+                <ExportButton
+                  filename="recurring-items.csv"
+                  columns={["Name", "Type", "Amount", "Currency", "Cadence", "Bills on", "Next bill", "Counterparty", "Started", "Canceled"]}
+                  rows={recurring.map((r) => [
+                    r.name,
+                    r.type,
+                    Number(r.amount),
+                    r.currency,
+                    r.cadence,
+                    billingDay(r),
+                    nextBillingOn(r) ?? "",
+                    r.counterparty ?? "",
+                    r.started_on,
+                    r.canceled_on ?? "",
+                  ])}
+                />
+              </div>
             }
           />
           {recurring.length === 0 ? (

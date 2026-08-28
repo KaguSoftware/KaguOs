@@ -115,34 +115,68 @@ export function CashflowChart({ data }: { data: MonthPoint[] }) {
 
 export type BreakdownItem = { name: string; value: number; type: "income" | "expense" };
 
-export function RecurringBreakdown({ items }: { items: BreakdownItem[] }) {
+export function RecurringBreakdown({
+  items,
+  hiddenCount = 0,
+}: {
+  items: BreakdownItem[];
+  /** Active items the chart dropped past its cap — money the total below omits. */
+  hiddenCount?: number;
+}) {
   const height = Math.max(120, items.length * 34 + 24);
+  // Summed off the charted rows, so the footer always adds up to the bars the
+  // reader can see. In and out stay apart: netting a retainer against a
+  // subscription would report a monthly bill nobody pays.
+  let income = 0;
+  let expense = 0;
+  for (const item of items) {
+    if (item.type === "income") income += item.value;
+    else expense += item.value;
+  }
   return (
-    <div className="px-2 pb-2" style={{ height }}>
-      <ResponsiveContainer width="100%" height="100%">
-        <BarChart data={items} layout="vertical" barCategoryGap="30%">
-          <XAxis type="number" hide />
-          <YAxis
-            type="category"
-            dataKey="name"
-            width={150}
-            tickLine={false}
-            axisLine={false}
-            tick={{ fill: "var(--muted)", fontSize: TICK_MD }}
-          />
-          <Bar dataKey="value" radius={[0, 4, 4, 0]} maxBarSize={14} isAnimationActive={false}>
-            {items.map((item) => (
-              <Cell key={item.name} fill={item.type === "income" ? INCOME : EXPENSE} />
-            ))}
-            <LabelList
-              dataKey="value"
-              position="right"
-              formatter={(value) => formatTRY(Number(value))}
-              style={{ fill: "var(--muted)", fontSize: TICK_SM, fontFamily: "var(--font-mono)" }}
+    <>
+      <div className="px-2 pb-2" style={{ height }}>
+        <ResponsiveContainer width="100%" height="100%">
+          <BarChart data={items} layout="vertical" barCategoryGap="30%">
+            <XAxis type="number" hide />
+            <YAxis
+              type="category"
+              dataKey="name"
+              width={150}
+              tickLine={false}
+              axisLine={false}
+              tick={{ fill: "var(--muted)", fontSize: TICK_MD }}
             />
-          </Bar>
-        </BarChart>
-      </ResponsiveContainer>
-    </div>
+            <Bar dataKey="value" radius={[0, 4, 4, 0]} maxBarSize={14} isAnimationActive={false}>
+              {items.map((item) => (
+                <Cell key={item.name} fill={item.type === "income" ? INCOME : EXPENSE} />
+              ))}
+              <LabelList
+                dataKey="value"
+                position="right"
+                formatter={(value) => formatTRY(Number(value))}
+                style={{ fill: "var(--muted)", fontSize: TICK_SM, fontFamily: "var(--font-mono)" }}
+              />
+            </Bar>
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
+      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 border-t border-line px-4 py-2.5 text-[calc(13px*var(--text-scale,1))]">
+        <span className="text-muted">
+          Total per month
+          {hiddenCount > 0 && (
+            <span className="text-faint">
+              {" "}
+              · top {items.length}, {hiddenCount} more not charted
+            </span>
+          )}
+        </span>
+        <span className="flex items-center gap-3 font-mono">
+          {income > 0 && <span className="text-primary-dim">{formatTRY(income)} in</span>}
+          {expense > 0 && <span className="text-danger">{formatTRY(expense)} out</span>}
+          {income === 0 && expense === 0 && <span className="text-faint">{formatTRY(0)}</span>}
+        </span>
+      </div>
+    </>
   );
 }
