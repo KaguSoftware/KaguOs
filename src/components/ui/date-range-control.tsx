@@ -101,10 +101,18 @@ export function DateRangeControl({
     commit(rangeForPreset(next, today) ?? range, next);
   }
 
-  // An empty string is the picker's "clear" — there is no such thing as a
-  // half-open range here, so keep the end that was already set.
+  // An empty string is the picker's "clear". There is no such thing as a
+  // half-open range here — totals need two ends — so clearing either field
+  // drops the window that was picked and falls back to the default preset,
+  // rather than leaving a date on screen that the X visibly failed to remove.
   function moveEnd(end: "from" | "to", iso: string) {
-    if (!iso) return;
+    if (!iso) {
+      commit(
+        rangeForPreset(defaultPreset, today) ?? { from: monthStart(today), to: today },
+        defaultPreset
+      );
+      return;
+    }
     commit({ ...range, [end]: iso }, "custom");
   }
 

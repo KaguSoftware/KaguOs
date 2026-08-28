@@ -11,6 +11,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button, ConfirmButton } from "@/components/ui/button";
 import { useAction } from "@/lib/use-action";
+import { useConfirm } from "@/lib/use-confirm";
 import {
   billingScheduleLabel,
   monthlyAmount,
@@ -61,7 +62,7 @@ export function TransactionRow({ transaction }: { transaction: Transaction }) {
       </td>
       <td className="px-4 py-2.5 text-right">
         <span className="inline-flex items-center gap-1">
-          {/* The one-click settle, mirroring RecurringRow's Cancel/Reactivate.
+          {/* The one-click settle, mirroring the recurring row's status pill.
               Shown as words, not an icon — "Mark paid" is the whole point of
               the feature and shouldn't hide behind hover-discovery. */}
           <Button
@@ -113,6 +114,9 @@ export function RecurringRow({
   const { pending, run } = useAction();
   const income = item.type === "income";
   const active = item.canceled_on === null;
+  const { armed, trigger: confirmCancel } = useConfirm(() =>
+    run(() => setRecurringCanceled(item.id, true), { success: "Marked canceled." })
+  );
   const monthlyTRY = toTRY(monthlyAmount(item), item.currency, rates);
   const nextBill = nextBillingOn(item);
 
@@ -153,7 +157,25 @@ export function RecurringRow({
             "—"
           )}
         </span>
-        <Badge tone={active ? "green" : "faint"}>{active ? "active" : "canceled"}</Badge>
+        {/* The status pill IS the switch. Cancelling stops live billing, so
+            the green pill arms first and asks — a stray click on a row full of
+            small controls shouldn't silently kill a subscription. Reactivating
+            is harmless and stays one click. */}
+        <Badge
+          tone={active ? (armed ? "amber" : "green") : "faint"}
+          disabled={pending}
+          title={active ? "Deactivate this recurring item" : "Reactivate this recurring item"}
+          onClick={
+            active
+              ? confirmCancel
+              : () =>
+                  run(() => setRecurringCanceled(item.id, false), {
+                    success: "Reactivated.",
+                  })
+          }
+        >
+          {active ? (armed ? "deactivate?" : "active") : "canceled"}
+        </Badge>
         <Link
           href={`/management/finance/recurring/${item.id}`}
           title="Edit recurring item"
@@ -162,18 +184,6 @@ export function RecurringRow({
           <Pencil className="size-3.5" aria-hidden />
           <span className="sr-only">Edit recurring item</span>
         </Link>
-        <Button
-          variant="ghost"
-          size="sm"
-          disabled={pending}
-          onClick={() =>
-            run(() => setRecurringCanceled(item.id, active), {
-              success: active ? "Marked canceled." : "Reactivated.",
-            })
-          }
-        >
-          {active ? "Cancel" : "Reactivate"}
-        </Button>
         <ConfirmButton
           size="sm"
           disabled={pending}

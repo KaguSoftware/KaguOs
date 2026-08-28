@@ -9,7 +9,7 @@ import {
   RecurringBreakdown,
   type BreakdownItem,
 } from "@/components/management/finance-charts";
-import { SpendingComparison } from "@/components/management/finance-comparison";
+import { RangeSummary } from "@/components/management/finance-range";
 import { RecurringRow, TransactionRow } from "@/components/management/finance-rows";
 import { ExportButton } from "@/components/management/export-button";
 import {
@@ -18,7 +18,6 @@ import {
   billingDay,
   isActiveRecurring,
   nextBillingOn,
-  monthKey,
   monthlyAmount,
   sumLifetime,
   toTRY,
@@ -26,7 +25,7 @@ import {
   type FxRates,
   type LedgerEntry,
 } from "@/lib/finance";
-import { cn, formatDate, todayInIstanbul } from "@/lib/utils";
+import { formatDate, todayInIstanbul } from "@/lib/utils";
 import type {
   Contract,
   ContractStatus,
@@ -41,36 +40,6 @@ const CONTRACT_TONE: Record<ContractStatus, BadgeTone> = {
   expired: "amber",
   terminated: "danger",
 };
-
-function StatTile({
-  label,
-  value,
-  sub,
-  tone,
-  className,
-}: {
-  label: string;
-  value: string;
-  sub?: string;
-  tone?: "green" | "red";
-  className?: string;
-}) {
-  return (
-    <div className={cn("rounded-lg border border-line bg-surface p-4", className)}>
-      <p className="text-[calc(13px*var(--text-scale,1))] text-muted">{label}</p>
-      <p
-        className={cn(
-          "mt-1 font-mono text-xl font-semibold tracking-tight",
-          tone === "green" && "text-primary-dim",
-          tone === "red" && "text-danger"
-        )}
-      >
-        {value}
-      </p>
-      {sub && <p className="mt-0.5 text-xs text-faint">{sub}</p>}
-    </div>
-  );
-}
 
 export function FinancePanel({
   transactions,
@@ -98,22 +67,8 @@ export function FinancePanel({
   // (amber badge) until someone marks it paid.
   const settled = transactions.filter((t) => t.status === "paid");
 
-  // This month, in TL
   const today = todayInIstanbul();
-  const thisMonth = monthKey(today);
-  let monthIncome = 0;
-  let monthExpense = 0;
   const skipped = new Set<string>();
-  for (const t of settled) {
-    if (monthKey(t.occurred_on) !== thisMonth) continue;
-    const value = toTRY(Number(t.amount), t.currency, rates);
-    if (value === null) {
-      skipped.add(t.currency);
-      continue;
-    }
-    if (t.type === "income") monthIncome += value;
-    else monthExpense += value;
-  }
 
   // Recurring, monthly-equivalent TL
   let recurringIn = 0;
@@ -129,9 +84,9 @@ export function FinancePanel({
   }
 
   // The transactions query is capped, so the oldest row that came back is the
-  // real floor of what any range can be measured against. Null when the ledger
-  // is small enough to have arrived whole — then nothing is missing and the
-  // year-on-year panel has no caveat to raise.
+  // real floor of any range's totals. Null when the ledger is small enough to
+  // have arrived whole — then nothing is missing and the range block has no
+  // caveat to raise.
   const oldestLoaded =
     transactions.length >= TRANSACTION_PAGE
       ? transactions[transactions.length - 1].occurred_on
@@ -177,49 +132,14 @@ export function FinancePanel({
       )}
 
       <div className="grid gap-6">
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
-          <StatTile
-            label="Total net, all time"
-            value={formatTRY(lifetime.net)}
-            sub={
-              lifetime.count === 0
-                ? "No settled transactions yet"
-                : `${formatTRY(lifetime.income)} in · ${formatTRY(lifetime.expense)} out${lifetime.complete ? ` · ${lifetime.count} settled` : " · partial, ledger past the read cap"}`
-            }
-            tone={lifetime.net >= 0 ? "green" : "red"}
-            className="col-span-2 lg:col-span-1"
-          />
-          <StatTile label="This month in" value={formatTRY(monthIncome)} tone="green" />
-          <StatTile label="This month out" value={formatTRY(monthExpense)} tone="red" />
-          <StatTile
-            label="This month net"
-            value={formatTRY(monthIncome - monthExpense)}
-            tone={monthIncome - monthExpense >= 0 ? "green" : "red"}
-          />
-          <StatTile
-            label="Recurring net / month"
-            value={formatTRY(recurringIn - recurringOut)}
-            sub={`${formatTRY(recurringIn)} in · ${formatTRY(recurringOut)} out`}
-            tone={recurringIn - recurringOut >= 0 ? "green" : "red"}
-          />
-        </div>
-
-        <Panel>
-          <PanelHeader
-            title="Compare a range"
-            action={
-              <span className="text-[calc(12px*var(--text-scale,1))] text-faint">
-                TL equivalent, settled only
-              </span>
-            }
-          />
-          <SpendingComparison
-            transactions={settled}
-            rates={rates}
-            today={today}
-            oldestLoaded={oldestLoaded}
-          />
-        </Panel>
+        <RangeSummary
+          transactions={settled}
+          recurring={recurring}
+          lifetime={lifetime}
+          rates={rates}
+          today={today}
+          oldestLoaded={oldestLoaded}
+        />
 
         <Panel>
           <PanelHeader title="Cash flow" />

@@ -11,23 +11,50 @@ const tones: Record<BadgeTone, string> = {
   faint: "border-line text-faint",
 };
 
+const base =
+  "inline-flex items-center gap-1 whitespace-nowrap rounded-full border px-2 py-px text-xs font-medium";
+
+/**
+ * A status pill. Given an `onClick` it becomes the control for the status it
+ * shows — the state and the switch are the same thing, so there's no separate
+ * button to hunt for. Without one it stays an inert `<span>`.
+ */
 export function Badge({
   tone = "neutral",
   className,
   children,
+  onClick,
+  title,
+  disabled,
 }: {
   tone?: BadgeTone;
   className?: string;
   children: React.ReactNode;
+  onClick?: () => void;
+  title?: string;
+  disabled?: boolean;
 }) {
+  if (onClick) {
+    return (
+      <button
+        type="button"
+        onClick={onClick}
+        title={title}
+        disabled={disabled}
+        className={cn(
+          base,
+          tones[tone],
+          "transition-colors duration-150 hover:brightness-125 disabled:pointer-events-none disabled:opacity-50",
+          className
+        )}
+      >
+        {children}
+      </button>
+    );
+  }
+
   return (
-    <span
-      className={cn(
-        "inline-flex items-center gap-1 whitespace-nowrap rounded-full border px-2 py-px text-xs font-medium",
-        tones[tone],
-        className
-      )}
-    >
+    <span className={cn(base, tones[tone], className)} title={title}>
       {children}
     </span>
   );

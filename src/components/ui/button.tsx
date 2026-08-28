@@ -1,8 +1,9 @@
 "use client";
 
-import { forwardRef, useEffect, useRef, useState } from "react";
+import { forwardRef } from "react";
 import { useFormStatus } from "react-dom";
 import { Loader2 } from "lucide-react";
+import { useConfirm } from "@/lib/use-confirm";
 import { buttonClasses, type ButtonSize, type ButtonVariant } from "@/lib/utils";
 
 export type ButtonProps = React.ButtonHTMLAttributes<HTMLButtonElement> & {
@@ -50,30 +51,10 @@ export function ConfirmButton({
   onConfirm,
   ...props
 }: ButtonProps & { confirmLabel?: string; onConfirm: () => void }) {
-  const [armed, setArmed] = useState(false);
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  useEffect(() => {
-    return () => {
-      if (timer.current) clearTimeout(timer.current);
-    };
-  }, []);
+  const { armed, trigger } = useConfirm(onConfirm);
 
   return (
-    <Button
-      variant="danger"
-      onClick={() => {
-        if (!armed) {
-          setArmed(true);
-          timer.current = setTimeout(() => setArmed(false), 3000);
-          return;
-        }
-        if (timer.current) clearTimeout(timer.current);
-        setArmed(false);
-        onConfirm();
-      }}
-      {...props}
-    >
+    <Button variant="danger" onClick={trigger} {...props}>
       {armed ? confirmLabel : children}
     </Button>
   );

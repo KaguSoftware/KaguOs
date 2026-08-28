@@ -2,7 +2,7 @@
 // entered rates (stored until changed). Anything without a rate is excluded
 // from TRY totals and surfaced as a warning, never silently dropped.
 
-import { addMonths, formatDate, todayInIstanbul, type DateRange } from "@/lib/utils";
+import { formatDate, todayInIstanbul, type DateRange } from "@/lib/utils";
 import type { Currency, RecurringItem, Transaction } from "@/lib/types";
 
 /**
@@ -194,23 +194,8 @@ export function formatTRY(amount: number): string {
 }
 
 // ---------------------------------------------------------------------------
-// Custom ranges — "this month vs the same time last year"
+// Custom ranges — totals for a window of the reader's choosing
 // ---------------------------------------------------------------------------
-
-/**
- * The same window one calendar year earlier.
- *
- * `addMonths(-12)` rather than "year - 1" so 29 Feb has somewhere to land: it
- * clamps to 28 Feb instead of silently rolling into 1 March and counting a day
- * that belongs to the next month.
- *
- * The window keeps its SHAPE, which is the whole point of the comparison — a
- * month-to-date range (1–26 Aug) maps to 1–26 Aug last year, not to the whole
- * of August, so a partial month is never measured against a full one.
- */
-export function sameRangeLastYear(range: DateRange): DateRange {
-  return { from: addMonths(range.from, -12), to: addMonths(range.to, -12) };
-}
 
 export type RangeTotals = {
   income: number;
@@ -255,18 +240,6 @@ export function sumRange(
     },
     skippedCurrencies: skipped,
   };
-}
-
-/**
- * Percent change from `prior` to `current`, or null when there is no baseline.
- *
- * Null, not 0 and not Infinity: spending 40k against a last-year zero is not
- * "up 0%" and not "up ∞%" — there is nothing to compare to, and the UI has to
- * say that rather than print a number nobody can act on.
- */
-export function percentChange(current: number, prior: number): number | null {
-  if (prior === 0) return null;
-  return ((current - prior) / prior) * 100;
 }
 
 /** "1 – 26 Aug 2026" — one range, read as a phrase. */
@@ -345,6 +318,96 @@ export function sumLifetime(
       net: Math.round(income - expense),
       count,
       complete,
+    },
+    skippedCurrencies: skipped,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Recurring, inside a window — "what did the subscriptions actually bill?"
+// ---------------------------------------------------------------------------
+
+export type RecurringRangeTotals = RangeTotals & {
+  /** How many distinct items billed at least once in the window. */
+  items: number;
+};
+
+/**
+ * What the recurring items billed inside one inclusive window, in TL.
+ *
+ * Occurrences, not monthly-equivalents: over "1 Jan – 15 Aug" a yearly domain
+ * renewal charges once and a monthly retainer charges eight times, and dividing
+ * the yearly one by twelve would answer a question nobody asked. Each occurrence
+ * is recomputed from the billing DAY rather than stepped from the previous one,
+ * for the clamping reason spelled out on `nextBillingOn`.
+ *
+ * An item is silent before it starts and from its cancellation date onward — the
+ * day it was canceled is the day it stopped billing, not one more charge.
+ */
+export function sumRecurringRange(
+  items: RecurringItem[],
+  rates: FxRates,
+  range: DateRange
+): { totals: RecurringRangeTotals; skippedCurrencies: Set<string> } {
+  const skipped = new Set<string>();
+  let income = 0;
+  let expense = 0;
+  let count = 0;
+  let billedItems = 0;
+
+  for (const item of items) {
+    const converted = toTRY(Number(item.amount), item.currency, rates);
+    const day = billingDay(item);
+    const dates: string[] = [];
+
+    if (item.cadence === "yearly") {
+      const month = Number(item.started_on.slice(5, 7));
+      const first = Number(range.from.slice(0, 4));
+      const last = Number(range.to.slice(0, 4));
+      for (let year = first; year <= last; year++) dates.push(onDayOf(year, month, day));
+    } else {
+      // Walk months, not days: at most ~12 steps for a year-long window.
+      let year = Number(range.from.slice(0, 4));
+      let month = Number(range.from.slice(5, 7));
+      const end = range.to.slice(0, 7);
+      while (`${year}-${String(month).padStart(2, "0")}` <= end) {
+        dates.push(onDayOf(year, month, day));
+        if (month === 12) {
+          year++;
+          month = 1;
+        } else {
+          month++;
+        }
+      }
+    }
+
+    let hits = 0;
+    for (const date of dates) {
+      // Plain string compare — see the DateRange doc comment.
+      if (date < range.from || date > range.to) continue;
+      if (date < item.started_on) continue;
+      if (item.canceled_on !== null && date >= item.canceled_on) continue;
+      hits++;
+    }
+    if (hits === 0) continue;
+
+    if (converted === null) {
+      skipped.add(item.currency);
+      continue;
+    }
+    billedItems++;
+    count += hits;
+    if (item.type === "income") income += converted * hits;
+    else expense += converted * hits;
+  }
+
+  return {
+    totals: {
+      income: Math.round(income),
+      expense: Math.round(expense),
+      net: Math.round(income - expense),
+      count,
+      items: billedItems,
     },
     skippedCurrencies: skipped,
   };
