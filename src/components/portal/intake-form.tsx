@@ -350,7 +350,6 @@ export function IntakeForm({
   locale,
   intro,
   dateLabels,
-  checkNotes,
   toastGeneric,
 }: {
   projectId: string;
@@ -363,14 +362,20 @@ export function IntakeForm({
   locale: Locale;
   intro: string;
   /**
-   * Three bundles of already-resolved strings, built by the page that reads the
-   * locale cookie. This is a `"use client"` component and cannot call `dict()`
-   * itself, and the three places below sit BELOW this file — inside the date
-   * picker, inside `buildChecks`, inside `useAction`'s catch — so each needs
-   * its words handed down rather than looked up. Same shape as `intro`.
+   * Two bundles of already-resolved STRINGS, built by the page that reads the
+   * locale cookie, because the places that need them sit BELOW this file —
+   * inside the date picker and inside `useAction`'s catch. Same shape as
+   * `intro`.
+   *
+   * ⚠️ Strings only. Everything in this prop list crosses the server→client
+   * boundary and is serialised, so a prop holding a FUNCTION throws
+   * "Functions cannot be passed directly to Client Components" and takes the
+   * whole page down — which is exactly what a `checkNotes` prop carrying
+   * `t.lineCount` and its two siblings did. `buildChecks`'s three counted
+   * sentences are built HERE now, from the dictionary this component already
+   * imports; see `checks` below.
    */
   dateLabels: DatePickerLabels;
-  checkNotes: CheckNotes;
   /** For `useAction`'s catch-all, which is the one error path here that has no server message to show. */
   toastGeneric: string;
 }) {
@@ -385,6 +390,20 @@ export function IntakeForm({
   /** `pack.sections.length` is the review step — one past the last section. */
   const [step, setStep] = useState(0);
   const topRef = useRef<HTMLDivElement>(null);
+
+  // The three counted sentences ("3 lines", "2 still to answer") are built
+  // here rather than handed down: they are FUNCTIONS of a row count, and a
+  // function cannot cross the server→client boundary. `dict()` is already
+  // imported above and `t` is a stable module-level object per locale, so this
+  // memo re-runs only when the answers actually change.
+  const checkNotes = useMemo<CheckNotes>(
+    () => ({
+      lineCount: t.lineCount,
+      linesIncomplete: t.linesIncomplete,
+      stillToAnswer: t.stillToAnswer,
+    }),
+    [t]
+  );
 
   const checks = useMemo(
     () => buildChecks(pack, answers, rows, checkNotes),

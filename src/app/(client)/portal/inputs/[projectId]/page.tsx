@@ -75,11 +75,17 @@ export default async function PortalInputsPage({
         initialSubmittedAt={pack.header?.submitted_at ?? null}
         locale={locale}
         intro={t.packBlurb}
-        // Three bundles of already-resolved words, built here because this is
-        // where the cookie is read. The date picker, buildChecks and
-        // useAction's catch all sit below the form and take plain strings, so
-        // the words have to be handed down rather than looked up — same reason
-        // `intro` above is a string and not a dictionary key.
+        // Already-resolved words, built here because this is where the cookie
+        // is read. The date picker and useAction's catch sit below the form and
+        // take plain strings, so the words have to be handed down rather than
+        // looked up — same reason `intro` above is a string and not a
+        // dictionary key.
+        //
+        // STRINGS only. buildChecks's three counted sentences used to be handed
+        // down beside these as a `checkNotes` prop, and they are functions of a
+        // row count — which React cannot serialise across this boundary, so
+        // every render of this page threw and the client got the error card.
+        // The form builds them itself from the same dictionary now.
         dateLabels={{
           placeholder: t.datePlaceholder,
           clearDate: t.dateClearAria,
@@ -88,11 +94,6 @@ export default async function PortalInputsPage({
           nextMonth: t.dateNextMonth,
           today: t.dateToday,
           clear: t.dateClear,
-        }}
-        checkNotes={{
-          lineCount: t.lineCount,
-          linesIncomplete: t.linesIncomplete,
-          stillToAnswer: t.stillToAnswer,
         }}
         toastGeneric={t.toastGeneric}
       />
