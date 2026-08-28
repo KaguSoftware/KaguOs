@@ -105,6 +105,37 @@ export async function updateProject(
   return { ok: true, message: "Saved." };
 }
 
+/**
+ * Flip one project's status, without touching any other field.
+ *
+ * Separate from `updateProject` because the work table edits status in place:
+ * the row has no form behind it, so routing this through `projectFields()`
+ * would mean synthesising a FormData of every column just to change one — and
+ * any column the table doesn't know about would be written back as its
+ * fallback ("Untitled project", null client) on every click.
+ */
+export async function setProjectStatus(
+  projectId: string,
+  status: ProjectStatus
+): Promise<ActionResult> {
+  const stop = await blockIfReadOnly("work");
+  if (stop) return stop;
+  const ctx = await requireSection("work");
+  if (!PROJECT_STATUSES.includes(status)) {
+    return { ok: false, message: "Unknown status." };
+  }
+
+  const { error } = await ctx.supabase
+    .from("projects")
+    .update({ status })
+    .eq("id", projectId);
+  if (error) return { ok: false, message: error.message };
+
+  revalidatePath("/work");
+  revalidatePath(`/work/projects/${projectId}`);
+  return { ok: true, message: `Status set to ${status}.` };
+}
+
 export async function deleteProject(projectId: string): Promise<ActionResult> {
   const stop = await blockIfReadOnly("work");
   if (stop) return stop;

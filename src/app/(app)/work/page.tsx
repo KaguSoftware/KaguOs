@@ -68,7 +68,11 @@ export default async function WorkPage() {
               </LinkButton>
             ),
             content: (
-              <ProjectsPanel projects={projectRows} currentUserId={ctx.userId} />
+              <ProjectsPanel
+                projects={projectRows}
+                currentUserId={ctx.userId}
+                showClientView={!ctx.showcase}
+              />
             ),
           },
           {

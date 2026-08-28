@@ -2,11 +2,20 @@
 
 import { useMemo } from "react";
 import Link from "next/link";
-import { ExternalLink, FolderKanban, GitBranch, Lightbulb, MessageSquare, Plus } from "lucide-react";
+import {
+  ExternalLink,
+  FolderKanban,
+  GitBranch,
+  Lightbulb,
+  MessageSquare,
+  MonitorSmartphone,
+  Plus,
+} from "lucide-react";
 import { Badge, type BadgeTone } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import { LinkButton } from "@/components/ui/link-button";
 import { PromoteProgress, VoteControl } from "@/components/work/idea-bits";
+import { ProjectStatusPicker } from "@/components/work/project-status-picker";
 import { FilterBar, useWorkFilters } from "@/components/work/work-filters";
 import { cn, formatDate, todayInIstanbul } from "@/lib/utils";
 import { optionLabel, PROJECT_TYPE_OPTIONS, SECTOR_OPTIONS } from "@/lib/options";
@@ -90,9 +99,16 @@ function ProjectDeadline({
 export function ProjectsPanel({
   projects,
   currentUserId,
+  showClientView = false,
 }: {
   projects: Project[];
   currentUserId: string;
+  /**
+   * Whether the row links out to the client portal view. Off in showcase mode,
+   * where a demo project has no client account behind it — the same gate the
+   * project page puts on its "Client view" panel.
+   */
+  showClientView?: boolean;
 }) {
   const filters = useWorkFilters("p", "updated");
   const { state } = filters;
@@ -220,7 +236,12 @@ export function ProjectsPanel({
                     </td>
                     <td className="px-4 py-3 text-muted">{project.client || "—"}</td>
                     <td className="px-4 py-3">
-                      <Badge tone={PROJECT_TONE[project.status]}>{project.status}</Badge>
+                      <ProjectStatusPicker
+                        projectId={project.id}
+                        status={project.status}
+                        statuses={PROJECT_STATUSES}
+                        tones={PROJECT_TONE}
+                      />
                     </td>
                     <td className="px-4 py-3">
                       <ProjectDeadline
@@ -230,6 +251,19 @@ export function ProjectsPanel({
                     </td>
                     <td className="px-4 py-3">
                       <span className="flex gap-2">
+                        {/* First in the row because it's the only link that is
+                            always there, and the one the team reaches for
+                            mid-call — "what does the client see right now?" */}
+                        {showClientView && (
+                          <Link
+                            href={`/work/projects/${project.id}/client`}
+                            title="Client view"
+                            className="text-faint hover:text-ink"
+                          >
+                            <MonitorSmartphone className="size-4" aria-hidden />
+                            <span className="sr-only">Client view</span>
+                          </Link>
+                        )}
                         {project.repo_url && (
                           <a
                             href={project.repo_url}
@@ -254,7 +288,7 @@ export function ProjectsPanel({
                             <span className="sr-only">Production</span>
                           </a>
                         )}
-                        {!project.repo_url && !project.prod_url && (
+                        {!showClientView && !project.repo_url && !project.prod_url && (
                           <span className="text-faint">—</span>
                         )}
                       </span>
