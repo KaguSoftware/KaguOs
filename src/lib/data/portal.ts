@@ -11,6 +11,7 @@ import {
 import {
   type InvoiceCurrency,
   type ProjectInvoice,
+  type ProjectLink,
   type ProjectMilestone,
   type ProjectPaymentInstallment,
   type ProjectPaymentPlan,
@@ -75,6 +76,33 @@ export async function getProjectInvoices(
   // float rounding a money column on the way out. Coerced once, here, so no
   // caller has to remember that `amount + amount` would otherwise concatenate.
   return rows.map((row) => ({ ...row, amount: Number(row.amount) }));
+}
+
+/**
+ * The things a client can go and open (0082).
+ *
+ * No coercion pass: every column is text, a boolean or an integer, and none of
+ * them feeds arithmetic. RLS hides the unpublished ones from a client and shows
+ * them to a member, which is why the team's client-view page and the portal can
+ * share this one function.
+ *
+ * Ordered by `sort` then `created_at`, the same rule the milestones use — the
+ * order the producer put them in, with newest last inside a tie.
+ */
+export async function getProjectLinks(
+  ctx: SessionContext,
+  projectIds: string[]
+): Promise<ProjectLink[]> {
+  if (projectIds.length === 0) return [];
+  return (await rowsOrThrow(
+    ctx.supabase
+      .from("project_links")
+      .select("*")
+      .in("project_id", projectIds)
+      .order("sort")
+      .order("created_at"),
+    "project_links"
+  )) as ProjectLink[];
 }
 
 /* ── Money, added up honestly ─────────────────────────────────────────────── */
@@ -419,6 +447,8 @@ export type PortalData = {
   intake: Map<string, IntakeSummary>;
   milestonesByProject: Map<string, ProjectMilestone[]>;
   invoicesByProject: Map<string, ProjectInvoice[]>;
+  /** Published previews, builds and boards — 0082. */
+  linksByProject: Map<string, ProjectLink[]>;
   plansByProject: Map<string, ProjectPaymentPlan[]>;
   /** Keyed by plan, not by project — a payment only means anything inside one. */
   paymentsByPlan: Map<string, ProjectPaymentInstallment[]>;
@@ -430,23 +460,26 @@ export async function getPortalData(
 ): Promise<PortalData> {
   const ids = projects.map((project) => project.id);
 
-  const [intake, milestones, invoices, plans, payments] = await Promise.all([
+  const [intake, milestones, invoices, links, plans, payments] = await Promise.all([
     getIntakeSummaries(
       ctx,
       projects.map((project) => ({ id: project.id, packKey: project.intake_pack }))
     ),
     getProjectMilestones(ctx, ids),
     getProjectInvoices(ctx, ids),
+    getProjectLinks(ctx, ids),
     getPaymentPlans(ctx, ids),
     getPaymentInstallments(ctx, ids),
   ]);
 
   const milestonesByProject = new Map<string, ProjectMilestone[]>();
   const invoicesByProject = new Map<string, ProjectInvoice[]>();
+  const linksByProject = new Map<string, ProjectLink[]>();
   const plansByProject = new Map<string, ProjectPaymentPlan[]>();
   for (const id of ids) {
     milestonesByProject.set(id, []);
     invoicesByProject.set(id, []);
+    linksByProject.set(id, []);
     plansByProject.set(id, []);
   }
   for (const milestone of milestones) {
@@ -454,6 +487,9 @@ export async function getPortalData(
   }
   for (const invoice of invoices) {
     invoicesByProject.get(invoice.project_id)?.push(invoice);
+  }
+  for (const link of links) {
+    linksByProject.get(link.project_id)?.push(link);
   }
   for (const plan of plans) {
     plansByProject.get(plan.project_id)?.push(plan);
@@ -473,6 +509,7 @@ export async function getPortalData(
     intake,
     milestonesByProject,
     invoicesByProject,
+    linksByProject,
     plansByProject,
     paymentsByPlan,
   };

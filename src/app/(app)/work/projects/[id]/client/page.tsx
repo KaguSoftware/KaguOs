@@ -8,6 +8,7 @@ import {
   getPaymentInstallments,
   getPaymentPlans,
   getProjectInvoices,
+  getProjectLinks,
   getProjectMilestones,
   invoiceTotals,
   milestoneProgress,
@@ -18,6 +19,7 @@ import { LiveRefresh } from "@/components/shell/live-refresh";
 import { Money, Stat } from "@/components/portal/bits";
 import {
   InvoicesPanel,
+  LinksPanel,
   MilestonesPanel,
 } from "@/components/work/client-portal-editor";
 import { PaymentPlansPanel } from "@/components/work/payment-plan-editor";
@@ -28,7 +30,8 @@ export const metadata: Metadata = { title: "Client view" };
 
 /**
  * The other side of the client portal: what this project's client is being
- * told, and the one place to change it.
+ * told — and, since 0082, what they can go and see for themselves. The one
+ * place to change either.
  *
  * ── Why it is a page and not a panel on the project ────────────────────────
  *
@@ -54,37 +57,45 @@ export default async function ProjectClientViewPage({
   const { id } = await params;
   const ctx = await requireSection("work");
 
-  const [{ data: project }, holders, milestones, invoices, plans, payments] =
-    await Promise.all([
-      selectOrThrow(
-        ctx.supabase
-          .from("projects")
-          .select("id, name, client")
-          .eq("id", id)
-          .eq("is_demo", ctx.showcase)
-          .maybeSingle(),
-        "project"
-      ),
-      // ⚠️ The relationship is NAMED, not inferred. `client_projects` has two
-      // foreign keys into `profiles` — `user_id` and `created_by` — so a bare
-      // embed is ambiguous and PostgREST refuses the whole request with PGRST201
-      // at runtime only. Same shape as the intake page's query, for the same
-      // reason.
-      rowsOrThrow(
-        ctx.supabase
-          .from("client_projects")
-          .select(
-            "user_id, profiles!client_projects_user_id_fkey!inner(full_name, email, kind)"
-          )
-          .eq("project_id", id)
-          .eq("profiles.kind", "client"),
-        "client_projects"
-      ),
-      getProjectMilestones(ctx, [id]),
-      getProjectInvoices(ctx, [id]),
-      getPaymentPlans(ctx, [id]),
-      getPaymentInstallments(ctx, [id]),
-    ]);
+  const [
+    { data: project },
+    holders,
+    milestones,
+    invoices,
+    links,
+    plans,
+    payments,
+  ] = await Promise.all([
+    selectOrThrow(
+      ctx.supabase
+        .from("projects")
+        .select("id, name, client")
+        .eq("id", id)
+        .eq("is_demo", ctx.showcase)
+        .maybeSingle(),
+      "project"
+    ),
+    // ⚠️ The relationship is NAMED, not inferred. `client_projects` has two
+    // foreign keys into `profiles` — `user_id` and `created_by` — so a bare
+    // embed is ambiguous and PostgREST refuses the whole request with PGRST201
+    // at runtime only. Same shape as the intake page's query, for the same
+    // reason.
+    rowsOrThrow(
+      ctx.supabase
+        .from("client_projects")
+        .select(
+          "user_id, profiles!client_projects_user_id_fkey!inner(full_name, email, kind)"
+        )
+        .eq("project_id", id)
+        .eq("profiles.kind", "client"),
+      "client_projects"
+    ),
+    getProjectMilestones(ctx, [id]),
+    getProjectInvoices(ctx, [id]),
+    getProjectLinks(ctx, [id]),
+    getPaymentPlans(ctx, [id]),
+    getPaymentInstallments(ctx, [id]),
+  ]);
   if (!project) notFound();
 
   const today = todayInIstanbul();
@@ -115,6 +126,7 @@ export default async function ProjectClientViewPage({
         tables={[
           "project_milestones",
           "project_invoices",
+          "project_links",
           "project_payment_plans",
           "project_payment_installments",
         ]}
@@ -130,7 +142,7 @@ export default async function ProjectClientViewPage({
 
       <PageHeader
         title="Client view"
-        description="What this project's client sees in their portal — the plan and the statement. Everything here is written for them, not for us."
+        description="What this project's client sees in their portal — the plan, the things they can go and open, and the statement. Everything here is written for them, not for us."
       />
 
       <p className="mb-6 flex flex-wrap items-center gap-1.5 text-[calc(13px*var(--text-scale,1))] text-faint">
@@ -197,6 +209,11 @@ export default async function ProjectClientViewPage({
 
       <div className="grid gap-6">
         <MilestonesPanel projectId={id} milestones={milestones} />
+        {/* Under the plan, because a link is almost always a link TO one of the
+            phases above it and the dropdown that files it there reads the same
+            list. Above the money for the same reason the plan is: this half of
+            the page is what we are building, the other half is what it costs. */}
+        <LinksPanel projectId={id} links={links} milestones={milestones} />
         <PaymentPlansPanel projectId={id} summaries={summaries} today={today} />
         <InvoicesPanel projectId={id} invoices={invoices} />
 

@@ -1,7 +1,13 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { cookies } from "next/headers";
-import { ArrowRight, Building2, Route, TriangleAlert } from "lucide-react";
+import {
+  ArrowRight,
+  Building2,
+  ExternalLink,
+  Route,
+  TriangleAlert,
+} from "lucide-react";
 import {
   loadPortal,
   milestoneProgress,
@@ -17,6 +23,7 @@ import {
   MilestoneBadge,
   MilestoneDot,
 } from "@/components/portal/bits";
+import { PortalLinks, portalLinkRows } from "@/components/portal/links";
 import {
   SystemColumns,
   type StepView,
@@ -51,6 +58,14 @@ export async function generateMetadata(): Promise<Metadata> {
  * rather than left in date order down the list, where it would read as one
  * quiet row among nine.
  *
+ * ── Why the links sit above the plan ───────────────────────────────────────
+ *
+ * Because "how's it going?" has a better answer than a percentage, and it is
+ * the staging site (0082). A client who can open the thing and click around it
+ * does not need to be told 62% first, and one who scrolled past four columns to
+ * find the address has already had the worse version of this page. The bars
+ * stay — they are what the link cannot show, namely what is NOT there yet.
+ *
  * ── Two shapes of plan, two views ──────────────────────────────────────────
  *
  * A plan whose top-level phases are the SYSTEMS being delivered, each with
@@ -83,7 +98,12 @@ export default async function PortalProgressPage() {
   return (
     <>
       <LiveRefresh
-        tables={["project_milestones", "project_intake", "project_intake_answers"]}
+        tables={[
+          "project_milestones",
+          "project_links",
+          "project_intake",
+          "project_intake_answers",
+        ]}
       />
 
       <PageHeader title={t.navProgress} description={t.progressDescription} />
@@ -108,6 +128,12 @@ export default async function PortalProgressPage() {
             const intake = portal.intake.get(project.id);
             const packPct = intake?.progress.pct ?? 0;
             const packSent = Boolean(intake?.submittedAt);
+            // What they can go and open. RLS has already dropped the
+            // unpublished ones (0082 §3), so anything here is deliberate.
+            const linkRows = portalLinkRows(
+              portal.linksByProject.get(project.id) ?? [],
+              milestones
+            );
 
             // For a columnar plan the honest count is steps, not systems —
             // "0/4 done" while three systems are half-built says nothing.
@@ -226,6 +252,25 @@ export default async function PortalProgressPage() {
                       ))}
                     </ul>
                   </div>
+                )}
+
+                {/* ---- The work itself, above the plan that describes it.
+                    Somebody who can open the staging site does not need to be
+                    told a percentage first, and a reader who scrolled past four
+                    columns to find the link has already had the worse version
+                    of this page. Only rendered when there IS something to open
+                    — an empty "Take a look" is a promise the page can't keep. */}
+                {linkRows.length > 0 && (
+                  <section className="mb-5">
+                    <h3 className="flex items-center gap-2 text-[calc(14px*var(--text-scale,1))] font-semibold tracking-tight text-ink">
+                      <ExternalLink className="size-4 text-faint" aria-hidden />
+                      {t.takeALook}
+                    </h3>
+                    <p className="mt-1 max-w-[70ch] text-[calc(12px*var(--text-scale,1))] leading-relaxed text-faint">
+                      {t.takeALookBlurb}
+                    </p>
+                    <PortalLinks className="mt-3" rows={linkRows} t={t} />
+                  </section>
                 )}
 
                 {milestones.length === 0 ? (
