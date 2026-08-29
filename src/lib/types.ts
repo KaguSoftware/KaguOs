@@ -1085,6 +1085,75 @@ export type ProjectInvoice = {
   updated_at: string;
 };
 
+/* ── What the client can go and look at (0082) ─────────────────────────────
+ *
+ * The plan says how far along a build is. This is the build itself: the
+ * staging site on its .vercel.app address, the TestFlight invite that puts the
+ * half-finished app on the client's own phone, the Figma board the screens
+ * live on. Published the same way a milestone is, and hidden the same way
+ * until somebody decides it is worth opening.
+ */
+
+/**
+ * What the reader is being asked to DO with a link.
+ *
+ * Not a taxonomy of the web — five buckets, each of which changes the verb and
+ * the icon on the client's page. "Open" next to a TestFlight invite is the
+ * version of this feature that generates support messages.
+ */
+export type ProjectLinkKind =
+  | "preview"
+  | "install"
+  | "design"
+  | "document"
+  | "other";
+
+export const PROJECT_LINK_KINDS: ProjectLinkKind[] = [
+  "preview",
+  "install",
+  "design",
+  "document",
+  "other",
+];
+
+/** The team's English. The portal maps the same five onto its own dictionary. */
+export const PROJECT_LINK_KIND_LABELS: Record<ProjectLinkKind, string> = {
+  preview: "Live preview",
+  install: "App to install",
+  design: "Design",
+  document: "Document",
+  other: "Link",
+};
+
+/**
+ * What the team writes under each kind in the create form — the difference
+ * between a producer picking the right one and picking the first one.
+ */
+export const PROJECT_LINK_KIND_HINTS: Record<ProjectLinkKind, string> = {
+  preview: "A running site the client can open — staging, a .vercel.app build.",
+  install: "Something they put on a device — TestFlight, Play Console, an APK.",
+  design: "Screens to look at rather than use — Figma, a prototype.",
+  document: "Something to read — a spec, a handover doc, a sheet.",
+  other: "Anything else worth keeping in one place.",
+};
+
+export type ProjectLink = {
+  id: string;
+  project_id: string;
+  /** The phase this belongs to, or null for "the project as a whole". */
+  milestone_id: string | null;
+  kind: ProjectLinkKind;
+  label: string;
+  url: string;
+  detail: string | null;
+  sort: number;
+  /** False keeps a URL on the member side until it is worth opening — 0082 §1. */
+  visible_to_client: boolean;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
 /* ── The payment plan (0075 §2) ────────────────────────────────────────────
  *
  * An invoice is a bill that has already gone out. A plan is the agreement it

@@ -4,9 +4,11 @@ import {
   INVOICE_CURRENCIES,
   INVOICE_STATUSES,
   MILESTONE_STATUSES,
+  PROJECT_LINK_KINDS,
   type InvoiceCurrency,
   type InvoiceStatus,
   type MilestoneStatus,
+  type ProjectLinkKind,
 } from "@/lib/types";
 import type { ActionResult } from "@/lib/actions/account";
 import {
@@ -16,12 +18,14 @@ import {
   percentOf,
   revalidateBoth,
   text,
+  urlOf,
 } from "@/lib/actions/portal-write";
 import { todayInIstanbul } from "@/lib/utils";
 
 /**
  * What the team publishes TO a client — the phases and invoices behind the
- * portal's progress and finance pages (0074, 0075 §1).
+ * portal's progress and finance pages (0074, 0075 §1), and the links that let
+ * them stop reading about the build and go and open it (0082).
  *
  * The guard, the revalidation and the small validators all live in
  * `portal-write.ts`, shared with the payment-plan actions: everything either
@@ -51,6 +55,27 @@ function asCurrency(value: unknown): InvoiceCurrency | null {
   return INVOICE_CURRENCIES.includes(value as InvoiceCurrency)
     ? (value as InvoiceCurrency)
     : null;
+}
+
+function asLinkKind(value: unknown): ProjectLinkKind | null {
+  return PROJECT_LINK_KINDS.includes(value as ProjectLinkKind)
+    ? (value as ProjectLinkKind)
+    : null;
+}
+
+/**
+ * A milestone id, or null — the phase a link hangs off.
+ *
+ * "" is what an unselected dropdown submits and means "the project as a
+ * whole", which is a real answer rather than a missing one. Anything that is
+ * not a uuid is dropped for the same reason: the database refuses it anyway
+ * (0082 §2), and a 500 out of a foreign key is a worse sentence than none.
+ */
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function asMilestoneId(value: unknown): string | null {
+  const raw = String(value ?? "").trim();
+  return UUID.test(raw) ? raw : null;
 }
 
 /* ── Phases ───────────────────────────────────────────────────────────────── */
@@ -362,4 +387,190 @@ export async function deleteInvoice(
 
   revalidateBoth(projectId);
   return { ok: true, message: "Invoice removed." };
+}
+
+/* ── Links: what the client can go and look at (0082) ─────────────────────── */
+
+export type ProjectLinkInput = {
+  label: string;
+  url: string;
+  kind?: string;
+  detail?: string;
+  /** "" for a link that belongs to the whole project rather than one phase. */
+  milestone_id?: string;
+  visible_to_client?: boolean;
+};
+
+/**
+ * Same split as the milestones above: a page to add one, an expander to edit
+ * it. A link is short, but it is the one row on this page that a client will
+ * ACT on — they open it, install something, and judge the build by what they
+ * find — so it gets the create surface and its empty-field confirm too.
+ *
+ * The URL goes through `urlOf`, which allow-lists http/https. That is a
+ * security check rather than a tidiness one: the value lands in an href on a
+ * customer's page. The column carries the same constraint (0082 §1) so the
+ * next code path cannot skip it.
+ */
+export async function createProjectLink(
+  _prev: ActionResult,
+  formData: FormData
+): Promise<ActionResult> {
+  const projectId = String(formData.get("project_id") ?? "");
+  const { ctx, stop } = await guard(projectId);
+  if (stop) return stop;
+
+  const label = text(formData.get("label"), 120);
+  if (!label) return { ok: false, message: "Give the link a name the client will recognise." };
+  const url = urlOf(formData.get("url"));
+  if (!url) {
+    return {
+      ok: false,
+      message: "That isn't a web address we can link to — it needs to be http or https.",
+    };
+  }
+
+  // Append, by reading the tail rather than counting — `moveMilestone`'s note.
+  const { data: last } = await ctx.supabase
+    .from("project_links")
+    .select("sort")
+    .eq("project_id", projectId)
+    .order("sort", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  const { data, error } = await ctx.supabase
+    .from("project_links")
+    .insert({
+      project_id: projectId,
+      label,
+      url,
+      kind: asLinkKind(formData.get("kind")) ?? "preview",
+      detail: text(formData.get("detail"), 2000),
+      // A phase of ANOTHER project is refused by the trigger rather than
+      // checked here (0082 §2) — one answer, in the place that stays true.
+      milestone_id: asMilestoneId(formData.get("milestone_id")),
+      sort: (last?.sort ?? -1) + 1,
+      visible_to_client: formData.get("visible_to_client") !== null,
+      created_by: ctx.userId,
+    })
+    .select("id")
+    .maybeSingle();
+  if (error) return { ok: false, message: error.message };
+
+  revalidateBoth(projectId);
+  return {
+    ok: true,
+    message:
+      formData.get("visible_to_client") !== null
+        ? "Link added — it's on the client's portal now."
+        : "Saved, hidden — the client can't see it until you publish it.",
+    id: data?.id,
+  };
+}
+
+export async function updateProjectLink(
+  projectId: string,
+  linkId: string,
+  input: ProjectLinkInput
+): Promise<ActionResult> {
+  const { ctx, stop } = await guard(projectId);
+  if (stop) return stop;
+
+  const label = text(input.label, 120);
+  if (!label) return { ok: false, message: "Give the link a name the client will recognise." };
+  const url = urlOf(input.url);
+  if (!url) {
+    return {
+      ok: false,
+      message: "That isn't a web address we can link to — it needs to be http or https.",
+    };
+  }
+
+  const { error } = await ctx.supabase
+    .from("project_links")
+    .update({
+      label,
+      url,
+      kind: asLinkKind(input.kind) ?? "preview",
+      detail: text(input.detail, 2000),
+      milestone_id: asMilestoneId(input.milestone_id),
+      visible_to_client: input.visible_to_client ?? true,
+    })
+    .eq("id", linkId)
+    // Belt and braces on top of RLS, exactly as `updateMilestone` does: the
+    // policy approves the UPDATE on the writer's section access alone, so
+    // without this a caller could pass any row id and edit another project's.
+    .eq("project_id", projectId);
+  if (error) return { ok: false, message: error.message };
+
+  revalidateBoth(projectId);
+  return { ok: true, message: "Saved." };
+}
+
+export async function deleteProjectLink(
+  projectId: string,
+  linkId: string
+): Promise<ActionResult> {
+  const { ctx, stop } = await guard(projectId);
+  if (stop) return stop;
+
+  const { error } = await ctx.supabase
+    .from("project_links")
+    .delete()
+    .eq("id", linkId)
+    .eq("project_id", projectId);
+  if (error) return { ok: false, message: error.message };
+
+  revalidateBoth(projectId);
+  return { ok: true, message: "Link removed." };
+}
+
+/** Swap two `sort` values — `moveMilestone`'s reasoning, unchanged. */
+export async function moveProjectLink(
+  projectId: string,
+  linkId: string,
+  direction: "up" | "down"
+): Promise<ActionResult> {
+  const { ctx, stop } = await guard(projectId);
+  if (stop) return stop;
+
+  const { data: rows, error: readError } = await ctx.supabase
+    .from("project_links")
+    .select("id, sort")
+    .eq("project_id", projectId)
+    .order("sort")
+    .order("created_at");
+  if (readError) return { ok: false, message: readError.message };
+
+  const list = rows ?? [];
+  const index = list.findIndex((row) => row.id === linkId);
+  if (index === -1) return { ok: false, message: "That link is gone." };
+
+  const swapWith = direction === "up" ? index - 1 : index + 1;
+  if (swapWith < 0 || swapWith >= list.length) return { ok: true, message: "" };
+
+  const a = list[index];
+  const b = list[swapWith];
+  // Equal sorts are a no-op that looks like a broken button — fall back to
+  // positions, same as the milestones.
+  const aSort = a.sort === b.sort ? swapWith : b.sort;
+  const bSort = a.sort === b.sort ? index : a.sort;
+
+  const [{ error: e1 }, { error: e2 }] = await Promise.all([
+    ctx.supabase
+      .from("project_links")
+      .update({ sort: aSort })
+      .eq("id", a.id)
+      .eq("project_id", projectId),
+    ctx.supabase
+      .from("project_links")
+      .update({ sort: bSort })
+      .eq("id", b.id)
+      .eq("project_id", projectId),
+  ]);
+  if (e1 || e2) return { ok: false, message: (e1 ?? e2)!.message };
+
+  revalidateBoth(projectId);
+  return { ok: true, message: "" };
 }
