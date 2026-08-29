@@ -40,7 +40,6 @@ import type {
   MilestoneStatus,
   PaymentCadence,
   PaymentPlanKind,
-  ProjectLinkKind,
 } from "@/lib/types";
 
 const en = {
@@ -150,25 +149,6 @@ const en = {
   notStartedYet: "Not started yet",
   closeStep: "Close this step",
   closeSystem: "Close this system",
-
-  /* ── the links (0082) ───────────────────────────────────────────────────
-     The one place on the portal that sends the reader somewhere else, so the
-     wording carries the two things a client needs to know before they click:
-     that it is the real thing rather than a picture of it, and that it is
-     still being built. */
-  takeALook: "Take a look",
-  takeALookBlurb:
-    "The work itself, not a screenshot of it. These are live and still being built, so things move between visits and the odd rough edge is expected.",
-  /* Appended to every link's accessible name. A link that leaves the portal
-     without warning is disorienting on a screen reader and worse on a phone,
-     where the back button stops working. */
-  opensInNewTab: "opens in a new tab",
-  linkKindPreview: "Live preview",
-  linkKindInstall: "App to install",
-  linkKindDesign: "Design",
-  linkKindDocument: "Document",
-  linkKindOther: "Link",
-
   /* The sentence under the greeting. A whole function rather than fragments a
      caller joins: English needs the comma-and list and a leading capital, and
      Arabic needs neither — a shared join() in the page would have to know
@@ -558,18 +538,6 @@ const ar: Dict = {
   notStartedYet: "لم تبدأ بعد",
   closeStep: "إغلاق هذه الخطوة",
   closeSystem: "إغلاق هذا النظام",
-
-  /* ── the links (0082) ─────────────────────────────────────────────────── */
-  takeALook: "ألقوا نظرة",
-  takeALookBlurb:
-    "العمل نفسه، لا صورة عنه. هذه نسخ حيّة ما زالت قيد البناء، لذا تتغيّر بين زيارة وأخرى، ووجود بعض الخشونة أمر متوقّع.",
-  opensInNewTab: "يُفتح في تبويب جديد",
-  linkKindPreview: "معاينة مباشرة",
-  linkKindInstall: "تطبيق للتثبيت",
-  linkKindDesign: "تصميم",
-  linkKindDocument: "مستند",
-  linkKindOther: "رابط",
-
   /* No leading capital and no "and" before the last item — Arabic joins the
      list with و prefixed to the word itself. */
   headline: (packs: number, overdue: number, blocked: number) => {
@@ -963,29 +931,6 @@ export function planKindLabel(t: Dict, kind: PaymentPlanKind): string {
       return t.planKindCustom;
     default:
       return t.planKindInstalments;
-  }
-}
-
-/**
- * What kind of thing a link points at, in the reader's language.
- *
- * `PROJECT_LINK_KIND_LABELS` in lib/types.ts stays the team's English — it is
- * what the create form and the client-view editor use. Same arrangement as the
- * four above: the portal maps the union onto its own dictionary here so no page
- * writes the switch a second time and gets one branch wrong.
- */
-export function projectLinkKindLabel(t: Dict, kind: ProjectLinkKind): string {
-  switch (kind) {
-    case "install":
-      return t.linkKindInstall;
-    case "design":
-      return t.linkKindDesign;
-    case "document":
-      return t.linkKindDocument;
-    case "other":
-      return t.linkKindOther;
-    default:
-      return t.linkKindPreview;
   }
 }
 

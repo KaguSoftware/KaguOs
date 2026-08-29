@@ -116,45 +116,6 @@ export function percentOf(value: unknown, fallback = 0): number {
   return Math.round(Math.min(100, Math.max(0, parsed)) * 100) / 100;
 }
 
-/**
- * A URL that is safe to put in an href on a customer's page, or null.
- *
- * ⚠️ This is a security check, not a tidiness one. The value ends up in an
- * `<a href>` on the portal, so a row reading `javascript:alert(1)` would be
- * stored XSS with a member as its author — which is why the scheme is
- * allow-listed HERE and again as a check constraint on the column (0082 §1).
- * Two copies on purpose: this one gives a sentence, the database one is what
- * still holds when somebody writes a third code path.
- *
- * `new URL()` rather than a regex: it is the same parser the browser will use,
- * so nothing can be smuggled past this that the anchor would then honour.
- *
- * A bare `kagu.co` is upgraded to https rather than refused. Producers paste
- * what they copied out of a dashboard, and refusing a domain because it has no
- * scheme teaches people to fight the form instead of using it.
- */
-export function urlOf(value: unknown): string | null {
-  const raw = String(value ?? "").trim();
-  if (raw === "" || raw.length > 2000) return null;
-  // Only prefix when there is no scheme at all. A `mailto:` or a `javascript:`
-  // must fall through to the allow-list below and be REFUSED, not turned into
-  // `https://javascript:...`.
-  const candidate = /^[a-z][a-z0-9+.-]*:/i.test(raw) ? raw : `https://${raw}`;
-
-  let parsed: URL;
-  try {
-    parsed = new URL(candidate);
-  } catch {
-    return null;
-  }
-  if (parsed.protocol !== "https:" && parsed.protocol !== "http:") return null;
-  // A scheme with nothing after it ("https://") parses fine and links nowhere.
-  if (!parsed.hostname) return null;
-
-  const href = parsed.toString();
-  return href.length <= 2000 ? href : null;
-}
-
 /** A positive whole number, capped — a count of payments to generate. */
 export function countOf(value: unknown, max: number): number | null {
   const parsed = Number(String(value ?? "").trim());

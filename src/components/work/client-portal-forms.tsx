@@ -11,11 +11,7 @@ import { Field } from "@/components/ui/field";
 import { Input, Textarea } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { NumberInput } from "@/components/ui/number-input";
-import {
-  createInvoice,
-  createMilestone,
-  createProjectLink,
-} from "@/lib/actions/client-portal";
+import { createInvoice, createMilestone } from "@/lib/actions/client-portal";
 import { createPaymentPlan } from "@/lib/actions/payment-plans";
 import { cleanCustomSchedule, layOutSchedule, MAX_PAYMENTS } from "@/lib/payments";
 import {
@@ -30,17 +26,13 @@ import {
   PAYMENT_PLAN_KIND_LABELS,
   PAYMENT_PLAN_STATUSES,
   PAYMENT_PLAN_STATUS_LABELS,
-  PROJECT_LINK_KINDS,
-  PROJECT_LINK_KIND_HINTS,
-  PROJECT_LINK_KIND_LABELS,
   type PaymentCadence,
   type PaymentPlanKind,
-  type ProjectLinkKind,
 } from "@/lib/types";
 import { addMonths, formatDate, formatMoney } from "@/lib/utils";
 
 /**
- * The four create surfaces behind the client view.
+ * The three create surfaces behind the client view.
  *
  * All of them write something a CUSTOMER will read, which is why they get a
  * page each rather than an expander in the list: the empty-field confirm that
@@ -82,12 +74,6 @@ const CADENCE_OPTIONS = PAYMENT_CADENCES.map((cadence) => ({
 const PLAN_STATUS_OPTIONS = PAYMENT_PLAN_STATUSES.map((status) => ({
   value: status,
   label: PAYMENT_PLAN_STATUS_LABELS[status],
-}));
-
-const LINK_KIND_OPTIONS = PROJECT_LINK_KINDS.map((kind) => ({
-  value: kind,
-  label: PROJECT_LINK_KIND_LABELS[kind],
-  hint: PROJECT_LINK_KIND_HINTS[kind],
 }));
 
 /**
@@ -666,118 +652,6 @@ export function NewPaymentPlanForm({
         hint="Shown to the client verbatim — how to pay, what the retainer covers."
       >
         <Textarea id="pp-note" name="note" maxLength={2000} />
-      </Field>
-
-      <Checkbox
-        name="visible_to_client"
-        defaultChecked
-        label="Visible to the client straight away"
-      />
-    </CreateForm>
-  );
-}
-
-/**
- * Something the client can go and open (0082).
- *
- * ── Why this gets a page like the other two ────────────────────────────────
- *
- * A link is two fields and could plausibly be an inline "+" in the panel. It
- * gets the full surface anyway, because of the third field: the paragraph
- * underneath. A TestFlight invite with no instructions produces a message back
- * asking what TestFlight is, and an inline row is exactly the shape that makes
- * somebody skip writing them. The empty-field confirm names Detail for the
- * same reason.
- *
- * ── The visibility default, and why it is the opposite of an invoice's ─────
- *
- * Checked. A link is pasted in at the moment somebody wants it seen — usually
- * with the client already asking — and the mistake it guards against is small
- * and instantly reversible. An invoice defaults to draft because the mistake
- * there is a bill.
- */
-export function NewProjectLinkForm({
-  projectId,
-  /** This project's phases, "The whole project" first. */
-  phases,
-}: {
-  projectId: string;
-  phases: { value: string; label: string }[];
-}) {
-  const router = useRouter();
-  const back = `/work/projects/${projectId}/client`;
-  const [kind, setKind] = useState<ProjectLinkKind>("preview");
-
-  return (
-    <CreateForm
-      action={createProjectLink}
-      fieldLabels={{ label: "Name", url: "Address", detail: "Detail" }}
-      submitLabel="Add link"
-      onCancel={() => router.back()}
-      onDone={() => router.push(back)}
-    >
-      <input type="hidden" name="project_id" value={projectId} />
-
-      <Field
-        label="Name"
-        htmlFor="pl-label"
-        hint="What the client sees — “Your booking app (test build)”, not “web-preview-3”."
-      >
-        <Input id="pl-label" name="label" maxLength={120} />
-      </Field>
-
-      <Field
-        label="Address"
-        htmlFor="pl-url"
-        hint="Paste it whole. Anything that isn't an http or https address is refused."
-      >
-        <Input
-          id="pl-url"
-          name="url"
-          type="url"
-          inputMode="url"
-          maxLength={2000}
-          placeholder="https://touch-padel.vercel.app"
-        />
-      </Field>
-
-      <div className="grid gap-4 sm:grid-cols-2">
-        <Field label="Kind" htmlFor="pl-kind" hint={PROJECT_LINK_KIND_HINTS[kind]}>
-          <Dropdown
-            id="pl-kind"
-            name="kind"
-            defaultValue="preview"
-            options={LINK_KIND_OPTIONS}
-            onChange={(value) => setKind(value as ProjectLinkKind)}
-            searchThreshold={0}
-          />
-        </Field>
-        <Field
-          label="Belongs to"
-          htmlFor="pl-milestone"
-          hint="Which phase this is for. Leave it on the whole project for a site or a doc that isn't about one part."
-        >
-          <Dropdown
-            id="pl-milestone"
-            name="milestone_id"
-            defaultValue=""
-            options={phases}
-            placeholder="The whole project"
-          />
-        </Field>
-      </div>
-
-      <Field
-        label="Detail"
-        htmlFor="pl-detail"
-        hint="Optional, and usually the difference between a link that gets used and a message asking how. Read verbatim by the client."
-      >
-        <Textarea
-          id="pl-detail"
-          name="detail"
-          maxLength={2000}
-          placeholder="Install TestFlight from the App Store first, then open this on the same phone. Tell us which Apple ID to invite and we'll add it."
-        />
       </Field>
 
       <Checkbox

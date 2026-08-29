@@ -4,7 +4,6 @@ import { useState } from "react";
 import {
   ChevronDown,
   ChevronUp,
-  ExternalLink,
   Eye,
   EyeOff,
   Plus,
@@ -21,12 +20,9 @@ import { Panel, PanelHeader } from "@/components/ui/panel";
 import {
   deleteInvoice,
   deleteMilestone,
-  deleteProjectLink,
   moveMilestone,
-  moveProjectLink,
   updateInvoice,
   updateMilestone,
-  updateProjectLink,
 } from "@/lib/actions/client-portal";
 import { useAction } from "@/lib/use-action";
 import {
@@ -35,12 +31,7 @@ import {
   INVOICE_STATUS_LABELS,
   MILESTONE_STATUSES,
   MILESTONE_STATUS_LABELS,
-  PROJECT_LINK_KINDS,
-  PROJECT_LINK_KIND_HINTS,
-  PROJECT_LINK_KIND_LABELS,
   type ProjectInvoice,
-  type ProjectLink,
-  type ProjectLinkKind,
   type ProjectMilestone,
   milestoneTree,
 } from "@/lib/types";
@@ -70,12 +61,10 @@ import { cn, formatMoney } from "@/lib/utils";
  *
  * ── The visibility switch ──────────────────────────────────────────────────
  *
- * A milestone can be planned internally before it is announced, an invoice is a
- * draft until it is sent, and a preview URL usually exists a week before it is
- * worth anybody opening (0082). All three states are gated in the RLS policies
- * (0074 §3, 0082 §3), not here — this component only has to make which one a
- * row is in unmissable, which is what the eye/eye-off marker down the left is
- * for, on all three panels.
+ * A milestone can be planned internally before it is announced, and an invoice
+ * is a draft until it is sent. Both states are gated in the RLS policy (0074
+ * §3), not here — this component only has to make which one a row is in
+ * unmissable, which is what the eye/eye-off marker down the left is for.
  */
 const MILESTONE_OPTIONS = MILESTONE_STATUSES.map((status) => ({
   value: status,
@@ -816,316 +805,6 @@ export function InvoicesPanel({
         </ul>
       )}
 
-    </Panel>
-  );
-}
-
-/* ── Links ────────────────────────────────────────────────────────────────── */
-
-const LINK_KIND_OPTIONS = PROJECT_LINK_KINDS.map((kind) => ({
-  value: kind,
-  label: PROJECT_LINK_KIND_LABELS[kind],
-  hint: PROJECT_LINK_KIND_HINTS[kind],
-}));
-
-/** The value the "no phase" option submits — see `asMilestoneId`. */
-const NO_PHASE = "";
-
-/**
- * The phases a link may be filed under, as dropdown options.
- *
- * Sub-phases are indented rather than excluded: a TestFlight build usually
- * belongs to "Booking end to end" and not to the whole mobile app, and a list
- * that only offered the four systems would make the producer file it a level
- * too high. Built from the tree so the order matches the panel above.
- */
-function phaseOptions(milestones: ProjectMilestone[]) {
-  const options = [{ value: NO_PHASE, label: "The whole project" }];
-  for (const { phase, steps } of milestoneTree(milestones)) {
-    options.push({ value: phase.id, label: phase.title });
-    for (const step of steps) {
-      options.push({ value: step.id, label: `— ${step.title}` });
-    }
-  }
-  return options;
-}
-
-function LinkEditor({
-  projectId,
-  link,
-  phases,
-  first,
-  last,
-  onDone,
-}: {
-  projectId: string;
-  link: ProjectLink;
-  phases: { value: string; label: string }[];
-  first: boolean;
-  last: boolean;
-  onDone: () => void;
-}) {
-  const { run, pending } = useAction();
-  const [label, setLabel] = useState(link.label);
-  const [url, setUrl] = useState(link.url);
-  const [kind, setKind] = useState<ProjectLinkKind>(link.kind);
-  const [detail, setDetail] = useState(link.detail ?? "");
-  const [milestoneId, setMilestoneId] = useState(link.milestone_id ?? NO_PHASE);
-  const [visible, setVisible] = useState(link.visible_to_client);
-
-  return (
-    <div className="grid gap-4">
-      <div className="grid gap-4 sm:grid-cols-2">
-        <div className="sm:col-span-2">
-          <label className={LABEL} htmlFor={`l-label-${link.id}`}>
-            Name — what the client sees
-          </label>
-          <Input
-            id={`l-label-${link.id}`}
-            value={label}
-            onChange={(event) => setLabel(event.target.value)}
-            maxLength={120}
-          />
-        </div>
-
-        <div className="sm:col-span-2">
-          <label className={LABEL} htmlFor={`l-url-${link.id}`}>
-            Address
-          </label>
-          {/* type="url" only for the keyboard it summons on a phone. The
-              validation that matters is `urlOf` in the action and the check
-              constraint behind it — a browser hint is not a security control. */}
-          <Input
-            id={`l-url-${link.id}`}
-            type="url"
-            inputMode="url"
-            value={url}
-            onChange={(event) => setUrl(event.target.value)}
-            maxLength={2000}
-            placeholder="https://…"
-          />
-        </div>
-
-        <div>
-          <span className={LABEL}>Kind</span>
-          <Dropdown
-            options={LINK_KIND_OPTIONS}
-            value={kind}
-            onChange={(value) => setKind(value as ProjectLinkKind)}
-            searchThreshold={0}
-          />
-        </div>
-
-        <div>
-          <span className={LABEL}>Belongs to</span>
-          <Dropdown
-            options={phases}
-            value={milestoneId}
-            onChange={setMilestoneId}
-            placeholder="The whole project"
-          />
-        </div>
-
-        <div className="sm:col-span-2">
-          <label className={LABEL} htmlFor={`l-detail-${link.id}`}>
-            Detail — the client reads this verbatim
-          </label>
-          <Textarea
-            id={`l-detail-${link.id}`}
-            value={detail}
-            onChange={(event) => setDetail(event.target.value)}
-            maxLength={2000}
-            placeholder="What they need to know before clicking — install TestFlight first, send us the Apple ID you want on the invite, the site rebuilds every night."
-          />
-        </div>
-      </div>
-
-      <Checkbox
-        checked={visible}
-        onChange={(event) => setVisible(event.target.checked)}
-        label="Visible to the client"
-      />
-
-      <div className="flex flex-wrap items-center gap-2">
-        <Button
-          variant="primary"
-          size="sm"
-          disabled={pending}
-          onClick={() =>
-            run(
-              () =>
-                updateProjectLink(projectId, link.id, {
-                  label,
-                  url,
-                  kind,
-                  detail,
-                  milestone_id: milestoneId,
-                  visible_to_client: visible,
-                }),
-              { success: "Saved.", onSuccess: onDone }
-            )
-          }
-        >
-          Save
-        </Button>
-
-        {/* Opens the thing itself. The one check nobody performs unless it is
-            one click away — and a dead preview URL on a client's portal is a
-            worse look than no link at all. */}
-        <a
-          href={link.url}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="inline-flex items-center gap-1.5 rounded-md border border-line px-2.5 py-1.5 text-[calc(12px*var(--text-scale,1))] text-muted transition-colors duration-150 hover:border-line-strong hover:text-ink"
-        >
-          <ExternalLink className="size-3.5" aria-hidden />
-          Open it
-        </a>
-
-        <Button
-          variant="ghost"
-          size="sm"
-          disabled={pending || first}
-          aria-label="Move up"
-          onClick={() => run(() => moveProjectLink(projectId, link.id, "up"))}
-        >
-          <ChevronUp className="size-3.5" aria-hidden />
-        </Button>
-        <Button
-          variant="ghost"
-          size="sm"
-          disabled={pending || last}
-          aria-label="Move down"
-          onClick={() => run(() => moveProjectLink(projectId, link.id, "down"))}
-        >
-          <ChevronDown className="size-3.5" aria-hidden />
-        </Button>
-
-        <ConfirmButton
-          size="sm"
-          className="ml-auto"
-          disabled={pending}
-          onConfirm={() =>
-            run(() => deleteProjectLink(projectId, link.id), {
-              success: "Link removed.",
-              onSuccess: onDone,
-            })
-          }
-        >
-          <Trash2 className="size-3.5" aria-hidden />
-          Delete
-        </ConfirmButton>
-      </div>
-    </div>
-  );
-}
-
-/**
- * What the client can go and open (0082).
- *
- * ── Why this panel is on the client page and not on the project ────────────
- *
- * The repo url, the Supabase dashboard and the deploy hook live on the project,
- * in `project_secrets` and the notes, and they are addressed to colleagues.
- * These are addressed to a customer: the same staging URL is a different object
- * depending on who is being handed it, and the sentence you write under it
- * changes completely. Keeping them apart is what stops the second kind
- * accidentally becoming the first.
- *
- * The eye/eye-off marker down the left is the same one the phases and invoices
- * carry, and means the same thing — a link is hidden until somebody decides it
- * is worth opening.
- */
-export function LinksPanel({
-  projectId,
-  links,
-  milestones,
-}: {
-  projectId: string;
-  links: ProjectLink[];
-  /** For the "belongs to" dropdown and for naming a link's phase in the list. */
-  milestones: ProjectMilestone[];
-}) {
-  const [openId, setOpenId] = useState<string | null>(null);
-  const phases = phaseOptions(milestones);
-  const titles = new Map(milestones.map((m) => [m.id, m.title]));
-  const published = links.filter((link) => link.visible_to_client).length;
-
-  return (
-    <Panel>
-      <PanelHeader
-        title="Links the client can open"
-        action={
-          <span className="flex items-center gap-3">
-            <span className="font-mono text-xs text-faint">
-              {published}/{links.length} published
-            </span>
-            <LinkButton
-              href={`/work/projects/${projectId}/client/new-link`}
-              variant="outline"
-              size="sm"
-            >
-              <Plus className="size-3.5" aria-hidden />
-              Add
-            </LinkButton>
-          </span>
-        }
-      />
-
-      {links.length === 0 ? (
-        <p className="px-4 py-6 text-[calc(13px*var(--text-scale,1))] text-faint">
-          Nothing to look at yet. This is where the staging site, the TestFlight
-          invite and the design board go — the things that otherwise get pasted
-          into a chat and lost. Anything here shows up on the client&apos;s
-          dashboard and Progress page.
-        </p>
-      ) : (
-        <ul>
-          {links.map((link, index) => {
-            const phaseTitle = link.milestone_id
-              ? (titles.get(link.milestone_id) ?? null)
-              : null;
-            return (
-              <Row
-                key={link.id}
-                hidden={!link.visible_to_client}
-                open={openId === link.id}
-                onToggle={() =>
-                  setOpenId((current) => (current === link.id ? null : link.id))
-                }
-                summary={
-                  <>
-                    <span className="flex flex-wrap items-baseline gap-x-2">
-                      <span className="min-w-0 truncate text-[calc(13px*var(--text-scale,1))] text-ink">
-                        {link.label}
-                      </span>
-                      <span className="shrink-0 font-mono text-[calc(11px*var(--text-scale,1))] text-muted">
-                        {PROJECT_LINK_KIND_LABELS[link.kind]}
-                      </span>
-                    </span>
-                    {/* The address in full rather than the host: this is the
-                        page where somebody checks whether it is the right one,
-                        and `truncate` keeps a long one from widening the row. */}
-                    <span className="block truncate font-mono text-[calc(11px*var(--text-scale,1))] text-faint">
-                      {link.url}
-                      {phaseTitle && ` · ${phaseTitle}`}
-                    </span>
-                  </>
-                }
-              >
-                <LinkEditor
-                  projectId={projectId}
-                  link={link}
-                  phases={phases}
-                  first={index === 0}
-                  last={index === links.length - 1}
-                  onDone={() => setOpenId(null)}
-                />
-              </Row>
-            );
-          })}
-        </ul>
-      )}
     </Panel>
   );
 }

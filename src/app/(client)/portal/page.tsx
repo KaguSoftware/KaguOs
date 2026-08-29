@@ -16,7 +16,6 @@ import { LiveRefresh } from "@/components/shell/live-refresh";
 import { Panel } from "@/components/ui/panel";
 import { ProgressMeter } from "@/components/portal/progress-meter";
 import { Money, MilestoneBadge } from "@/components/portal/bits";
-import { PortalLinks, portalLinkRows } from "@/components/portal/links";
 import { LOCALE_COOKIE, parseLocale } from "@/lib/locale";
 import { dict, milestoneStatusLabel } from "@/lib/i18n";
 import {
@@ -104,10 +103,6 @@ export default async function PortalDashboardPage() {
       packTotal: intake?.progress.total ?? 0,
       packSent: Boolean(intake?.submittedAt),
       milestones,
-      // The compact version — label and address only. The detail paragraph
-      // ("send us the Apple ID you use") belongs on Progress, where there is
-      // room for it; a card that carries it stops being a card.
-      links: portalLinkRows(portal.linksByProject.get(project.id) ?? [], milestones),
     };
   });
 
@@ -146,12 +141,7 @@ export default async function PortalDashboardPage() {
   return (
     <>
       <LiveRefresh
-        tables={[
-          "project_milestones",
-          "project_invoices",
-          "project_links",
-          "project_intake",
-        ]}
+        tables={["project_milestones", "project_invoices", "project_intake"]}
       />
 
       <PageHeader
@@ -317,19 +307,6 @@ export default async function PortalDashboardPage() {
                       </>
                     )}
                   </p>
-                )}
-
-                {/* What they can go and open, if anything (0082). On the card
-                    rather than only on Progress because "can I see it yet?" is
-                    a fourth reason to open this app, and a client who has one
-                    should not have to navigate to find out. */}
-                {entry.links.length > 0 && (
-                  <div className="mt-4 border-t border-line pt-3">
-                    <p className="font-mono text-[calc(10px*var(--text-scale,1))] uppercase tracking-wider text-faint rtl:font-sans rtl:normal-case rtl:tracking-normal">
-                      {t.takeALook}
-                    </p>
-                    <PortalLinks className="mt-2" rows={entry.links} t={t} compact />
-                  </div>
                 )}
 
                 <div className="mt-4 flex flex-wrap gap-x-4 gap-y-1 font-mono text-[calc(11px*var(--text-scale,1))] uppercase tracking-wider rtl:font-sans rtl:normal-case rtl:tracking-normal">
