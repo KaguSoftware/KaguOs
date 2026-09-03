@@ -44,24 +44,55 @@ type NavItem = {
   icon: LucideIcon;
   section?: Section;
   adminOnly?: boolean;
+  /** The selected-state colour. One hue per section, so the tab you're on is
+      identifiable by colour alone, before you've read the label. */
+  accent: string;
 };
 
 const NAV: NavItem[] = [
-  { href: "/", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/work", label: "Work", icon: FolderKanban, section: "work" },
-  { href: "/learn", label: "Learn", icon: GraduationCap, section: "learn" },
+  { href: "/", label: "Dashboard", icon: LayoutDashboard, accent: "#4FD1E0" },
+  { href: "/work", label: "Work", icon: FolderKanban, section: "work", accent: "#F0EFEA" },
+  {
+    href: "/learn",
+    label: "Learn",
+    icon: GraduationCap,
+    section: "learn",
+    accent: "#9B84FF",
+  },
   {
     href: "/management/finance",
     label: "Management",
     icon: Landmark,
     section: "management",
+    accent: "#6E93FF",
   },
-  { href: "/debug", label: "Debug", icon: Bug, section: "debug" },
+  { href: "/debug", label: "Debug", icon: Bug, section: "debug", accent: "#F5A93C" },
   // Chat has its own gate (0052) — the same audience the presence panel shows.
-  { href: "/messages", label: "Messages", icon: MessagesSquare, section: "chat" },
-  { href: "/marketing", label: "Marketing", icon: Megaphone, section: "marketing" },
-  { href: "/comms", label: "Comms", icon: ContactIcon, section: "comms" },
+  {
+    href: "/messages",
+    label: "Messages",
+    icon: MessagesSquare,
+    section: "chat",
+    accent: "#2FD39E",
+  },
+  {
+    href: "/marketing",
+    label: "Marketing",
+    icon: Megaphone,
+    section: "marketing",
+    accent: "#FF5C8A",
+  },
+  { href: "/comms", label: "Comms", icon: ContactIcon, section: "comms", accent: "#A8D74A" },
 ];
+
+/** Admin is gated, so it lives outside NAV — but both the rail and the mobile
+    board render it, so it's defined once here. */
+const ADMIN_ITEM: NavItem = {
+  href: "/admin",
+  label: "Admin",
+  icon: ShieldCheck,
+  accent: "#F2665E",
+};
 
 function isActive(pathname: string, href: string) {
   if (href === "/") return pathname === "/";
@@ -93,17 +124,25 @@ function NavLink({
       // becomes the native tooltip, so the rail stays learnable by hover.
       aria-label={item.label}
       title={collapsed ? item.label : undefined}
+      // The accent only exists while selected — an always-coloured rail would
+      // be a rainbow, and the point is to mark ONE row.
+      style={
+        active
+          ? {
+              backgroundColor: `color-mix(in srgb, ${item.accent} 16%, transparent)`,
+            }
+          : undefined
+      }
       className={cn(
         "flex items-center rounded-md py-1.5 text-sm transition-colors duration-150",
         collapsed ? "justify-center px-0" : "gap-2.5 px-2.5",
-        active
-          ? "bg-raised text-ink"
-          : "text-muted hover:bg-raised/60 hover:text-ink"
+        active ? "text-ink" : "text-muted hover:bg-raised/60 hover:text-ink"
       )}
     >
       <span className={cn("relative", collapsed && "grid size-5 place-items-center")}>
         <Icon
-          className={cn("size-4", active && "text-primary-dim")}
+          className="size-4"
+          style={active ? { color: item.accent } : undefined}
           aria-hidden
         />
         {/* Collapsed there's no room for a count, but silence would be worse
@@ -208,7 +247,7 @@ function MobileMenu({
   }, [close]);
 
   const items: NavItem[] = isAdmin
-    ? [...visible, { href: "/admin", label: "Admin", icon: ShieldCheck }]
+    ? [...visible, ADMIN_ITEM]
     : visible;
 
   const firstName = name?.split(" ")[0] ?? "";
@@ -342,21 +381,30 @@ function MobileMenu({
                 href={item.href}
                 aria-current={active ? "page" : undefined}
                 onClick={close}
-                style={{ animationDelay: `${Math.min(i, 7) * 30 + 60}ms` }}
+                style={{
+                  animationDelay: `${Math.min(i, 7) * 30 + 60}ms`,
+                  ...(active
+                    ? {
+                        borderColor: `color-mix(in srgb, ${item.accent} 45%, transparent)`,
+                        backgroundColor: `color-mix(in srgb, ${item.accent} 12%, transparent)`,
+                      }
+                    : null),
+                }}
                 className={cn(
                   "group relative flex min-h-28 flex-col justify-between overflow-hidden rounded-2xl border p-3.5",
                   "transition-[border-color,background-color,transform] duration-200 ease-mac active:scale-[0.97]",
                   "motion-safe:animate-[tile-in_320ms_var(--ease-mac)_both]",
                   // A busy section earns the full width.
                   loud && "col-span-2",
-                  active
-                    ? "border-primary/40 bg-primary/10"
-                    : "border-line bg-surface/70 hover:border-line-strong"
+                  !active && "border-line bg-surface/70 hover:border-line-strong"
                 )}
               >
                 {active && (
                   <span
-                    className="pointer-events-none absolute -right-8 -top-8 size-24 rounded-full bg-primary/20 blur-2xl"
+                    className="pointer-events-none absolute -right-8 -top-8 size-24 rounded-full blur-2xl"
+                    style={{
+                      backgroundColor: `color-mix(in srgb, ${item.accent} 22%, transparent)`,
+                    }}
                     aria-hidden
                   />
                 )}
@@ -364,10 +412,16 @@ function MobileMenu({
                   <span
                     className={cn(
                       "grid size-9 place-items-center rounded-xl transition-colors duration-200",
-                      active
-                        ? "bg-primary/20 text-primary-dim"
-                        : "bg-raised/80 text-faint group-hover:text-muted"
+                      !active && "bg-raised/80 text-faint group-hover:text-muted"
                     )}
+                    style={
+                      active
+                        ? {
+                            backgroundColor: `color-mix(in srgb, ${item.accent} 22%, transparent)`,
+                            color: item.accent,
+                          }
+                        : undefined
+                    }
                     aria-hidden
                   >
                     <Icon className="size-4.5" />
@@ -645,7 +699,7 @@ export function Sidebar({
             <>
               <hr className="my-2 border-line" />
               <NavLink
-                item={{ href: "/admin", label: "Admin", icon: ShieldCheck }}
+                item={ADMIN_ITEM}
                 pathname={pathname}
                 collapsed={collapsed}
               />
