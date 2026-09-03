@@ -32,6 +32,40 @@
   --danger: oklch(0.7 0.19 25);
   --info: oklch(0.76 0.1 240);
 
+  /* SECTION ACCENTS — one hue per place in the app, not per state.
+   *
+   * These are the ONE exception to the restrained strategy above, and the
+   * exception has a rule: hue answers "where am I", green/amber/red still
+   * answer "what condition is this in". So an accent may tint a selected tab,
+   * a page-header rule, or a section's own icon — and may never colour a
+   * status pill, a button, or a focus ring, where it would collide with the
+   * state vocabulary.
+   *
+   * Defined here rather than in a TS map so every surface reads the same
+   * value, and so a colour can be retuned in one place. Keys are NAV keys, not
+   * Section values — Dashboard and Admin are tabs without a section, and the
+   * chat section is called Messages in the nav. See lib/section-accent.ts.
+   *
+   * Work is deliberately near-white: it's the default place, so it reads as
+   * "no colour" next to the others rather than competing with them.
+   */
+  --sec-dashboard: #4fd1e0;
+  --sec-work: #f0efea;
+  --sec-learn: #9b84ff;
+  --sec-management: #6e93ff;
+  --sec-debug: #f5a93c;
+  --sec-messages: #2fd39e;
+  --sec-marketing: #ff5c8a;
+  --sec-comms: #a8d74a;
+  --sec-admin: #f2665e;
+
+  /* The CURRENT page's accent, set per-route by SectionAccentScope (see
+   * components/shell/section-accent.tsx). Anything inside <main> can reach for
+   * it without being handed a section prop. The fallback keeps every surface
+   * that uses it correct on routes with no section of their own (/account),
+   * and in the client portal, where the scope never mounts. */
+  --section-accent: var(--primary-dim);
+
   /* Text size (Account → Text size). The multiplier every font-size in the app
    * passes through, so one preference moves all of them together. Overwritten
    * on :root by a <style> the app layout renders from the cookie — see

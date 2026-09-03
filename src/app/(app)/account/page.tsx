@@ -9,9 +9,10 @@ import { MyColorForm } from "@/components/account/color-form";
 import { ChatAlertsForm } from "@/components/account/alerts-form";
 import { TextSizeForm } from "@/components/account/text-size-form";
 import { Badge } from "@/components/ui/badge";
+import { SectionChip } from "@/components/ui/section-chip";
 import { defaultColorKey, memberColorCss } from "@/lib/colors";
 import { TEXT_SIZE_COOKIE, parseTextSize } from "@/lib/text-size";
-import { SECTION_LABELS, type Section } from "@/lib/types";
+import { type Section } from "@/lib/types";
 
 export const metadata: Metadata = { title: "Account" };
 
@@ -73,7 +74,7 @@ export default async function AccountPage() {
           <div className="flex flex-wrap gap-1.5 p-4">
             {ctx.isAdmin && <Badge tone="green">admin</Badge>}
             {[...ctx.sections].map((s) => (
-              <Badge key={s}>{SECTION_LABELS[s as Section]}</Badge>
+              <SectionChip key={s} section={s as Section} />
             ))}
             {ctx.sections.size === 0 && !ctx.isAdmin && (
               <p className="text-[calc(13px*var(--text-scale,1))] text-faint">

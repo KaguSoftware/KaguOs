@@ -14,6 +14,7 @@ import { PrefetchHeavy } from "@/components/shell/prefetch-heavy";
 import { ShowcaseToggle } from "@/components/shell/showcase";
 import { formatTRY, isActiveRecurring, monthlyAmount, toTRY, type FxRates } from "@/lib/finance";
 import { addDays, cn, todayInIstanbul } from "@/lib/utils";
+import { accentForSection, accentMix, accentVar } from "@/lib/section-accent";
 import {
   SECTION_LABELS,
   type PinboardNote,
@@ -663,40 +664,64 @@ export default async function DashboardPage() {
             "--stat-cols": Math.min(stats.length, 6),
           } as CSSProperties}
         >
-          {stats.map((s, i) => (
-            <Link
-              key={s.section}
-              href={s.href}
-              className={cn(
-                "group bg-surface p-3 transition-colors duration-150 hover:bg-raised",
-                // The narrow breakpoints have fixed column counts, so a stat
-                // count that doesn't divide evenly leaves a hole at the end of
-                // the last row — the same tell as above, just narrower. The
-                // first tile absorbs the remainder so every row ends flush.
-                stats.length % 2 === 1 && i === 0 && "col-span-2 sm:col-span-1",
-                stats.length % 3 === 1 && i === 0 && "sm:col-span-3 lg:col-span-1",
-                stats.length % 3 === 2 && i === 0 && "sm:col-span-2 lg:col-span-1"
-              )}
-            >
-              <span className="flex items-center gap-1 text-[calc(11px*var(--text-scale,1))] text-faint">
-                {SECTION_LABELS[s.section].replace("Kagu ", "")}
-                <ArrowUpRight
-                  className="size-3 opacity-0 transition-opacity duration-150 group-hover:opacity-100"
-                  aria-hidden
-                />
-              </span>
-              <span className="mt-1.5 flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
-                {s.figures.map((f) => (
-                  <span key={f.label} className="flex items-baseline gap-1">
-                    <span className="font-mono text-[calc(15px*var(--text-scale,1))] font-medium text-ink tabular-nums">
-                      {f.value}
+          {stats.map((s, i) => {
+            // Each tile IS a section, so it wears that section's colour — the
+            // same one the sidebar tab wears. That's what makes this row and
+            // the nav read as one object rather than two lists that happen to
+            // share names. The colour lands on the label and a hairline at the
+            // top edge; the figures stay --ink, because they're the content.
+            const accent = accentForSection(s.section);
+            return (
+              <Link
+                key={s.section}
+                href={s.href}
+                style={
+                  accent
+                    ? {
+                        borderTopColor: accentMix(accent, 55),
+                        color: accentVar(accent),
+                      }
+                    : undefined
+                }
+                className={cn(
+                  accent && "border-t-2",
+                  "group bg-surface p-3 transition-colors duration-150 hover:bg-raised",
+                  // The narrow breakpoints have fixed column counts, so a stat
+                  // count that doesn't divide evenly leaves a hole at the end of
+                  // the last row — the same tell as above, just narrower. The
+                  // first tile absorbs the remainder so every row ends flush.
+                  stats.length % 2 === 1 && i === 0 && "col-span-2 sm:col-span-1",
+                  stats.length % 3 === 1 && i === 0 && "sm:col-span-3 lg:col-span-1",
+                  stats.length % 3 === 2 && i === 0 && "sm:col-span-2 lg:col-span-1"
+                )}
+              >
+                {/* Inherits the accent set on the Link — currentColor rather
+                    than a second style object. */}
+                <span
+                  className={cn(
+                    "flex items-center gap-1 text-[calc(11px*var(--text-scale,1))]",
+                    !accent && "text-faint"
+                  )}
+                >
+                  {SECTION_LABELS[s.section].replace("Kagu ", "")}
+                  <ArrowUpRight
+                    className="size-3 opacity-0 transition-opacity duration-150 group-hover:opacity-100"
+                    aria-hidden
+                  />
+                </span>
+                <span className="mt-1.5 flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                  {s.figures.map((f) => (
+                    <span key={f.label} className="flex items-baseline gap-1">
+                      <span className="font-mono text-[calc(15px*var(--text-scale,1))] font-medium text-ink tabular-nums">
+                        {f.value}
+                      </span>
+                      <span className="text-[calc(11px*var(--text-scale,1))] text-muted">{f.label}</span>
                     </span>
-                    <span className="text-[calc(11px*var(--text-scale,1))] text-muted">{f.label}</span>
-                  </span>
-                ))}
-              </span>
-            </Link>
-          ))}
+                  ))}
+                </span>
+              </Link>
+            );
+          })}
         </div>
       )}
 

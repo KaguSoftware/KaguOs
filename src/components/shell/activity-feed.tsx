@@ -15,15 +15,28 @@ import {
 import type { ActivityItem, ActivityKind } from "@/lib/data/activity";
 import type { MembersMap } from "@/lib/types";
 import { cn, formatRelative } from "@/lib/utils";
+import { accentMix, accentVar, type AccentKey } from "@/lib/section-accent";
 
-const KIND: Record<ActivityKind, { icon: LucideIcon; verb: string; label: string }> = {
-  debug_task: { icon: Bug, verb: "posted a task", label: "Tasks" },
-  idea: { icon: Lightbulb, verb: "posted an idea", label: "Ideas" },
-  project: { icon: FolderKanban, verb: "started a project", label: "Projects" },
-  transaction: { icon: Receipt, verb: "logged", label: "Money" },
-  creative: { icon: Megaphone, verb: "added a video", label: "Videos" },
-  meeting: { icon: CalendarDays, verb: "recorded a meeting", label: "Meetings" },
-  contact: { icon: UserPlus, verb: "added a contact", label: "Contacts" },
+/**
+ * `accent` is the section each kind CAME FROM, so a mixed feed can be scanned
+ * by colour: orange rows are Debug, blue is Management, pink is Marketing.
+ * Two kinds share Work because two kinds of thing live there.
+ *
+ * The colour lands on the icon glyph only — the chip keeps its neutral border
+ * and the text stays --ink. Nine hues filling nine chips in one dense list is
+ * the point at which a system starts looking like confetti.
+ */
+const KIND: Record<
+  ActivityKind,
+  { icon: LucideIcon; verb: string; label: string; accent: AccentKey }
+> = {
+  debug_task: { icon: Bug, verb: "posted a task", label: "Tasks", accent: "debug" },
+  idea: { icon: Lightbulb, verb: "posted an idea", label: "Ideas", accent: "work" },
+  project: { icon: FolderKanban, verb: "started a project", label: "Projects", accent: "work" },
+  transaction: { icon: Receipt, verb: "logged", label: "Money", accent: "management" },
+  creative: { icon: Megaphone, verb: "added a video", label: "Videos", accent: "marketing" },
+  meeting: { icon: CalendarDays, verb: "recorded a meeting", label: "Meetings", accent: "comms" },
+  contact: { icon: UserPlus, verb: "added a contact", label: "Contacts", accent: "comms" },
 };
 
 /** How many rows show before "Show more". */
@@ -72,7 +85,12 @@ export function ActivityFeed({
               All
             </FilterChip>
             {kinds.map((k) => (
-              <FilterChip key={k} on={kind === k} onClick={() => pick(k)}>
+              <FilterChip
+                key={k}
+                on={kind === k}
+                onClick={() => pick(k)}
+                accent={KIND[k].accent}
+              >
                 {KIND[k].label}
               </FilterChip>
             ))}
@@ -99,8 +117,12 @@ export function ActivityFeed({
                     href={item.href}
                     className="flex items-start gap-3 px-4 py-2.5 transition-colors duration-150 hover:bg-raised/60"
                   >
-                    <span className="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-md border border-line text-faint">
-                      <Icon className="size-3.5" aria-hidden />
+                    <span className="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-md border border-line">
+                      <Icon
+                        className="size-3.5"
+                        style={{ color: accentVar(meta.accent) }}
+                        aria-hidden
+                      />
                     </span>
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-[calc(13px*var(--text-scale,1))] text-ink">
@@ -135,13 +157,17 @@ export function ActivityFeed({
   );
 }
 
+/** `accent` is absent on "All", which filters nothing and so belongs to no
+    section — it stays on the neutral selected fill. */
 function FilterChip({
   on,
   onClick,
+  accent,
   children,
 }: {
   on: boolean;
   onClick: () => void;
+  accent?: AccentKey;
   children: React.ReactNode;
 }) {
   return (
@@ -149,9 +175,12 @@ function FilterChip({
       type="button"
       aria-pressed={on}
       onClick={onClick}
+      style={on && accent ? { backgroundColor: accentMix(accent, 16) } : undefined}
       className={cn(
         "rounded-md px-2 py-0.5 text-[calc(11px*var(--text-scale,1))] transition-colors duration-150",
-        on ? "bg-raised text-ink" : "text-faint hover:bg-raised/60 hover:text-muted"
+        on
+          ? cn("text-ink", !accent && "bg-raised")
+          : "text-faint hover:bg-raised/60 hover:text-muted"
       )}
     >
       {children}

@@ -24,6 +24,35 @@ Strategy: **Restrained** — neutral surfaces carry everything; green/amber/red 
 Text on saturated fills: primary buttons use near-black `primary-ink` on the pale green fill
 (≥10:1). Never white-on-mid-green.
 
+### Section accents (hue = place, 2026-09-03)
+
+One hue per destination, defined as `--sec-*` in `globals.css` and reached through
+`lib/section-accent.ts` (never re-typed as a hex):
+
+| Key | Value | | Key | Value |
+|---|---|---|---|---|
+| `dashboard` | `#4FD1E0` | | `messages` | `#2FD39E` |
+| `work` | `#F0EFEA` | | `marketing` | `#FF5C8A` |
+| `learn` | `#9B84FF` | | `comms` | `#A8D74A` |
+| `management` | `#6E93FF` | | `admin` | `#F2665E` |
+| `debug` | `#F5A93C` | | | |
+
+The keys are NAV keys, not `Section` values: Dashboard and Admin are tabs without a section,
+`chat` is called Messages in the nav, and `status` is a gate with no destination and so no colour.
+Work is near-white on purpose — it's the default place, and reads as "no colour" beside the rest.
+
+**The rule this buys, and its limit:** hue answers *where am I*; green/amber/red still answer
+*what condition is this in*. An accent may tint a selected tab, a page-header rule, a section's own
+icon, or a chip that names a section. It may **never** colour a status pill, a button, a focus ring,
+or an unread badge — those belong to the state vocabulary below, and a place-colour entering
+through that door is how "amber" stops meaning one thing.
+
+In use: sidebar tabs + mobile tiles (selected only), `PageHeader`'s left rule, the dashboard stat
+tiles, activity-feed icons, the highlighted command-palette row, and the access chips in
+Account/Admin. `SectionAccentScope` publishes the current route's accent as `--section-accent` on
+the content column, so a page-level surface never needs a section prop; per-item lists look their
+own key up instead.
+
 ## State vocabulary
 
 - Debug task states: `open` = neutral outline pill, `in_progress` = amber pill, `done` = green pill.

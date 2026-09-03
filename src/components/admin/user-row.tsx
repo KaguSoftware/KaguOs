@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import {
     Building2,
     ChevronDown,
@@ -19,6 +19,7 @@ import {
 } from "@/lib/actions/admin";
 import { Button, ConfirmButton } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { accentForSection, accentVar } from "@/lib/section-accent";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { AdminColorPicker } from "@/components/account/color-form";
@@ -160,13 +161,28 @@ export function UserRow({
                             ? shared.map((p) => p.name).join(" · ")
                             : "No projects shared"
                         : granted.length > 0
-                        ? granted
-                              .map((s) =>
-                                  user.access[s] === "read"
-                                      ? `${shortLabel(s)} (view)`
-                                      : shortLabel(s)
-                              )
-                              .join(" · ")
+                        ? granted.map((s, i) => {
+                              // Colour per section, so the access line is read
+                              // by hue instead of parsed word by word — this is
+                              // the same list on every row of the table, and
+                              // the DIFFERENCES between rows are the content.
+                              const accent = accentForSection(s);
+                              return (
+                                  <Fragment key={s}>
+                                      {i > 0 && " · "}
+                                      <span
+                                          style={
+                                              accent
+                                                  ? { color: accentVar(accent) }
+                                                  : undefined
+                                          }
+                                      >
+                                          {shortLabel(s)}
+                                          {user.access[s] === "read" && " (view)"}
+                                      </span>
+                                  </Fragment>
+                              );
+                          })
                         : "No sections"}
                 </p>
 
@@ -318,6 +334,28 @@ export function UserRow({
                                             key={section}
                                             className="flex items-center gap-2"
                                         >
+                                            {/* The section's colour, so a row
+                          is found by hue before it's read. Dimmed when the
+                          access is off — the dot tracks the switch, not just
+                          the label. `status` has no colour (it's a gate, not a
+                          place), so it keeps the neutral dot. */}
+                                            <span
+                                                aria-hidden
+                                                className="size-1.5 shrink-0 rounded-full bg-line-strong transition-opacity duration-150"
+                                                style={(() => {
+                                                    const a =
+                                                        accentForSection(section);
+                                                    return a
+                                                        ? {
+                                                              backgroundColor:
+                                                                  accentVar(a),
+                                                              opacity: tier
+                                                                  ? 1
+                                                                  : 0.3,
+                                                          }
+                                                        : { opacity: tier ? 1 : 0.3 };
+                                                })()}
+                                            />
                                             <Checkbox
                                                 size="sm"
                                                 className="min-w-0 flex-1 text-[calc(13px*var(--text-scale,1))]"

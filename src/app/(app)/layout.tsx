@@ -18,6 +18,7 @@ import { getInboxSummary, totalUnread } from "@/lib/data/messages";
 import { selectOrThrow } from "@/lib/data/query";
 import { ChatLiveRefresh } from "@/components/shell/chat-live-refresh";
 import { LiveRefresh } from "@/components/shell/live-refresh";
+import { SectionAccentScope } from "@/components/shell/section-accent";
 import { Sidebar } from "@/components/shell/sidebar";
 import { CommandPalette } from "@/components/shell/command-palette";
 import { ShowcaseBanner } from "@/components/shell/showcase";
@@ -189,9 +190,11 @@ export default async function AppLayout({
 					className="min-w-0 flex-1 focus:outline-none"
 				>
 					{ctx.showcase && <ShowcaseBanner />}
-					<div className="mx-auto w-full max-w-6xl px-4 py-6 md:px-8 md:py-10">
+					{/* Carries the section's colour to everything on the page —
+					    see components/shell/section-accent.tsx. */}
+					<SectionAccentScope className="mx-auto w-full max-w-6xl px-4 py-6 md:px-8 md:py-10">
 						{children}
-					</div>
+					</SectionAccentScope>
 				</main>
 			</div>
 		</ToastProvider>

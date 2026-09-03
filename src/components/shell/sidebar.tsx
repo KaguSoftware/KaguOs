@@ -24,6 +24,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { accentMix, accentVar, type AccentKey } from "@/lib/section-accent";
 import { SIDEBAR_COOKIE, SIDEBAR_COOKIE_MAX_AGE } from "@/lib/sidebar-pref";
 import type { Section } from "@/lib/types";
 import { signOut } from "@/lib/actions/account";
@@ -45,44 +46,39 @@ type NavItem = {
   section?: Section;
   adminOnly?: boolean;
   /** The selected-state colour. One hue per section, so the tab you're on is
-      identifiable by colour alone, before you've read the label. */
-  accent: string;
+      identifiable by colour alone, before you've read the label. The values
+      live in globals.css; this is only the key — see lib/section-accent.ts. */
+  accent: AccentKey;
 };
 
 const NAV: NavItem[] = [
-  { href: "/", label: "Dashboard", icon: LayoutDashboard, accent: "#4FD1E0" },
-  { href: "/work", label: "Work", icon: FolderKanban, section: "work", accent: "#F0EFEA" },
-  {
-    href: "/learn",
-    label: "Learn",
-    icon: GraduationCap,
-    section: "learn",
-    accent: "#9B84FF",
-  },
+  { href: "/", label: "Dashboard", icon: LayoutDashboard, accent: "dashboard" },
+  { href: "/work", label: "Work", icon: FolderKanban, section: "work", accent: "work" },
+  { href: "/learn", label: "Learn", icon: GraduationCap, section: "learn", accent: "learn" },
   {
     href: "/management/finance",
     label: "Management",
     icon: Landmark,
     section: "management",
-    accent: "#6E93FF",
+    accent: "management",
   },
-  { href: "/debug", label: "Debug", icon: Bug, section: "debug", accent: "#F5A93C" },
+  { href: "/debug", label: "Debug", icon: Bug, section: "debug", accent: "debug" },
   // Chat has its own gate (0052) — the same audience the presence panel shows.
   {
     href: "/messages",
     label: "Messages",
     icon: MessagesSquare,
     section: "chat",
-    accent: "#2FD39E",
+    accent: "messages",
   },
   {
     href: "/marketing",
     label: "Marketing",
     icon: Megaphone,
     section: "marketing",
-    accent: "#FF5C8A",
+    accent: "marketing",
   },
-  { href: "/comms", label: "Comms", icon: ContactIcon, section: "comms", accent: "#A8D74A" },
+  { href: "/comms", label: "Comms", icon: ContactIcon, section: "comms", accent: "comms" },
 ];
 
 /** Admin is gated, so it lives outside NAV — but both the rail and the mobile
@@ -91,7 +87,7 @@ const ADMIN_ITEM: NavItem = {
   href: "/admin",
   label: "Admin",
   icon: ShieldCheck,
-  accent: "#F2665E",
+  accent: "admin",
 };
 
 function isActive(pathname: string, href: string) {
@@ -126,13 +122,7 @@ function NavLink({
       title={collapsed ? item.label : undefined}
       // The accent only exists while selected — an always-coloured rail would
       // be a rainbow, and the point is to mark ONE row.
-      style={
-        active
-          ? {
-              backgroundColor: `color-mix(in srgb, ${item.accent} 16%, transparent)`,
-            }
-          : undefined
-      }
+      style={active ? { backgroundColor: accentMix(item.accent, 16) } : undefined}
       className={cn(
         "flex items-center rounded-md py-1.5 text-sm transition-colors duration-150",
         collapsed ? "justify-center px-0" : "gap-2.5 px-2.5",
@@ -142,7 +132,7 @@ function NavLink({
       <span className={cn("relative", collapsed && "grid size-5 place-items-center")}>
         <Icon
           className="size-4"
-          style={active ? { color: item.accent } : undefined}
+          style={active ? { color: accentVar(item.accent) } : undefined}
           aria-hidden
         />
         {/* Collapsed there's no room for a count, but silence would be worse
@@ -385,8 +375,8 @@ function MobileMenu({
                   animationDelay: `${Math.min(i, 7) * 30 + 60}ms`,
                   ...(active
                     ? {
-                        borderColor: `color-mix(in srgb, ${item.accent} 45%, transparent)`,
-                        backgroundColor: `color-mix(in srgb, ${item.accent} 12%, transparent)`,
+                        borderColor: accentMix(item.accent, 45),
+                        backgroundColor: accentMix(item.accent, 12),
                       }
                     : null),
                 }}
@@ -402,9 +392,7 @@ function MobileMenu({
                 {active && (
                   <span
                     className="pointer-events-none absolute -right-8 -top-8 size-24 rounded-full blur-2xl"
-                    style={{
-                      backgroundColor: `color-mix(in srgb, ${item.accent} 22%, transparent)`,
-                    }}
+                    style={{ backgroundColor: accentMix(item.accent, 22) }}
                     aria-hidden
                   />
                 )}
@@ -417,8 +405,8 @@ function MobileMenu({
                     style={
                       active
                         ? {
-                            backgroundColor: `color-mix(in srgb, ${item.accent} 22%, transparent)`,
-                            color: item.accent,
+                            backgroundColor: accentMix(item.accent, 22),
+                            color: accentVar(item.accent),
                           }
                         : undefined
                     }

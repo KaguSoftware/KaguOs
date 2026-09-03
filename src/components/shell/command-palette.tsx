@@ -21,6 +21,12 @@ import {
 import { searchContent, type SearchHit } from "@/lib/actions/search";
 import type { Section } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import {
+  accentForPath,
+  accentMix,
+  accentVar,
+  type AccentKey,
+} from "@/lib/section-accent";
 
 type Command = {
   id: string;
@@ -43,6 +49,12 @@ type Item = {
   href: string;
   icon: LucideIcon;
   typeLabel?: string; // e.g. "task", "project" — shown for content hits
+  /**
+   * Where this row LANDS you, as a colour. Derived from the href rather than
+   * declared per command, so content hits — a task, a contact — are covered by
+   * the same line, and a row can never claim a section its link doesn't go to.
+   */
+  accent?: AccentKey;
 };
 
 const HIT_ICON: Record<SearchHit["type"], LucideIcon> = {
@@ -138,6 +150,7 @@ export function CommandPalette({
         sub: c.hint,
         href: c.href,
         icon: c.icon,
+        accent: accentForPath(c.href) ?? undefined,
       })),
     [available]
   );
@@ -156,6 +169,7 @@ export function CommandPalette({
         sub: c.hint,
         href: c.href,
         icon: c.icon,
+        accent: accentForPath(c.href) ?? undefined,
       }));
   }, [q, available, actionItems]);
 
@@ -177,6 +191,7 @@ export function CommandPalette({
         href: h.href,
         icon: HIT_ICON[h.type],
         typeLabel: HIT_TYPE_LABEL[h.type],
+        accent: accentForPath(h.href) ?? undefined,
       }));
   }, [q, content]);
 
@@ -293,20 +308,37 @@ export function CommandPalette({
               const Icon = item.icon;
               return (
                 <li key={item.key}>
+                  {/* Only the HIGHLIGHTED row takes a colour, and it takes the
+                      colour of where it goes. Colouring every icon would turn
+                      a list you read top-to-bottom into a swatch chart; this
+                      way the accent previews the destination instead. */}
                   <button
                     type="button"
                     onMouseEnter={() => setActive(i)}
                     onClick={() => choose(item)}
+                    style={
+                      i === active && item.accent
+                        ? { backgroundColor: accentMix(item.accent, 14) }
+                        : undefined
+                    }
                     className={cn(
                       "flex w-full items-center gap-3 px-3.5 py-2 text-left transition-colors duration-75",
-                      i === active ? "bg-primary/10" : "hover:bg-surface"
+                      i === active
+                        ? !item.accent && "bg-primary/10"
+                        : "hover:bg-surface"
                     )}
                   >
                     <Icon
                       className={cn(
                         "size-4 shrink-0",
-                        i === active ? "text-primary-dim" : "text-faint"
+                        i === active && !item.accent && "text-primary-dim",
+                        i !== active && "text-faint"
                       )}
+                      style={
+                        i === active && item.accent
+                          ? { color: accentVar(item.accent) }
+                          : undefined
+                      }
                       aria-hidden
                     />
                     <span className="truncate text-sm text-ink">{item.label}</span>
