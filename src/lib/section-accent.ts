@@ -26,9 +26,34 @@ export const ACCENT_KEYS = [
 
 export type AccentKey = (typeof ACCENT_KEYS)[number];
 
-/** `var(--sec-work)`, ready to drop into a style or a color-mix(). */
+/**
+ * The literal values, mirroring the `--sec-*` tokens in globals.css.
+ *
+ * They're duplicated ON PURPOSE, as the FALLBACK arm of every var() below.
+ * A custom property that isn't defined doesn't fail loudly — `color: var(--x)`
+ * with no --x is invalid at computed-value time, so `color` falls back to
+ * INHERITED and `border-color` to currentColor. Both land on near-white ink
+ * here, which means one stale stylesheet turns the whole system silently
+ * white rather than throwing anything. Every accent now renders correctly
+ * with no stylesheet at all, and the token is an override on top.
+ *
+ * globals.css stays the place to RETUNE a colour — these are the floor.
+ */
+const ACCENT_HEX: Record<AccentKey, string> = {
+  dashboard: "#4FD1E0",
+  work: "#F0EFEA",
+  learn: "#9B84FF",
+  management: "#6E93FF",
+  debug: "#F5A93C",
+  messages: "#2FD39E",
+  marketing: "#FF5C8A",
+  comms: "#A8D74A",
+  admin: "#F2665E",
+};
+
+/** `var(--sec-work, #F0EFEA)` — ready to drop into a style or a color-mix(). */
 export function accentVar(key: AccentKey): string {
-  return `var(--sec-${key})`;
+  return `var(--sec-${key}, ${ACCENT_HEX[key]})`;
 }
 
 /**
@@ -40,8 +65,12 @@ export function accentMix(key: AccentKey, percent: number): string {
   return `color-mix(in srgb, ${accentVar(key)} ${percent}%, transparent)`;
 }
 
-/** The accent of whatever page you're on. Set by SectionAccentScope. */
-export const CURRENT_ACCENT = "var(--section-accent)";
+/**
+ * The accent of whatever page you're on — set by SectionAccentScope, which
+ * writes an already-fallback-bearing value into it. The literal here is
+ * `--primary-dim`, for the routes that belong to no section at all.
+ */
+export const CURRENT_ACCENT = "var(--section-accent, var(--primary-dim, #6BCF9D))";
 
 export function currentAccentMix(percent: number): string {
   return `color-mix(in srgb, ${CURRENT_ACCENT} ${percent}%, transparent)`;
