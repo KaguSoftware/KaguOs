@@ -28,8 +28,55 @@ export type ChangePayload = RealtimePostgresChangesPayload<
   Record<string, unknown>
 >;
 
+/**
+ * A table to watch, when a bare name isn't precise enough.
+ *
+ * `shouldRefresh` filters in the BROWSER: the event still crosses the socket and
+ * is then thrown away. These two filter on the SERVER, so the event is never
+ * sent at all — strictly better whenever the narrowing can be expressed as a
+ * column predicate. Reach for the predicate only when the decision needs
+ * something the server can't know (which route is currently on screen, say).
+ *
+ *   useRealtimeRefresh([{ table: "notifications", filter: `user_id=eq.${me}` }]);
+ *
+ * `filter` takes Realtime's single-condition syntax — `col=eq.value`, and also
+ * neq/lt/lte/gt/gte/in. One condition only; it cannot express AND/OR.
+ */
+export type WatchedTable = {
+  table: string;
+  /** Defaults to "*". Narrow it when the view only cares about some events. */
+  event?: "INSERT" | "UPDATE" | "DELETE" | "*";
+  /** Realtime server-side row filter, e.g. `user_id=eq.<uuid>`. */
+  filter?: string;
+};
+
+export type Watchable = string | WatchedTable;
+
+/** Normalize either spelling into the full descriptor. */
+function normalize(t: Watchable): Required<Omit<WatchedTable, "filter">> &
+  Pick<WatchedTable, "filter"> {
+  return typeof t === "string"
+    ? { table: t, event: "*" }
+    : { table: t.table, event: t.event ?? "*", filter: t.filter };
+}
+
+/**
+ * A stable string identity for a watch set. This is both the effect's dependency
+ * and the channel topic, so it has to change when — and only when — the actual
+ * subscription changes. Filters are part of it: two views watching the same
+ * table through different filters need different topics, or supabase-js hands
+ * them the same deduped channel and the second one silently gets the first's
+ * filter.
+ */
+function watchKey(list: Watchable[]): string {
+  return list
+    .map(normalize)
+    .map((w) => `${w.table}:${w.event}:${w.filter ?? ""}`)
+    .join(",");
+}
+
 export function useRealtimeRefresh(
-  tables: string | string[],
+  tables: Watchable | Watchable[],
   /**
    * Decide per event whether a refresh is worth a server round trip. Omit and
    * every change refreshes. Used by the shell's chat subscription to ignore
@@ -52,9 +99,21 @@ export function useRealtimeRefresh(
   onChange?: (payload: ChangePayload) => void
 ) {
   const router = useRouter();
-  // Stringify so the effect re-subscribes only when the actual table set
+  const list = (Array.isArray(tables) ? tables : [tables]).map(normalize);
+  // Stringify so the effect re-subscribes only when the actual watch set
   // changes, not on every render (a fresh array literal each time otherwise).
-  const key = Array.isArray(tables) ? tables.join(",") : tables;
+  const key = watchKey(list);
+
+  // The descriptors themselves can't be the effect's dependency (new objects
+  // every render), and `key` can't be parsed back into them — a filter may
+  // legitimately contain the separator, e.g. `id=in.(a,b)`. So the list rides a
+  // ref, and `key` remains the thing that decides when to re-subscribe. This
+  // effect is declared BEFORE the subscribing one so it has already run for the
+  // current render when that one fires.
+  const listRef = useRef(list);
+  useEffect(() => {
+    listRef.current = list;
+  });
 
   // Keep the newest router in a ref so the subscription callback always calls
   // the current one without being a dependency that re-subscribes. Synced in an
@@ -79,8 +138,8 @@ export function useRealtimeRefresh(
   }, [onChange]);
 
   useEffect(() => {
-    const list = key.split(",").filter(Boolean);
-    if (list.length === 0) return;
+    const watched = listRef.current;
+    if (watched.length === 0) return;
 
     const supabase = createClient();
     let timer: ReturnType<typeof setTimeout> | null = null;
@@ -111,10 +170,15 @@ export function useRealtimeRefresh(
       if (cancelled) return;
 
       let ch = supabase.channel(`realtime-refresh:${key}`);
-      for (const table of list) {
+      for (const w of watched) {
         ch = ch.on(
           "postgres_changes",
-          { event: "*", schema: "public", table },
+          {
+            event: w.event,
+            schema: "public",
+            table: w.table,
+            ...(w.filter ? { filter: w.filter } : {}),
+          },
           (payload) => {
             changeRef.current?.(payload);
             const filter = filterRef.current;

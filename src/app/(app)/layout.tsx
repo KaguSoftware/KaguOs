@@ -17,7 +17,7 @@ import { getPulse } from "@/lib/data/pulse";
 import { getInboxSummary, totalUnread } from "@/lib/data/messages";
 import { selectOrThrow } from "@/lib/data/query";
 import { ChatLiveRefresh } from "@/components/shell/chat-live-refresh";
-import { LiveRefresh } from "@/components/shell/live-refresh";
+import { ShellLiveRefresh } from "@/components/shell/shell-live-refresh";
 import { SectionAccentScope } from "@/components/shell/section-accent";
 import { Sidebar } from "@/components/shell/sidebar";
 import { CommandPalette } from "@/components/shell/command-palette";
@@ -146,12 +146,16 @@ export default async function AppLayout({
           the moment a notification lands or someone changes status. Skipped in
           showcase — notifications are hidden and presence is demo-irrelevant.
 
+          Not a bare <LiveRefresh>: the profiles stream also carries the
+          last_seen_at heartbeat, which must NOT refresh the shell. See
+          shell-live-refresh.tsx.
+
           The chat tables are watched SEPARATELY, because a refresh must not fire
           for the thread the user is currently reading — that thread patches
           itself in place. See chat-live-refresh.tsx. */}
 			{!ctx.showcase && (
 				<>
-					<LiveRefresh tables={["notifications", "profiles"]} />
+					<ShellLiveRefresh meId={ctx.userId} />
 					<ChatLiveRefresh meId={ctx.userId} members={members} />
 				</>
 			)}
