@@ -1,7 +1,8 @@
 # KaguOs — Handoff
 
-> Read this first when starting a fresh chat. Companions: PRODUCT.md · DESIGN.md ·
-> plan at `C:\Users\p.mansouri\.claude\plans\we-are-kagu-this-precious-teacup.md`.
+> Read this first when starting a fresh chat. Companions: PRODUCT.md · DESIGN.md.
+> (The old pointer here named a plan under `C:\Users\p.mansouri\...`, a user that no longer exists —
+> plans now live under `C:\Users\MnS\.claude\plans\`.)
 
 ## Working style
 - **Git authorship — ABSOLUTE RULE**: **no AI attribution, ever.** Never add Claude as co-author,
@@ -68,6 +69,76 @@ Contracts w/ PDFs), **Debug** (everyone: per-project boards, self-claim-only, re
 - Next 16: `src/proxy.ts` (not middleware); async cookies/params.
 - Chart colors are validated (dataviz skill): income `oklch(0.62 0.13 160)`, expense
   `oklch(0.55 0.16 25)` — L band 0.48–0.67 on dark; re-validate any new chart palette.
+
+## Current status (2026-09-12)
+
+### 🟢 REALTIME: THE HEARTBEAT REFRESH STORM KILLED + TYPING INDICATORS ON BROADCAST (2026-09-12) — tsc clean · lint unchanged (the 2 known pre-existing errors only) · build green, **migration 0083 APPLIED to prod and schema-verified**, live two-browser drive by Parsa PENDING
+
+Parsa asked whether WebSockets could be used in KaguOs. **They already are, everywhere** — Supabase
+Realtime *is* a WebSocket, the client holds one socket per tab, ~20 surfaces ride it, and there is
+zero polling anywhere in messaging. So the session went to the two things genuinely left over.
+
+**1. The `last_seen_at` refresh storm — the real bandwidth cost, and it was invisible.**
+`(app)/layout.tsx` mounted a bare `<LiveRefresh tables={["notifications", "profiles"]} />`:
+`event: "*"`, no filter. `data/session.ts` stamps `last_seen_at` on every active user once per
+5 minutes — a deliberately tiny write, thrown off the critical path with `after()`. But it is still
+a `profiles` UPDATE, so it reached **every open tab of every teammate and fired a full
+`router.refresh()` of the app shell**: the whole layout query wave (`getPresence` +
+`getInboxSummary` + members + notifications) plus the RSC payload, round-tripped to `hnd1`. Nothing
+on screen changed. Cost was users × tabs every 5 min, growing quadratically with the team.
+
+It bought **nothing**: `last_seen_at` is only ever the STALE FALLBACK for presence
+(`sidebar.tsx` reads it solely when the presence channel has no live entry; `sidebar-presence.tsx`
+renders it as "Last seen 20m ago" prose). `presence:team` already reports the truth instantly.
+- **`src/components/shell/shell-live-refresh.tsx` (NEW)** — same shape as `chat-live-refresh.tsx`
+  (filter the EVENTS, not the subscription). Diffs `payload.old` against `payload.new` and drops
+  `profiles` UPDATEs where **only** `last_seen_at` moved. `status_kind`/`status_emoji`/`status_text`/
+  `available_to_call`/`status_until`/`full_name`/`color` still refresh — dropping `profiles`
+  wholesale would have broken the sidebar in the other direction.
+- Works only because `0029` sets **`replica identity full`** on every published table, so an UPDATE
+  payload carries the complete old row.
+
+**2. `useRealtimeRefresh` can now filter SERVER-side.** It hardcoded
+`{ event: "*", schema: "public", table }`, so every qualifying event crossed the wire and was
+discarded in the browser. It now also accepts `{table, event, filter}` descriptors
+(`Watchable`/`WatchedTable`, mirrored through `LiveRefresh`'s props). Filters are folded into the
+channel topic — two views watching one table through different filters MUST get different topics or
+supabase-js hands them the same deduped channel and the second silently inherits the first's filter.
+Every existing string call site is untouched.
+
+**3. Typing indicators — the first BROADCAST in the codebase.** Nothing had ever opened a broadcast
+channel; `postgres_changes` and `presence` were the only two patterns. A typing signal is not a row
+(true for four seconds, never read back), so it rides a pure pipe: no insert, no WAL, no per-
+subscriber RLS pass, and **no `router.refresh()` per keystroke** — the one thing that would have
+made it expensive.
+- **`src/lib/use-typing.ts` (NEW)** — private channel, 2s send throttle, 4s expiry, sweep interval
+  that runs **only while someone is typing**. Clears a typist the instant their line lands rather
+  than waiting out the TTL ("Sara is typing…" under Sara's new message reads as broken).
+- **`supabase/migrations/0083_realtime_typing.sql` (NEW, APPLIED)** — `private.can_use_typing_topic()`
+  + `chat_typing_receive`/`chat_typing_send` policies on `realtime.messages`. Membership mirrors
+  `public.messages`: group needs `private.is_member('work')`, a DM additionally requires you to be
+  one of the two participants. Fails loudly if RLS is ever off on `realtime.messages`.
+- Wired through `thread.tsx` (typists line sits OUTSIDE the scroll container so it can't fight the
+  scroll anchoring) and an optional `onTyping` prop on `composer.tsx`.
+- **Deliberately NOT in `thread-list.tsx`** — a typing dot there means every client joins a
+  broadcast topic for every visible conversation, the opposite of the goal.
+
+**Three things the plan got wrong, corrected during the build:**
+1. The plan wanted `announcements` added to the dashboard's `LiveRefresh`. **`AnnouncementHero` is
+   rendered NOWHERE** — announcements were deliberately replaced by pinboard notes (the comment sits
+   at `(app)/page.tsx`). Subscribing would add a refresh for something nothing displays. Dropped.
+2. The plan sold a `notifications` filter as a bandwidth win. Its RLS is already
+   `recipient_id = auth.uid()`, so other people's rows never reached the client. Applied anyway —
+   Realtime evaluates the filter BEFORE the per-subscriber RLS check, so it saves Supabase CPU — but
+   the code comment says plainly that it is not a privacy or bandwidth change.
+3. The plan's typing topic was `typing:${threadId}`, which is **broken**: a DM is named from each
+   side by *the other person*, so the two participants would sit on two different topics and neither
+   would ever hear the other. Topics are now `typing:dm:<sorted pair>` / `typing:team`, and the SQL
+   policy parses that same shape.
+
+**Not verified:** none of this has been driven in a real browser. The heartbeat fix is the one worth
+measuring — two profiles, DevTools → Network → WS, confirm the `profiles` frame still arrives while
+no RSC request follows it, then have one user set a status emoji and confirm the shell DOES refresh.
 
 ## Current status (2026-08-24, newest)
 
@@ -1689,6 +1760,18 @@ volume. They're insurance, not a speedup.
   (deferred — 2-browser tested). **The agreed feature plan is now fully built.**
 
 ## File map (key files)
+- `src/lib/use-realtime-refresh.ts` — the `postgres_changes` → `router.refresh()` engine. Takes table
+  NAMES or `{table, event, filter}` descriptors; `filter` narrows on the SERVER (event never sent),
+  `shouldRefresh` narrows in the BROWSER (event sent, then discarded). Prefer the former.
+  ⚠️ Filters are part of the channel topic — they must be, or two views watching one table through
+  different filters get handed the same deduped channel.
+- `src/components/shell/shell-live-refresh.tsx` — the app-wide subscription. Exists ONLY to drop
+  `profiles` UPDATEs that changed nothing but `last_seen_at`; a bare `<LiveRefresh>` there refreshed
+  every tab of every teammate every 5 minutes for nothing. Don't inline it back.
+- `src/lib/use-typing.ts` — "Sara is typing…" over Realtime BROADCAST (the third realtime pattern:
+  no row, no refresh). `typingTopic()` SORTS the DM pair — both ends must land on one topic, and
+  "the other person" names a different one depending on who asks. The same shape is parsed by
+  `private.can_use_typing_topic()` in migration 0083; change one, change the other.
 - `src/lib/debug-export.ts` — `taskToText`/`tasksToText`, plus `imageStem`/`imageFilename`/
   `downloadBlob`/`downloadTaskImages`. The filename helpers are the contract between the file
   written to disk and the path written into the clipboard — change one, change both.
@@ -1927,7 +2010,8 @@ surface; run `/impeccable audit` after the batch (design hook was silenced after
 | Task screenshots (2026-07-19) | 6/task, 5MB each, from create form + row + editor + brainstorm; Copy downloads them and names them in the text; **PASTE-TO-UPLOAD done 2026-07-21** (everywhere, incl. the create form) | annotation/crop · thumbnails via a transform URL rather than full-size `unoptimized` (**Phase 4**) | later |
 | ⌘K search | nav actions + content (tasks/projects/ideas/contacts/sprints), loaded-once client-filter (done) | live/fresh results, ranking, recents | later |
 | Presence | **REDESIGNED 2026-07-19 (`a26ff0f`)**: three signals — LIVE online/away/offline dot via presence channels + status (emoji+note, presets are shortcuts) + available-to-call; **simple durations (30m/1h/2h/12h)** auto-expiry; **centered modal editor** w/ live preview + **Save button** (draft, not auto-save); **teammate hover cards** (full status); always-on last-seen column; status-change notify to work team kept (done). **2026-07-20: 9 presets, a 3×3 grid** — added 🍜 Eating · 🚶 Not home · 🛋️ Chilling · 😴 Sleeping (migration **0038 APPLIED 2026-07-21**). **Emoji picker done 2026-07-21** — a curated grid replaced the 4-char text input | open/close delay on hover cards; per-section activity; **per-preset default durations were considered and deliberately declined** (Parsa: expiry stays manual) | later |
-| Realtime | **live updates on every tab via `useRealtimeRefresh`→router.refresh(); debug board in-place (done 2026-07-19)** | in-place patching on more tabs (currently only debug patches; others refresh) | later |
+| Realtime | **live updates on every tab via `useRealtimeRefresh`→router.refresh(); debug board + chat thread in-place (2026-07-19)**. **2026-09-12: the `last_seen_at` heartbeat storm killed (`shell-live-refresh.tsx`); `useRealtimeRefresh` gained SERVER-side `event`/`filter`** | in-place patching on more tabs (only debug + chat patch; others refresh). The new `filter` support is used on ONE call site (`notifications`) — the other ~16 `LiveRefresh` mounts still watch whole tables with `event: "*"` and could be narrowed | later |
+| Typing indicators | **DONE 2026-09-12** — in-thread only, DM + group, private broadcast channel, 2s throttle / 4s expiry, cleared the moment the line lands (migration 0083 APPLIED) | a typing dot in `thread-list.tsx` was **deliberately declined** — it means joining a broadcast topic per visible conversation. Broadcast is now proven, so live cursors / "X is viewing this" are cheap if ever wanted | if asked |
 | Email (Resend) | **NONE — scoped then dropped by Parsa 2026-07-19 ("forget resend for now")**. `resend` not installed | announcements→everyone, task-assign→assignee, admin digests, role-polarized | when Parsa revives it |
 | Debug brainstorm | /debug/brainstorm: capture → one-trip post → per-task details pass + board trail + collapsed notify (done 2026-07-18, v2 after Parsa rejected the inline-bar v1) | — | — |
 | Comms/CRM | leads/clients + linked resources (done) | — | — |
@@ -1940,6 +2024,35 @@ surface; run `/impeccable audit` after the batch (design hook was silenced after
 | i18n | English only | next-intl (TR) | if requested |
 
 ## Gotchas / open issues
+- ⚠️ **A realtime subscription's real cost is the `router.refresh()`, not the socket (2026-09-12).**
+  The socket is nearly free; each event it delivers costs a full server re-render plus an RSC payload
+  from Tokyo. So the question for any new `<LiveRefresh>` is never "is this table interesting?" but
+  **"is every event on this table worth a full page re-render?"** Two traps found:
+  1. **A throttled housekeeping write is still an event.** `last_seen_at` (one tiny UPDATE per user
+     per 5 min) was refreshing the entire app shell in every tab of every teammate — and it exists
+     only as the fallback for a presence channel that already knew better. Whenever a column is
+     written by the *system* rather than by a person, ask whether its stream should refresh anything.
+  2. **Don't widen a `LiveRefresh` to cover a digest.** The activity feed reads seven tables; wiring
+     them in would make the most-visited page in the app re-render on every transaction, contact and
+     task edit team-wide. It refreshes on navigation, and that is correct. **Left non-live on
+     purpose** — there is a comment on the dashboard's `LiveRefresh` saying so; don't "fix" it.
+- ⚠️ **Broadcast topics must be CANONICAL, unlike `postgres_changes` topics (2026-09-12).**
+  `thread.tsx` keys its postgres_changes channel `messages-${otherId}` and that is fine — each client
+  gets its own RLS-filtered stream, so the topic is just a local name. **Broadcast is the opposite:
+  both ends must join the SAME topic**, and "the other person" names a different topic depending on
+  who is asking. Hence the sorted pair in `typingTopic()`. Any future broadcast feature (live
+  cursors, "X is viewing this") has the same trap.
+- ⚠️ **A private broadcast channel is authorized by RLS on `realtime.messages`, not by any table
+  (2026-09-12).** No table is touched, so none of the app's RLS applies. Two consequences: the
+  channel MUST be created with `config: { private: true }` (drop it and the topic is readable by
+  anyone holding the anon key), and a policy must exist for the topic or the join is refused.
+  Migration 0083 raises rather than proceeding if RLS on `realtime.messages` is ever off — a silently
+  open channel is the worst outcome.
+- ⚠️ **`AnnouncementHero` is dead code (noted 2026-09-12).** `src/components/shell/announcement-hero.tsx`
+  is rendered NOWHERE; announcements were deliberately replaced by pinboard notes with an "All
+  members" audience. `lib/actions/announcements.ts` and the `announcements` table still exist and the
+  table is still in the realtime publication. Either revive it or delete it — but don't wire a
+  `LiveRefresh` to it thinking it is a live surface, which is exactly the trap it set this session.
 - ⚠️ **Storage image transforms are baked into the TOKEN, not the query string (2026-07-21, Phase 4).**
   Three traps, all measured against prod, all of which look like success:
   1. **You cannot add a resize to an existing signed URL.** Appending `&width=320&resize=contain` to

@@ -122,9 +122,15 @@ export const Composer = forwardRef<
      * `@` key is ordinary text.
      */
     mentionable?: { id: string; name: string }[];
+    /**
+     * Called on every keystroke so the thread can announce "typing…" to the
+     * other end. Throttled by the caller, not here — the composer shouldn't
+     * have an opinion about how chatty the signal is. Absent = no indicator.
+     */
+    onTyping?: () => void;
   }
 >(function Composer(
-  { onSend, autoFocus = false, draftKey, mentionable },
+  { onSend, autoFocus = false, draftKey, mentionable, onTyping },
   ref
 ) {
   // Seeded from storage on mount, so the words are already there on first paint
@@ -506,6 +512,7 @@ export const Composer = forwardRef<
           onChange={(e) => {
             setDraft(e.target.value);
             setCaretAt(e.target.selectionStart);
+            onTyping?.();
           }}
           // The caret can move without the text changing, which has to close or
           // reopen the picker.

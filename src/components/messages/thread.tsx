@@ -34,6 +34,7 @@ import {
   TaskRefBody,
   taskSearchHref,
 } from "@/components/messages/message-refs";
+import { useTyping } from "@/lib/use-typing";
 import { RichText } from "@/components/messages/rich-text";
 import { CHAT_THUMB_TRANSFORM, chatImagePath } from "@/lib/messages-shared";
 import { buttonClasses, cn } from "@/lib/utils";
@@ -67,6 +68,18 @@ const FULL_TTL_S = 60;
 
 function firstName(members: MembersMap, id: string) {
   return (members[id]?.name ?? "Former member").split(" ")[0];
+}
+
+/**
+ * "Sara is typing…" / "Sara and Ali are typing…" / "3 people are typing…".
+ * Names are dropped past two because the group chat is the only place this can
+ * happen and a list of first names there is longer than the line it describes.
+ */
+function typingLabel(members: MembersMap, ids: string[]) {
+  if (ids.length === 1) return `${firstName(members, ids[0])} is typing…`;
+  if (ids.length === 2)
+    return `${firstName(members, ids[0])} and ${firstName(members, ids[1])} are typing…`;
+  return `${ids.length} people are typing…`;
 }
 
 /** Everything about one bubble that doesn't change unless `messages` does. */
@@ -213,6 +226,19 @@ export function MessageThread({
     markRef.current = mark;
   }, [mark]);
 
+  // "Sara is typing…" — rides a private BROADCAST channel, not the DB. See
+  // lib/use-typing.ts for why this is a third realtime pattern and not one of
+  // the two above.
+  const { typists, notifyTyping, clearTypist, resetThrottle } = useTyping({
+    meId,
+    otherId,
+  });
+  // Same reasoning as markRef: kept out of the subscription's dependencies.
+  const clearTypistRef = useRef(clearTypist);
+  useEffect(() => {
+    clearTypistRef.current = clearTypist;
+  }, [clearTypist]);
+
   // Opening the thread consumes its unread. Skipped when there's nothing unread:
   // marking refreshes the tree (that's how the badge drops), and doing that on
   // every quiet open would be a server round trip for nothing.
@@ -296,7 +322,12 @@ export function MessageThread({
             }
             // Requests a mark; the helper decides whether the reader is actually
             // present, and coalesces a burst of lines into one round trip.
-            if (row.sender_id !== meId) markRef.current();
+            if (row.sender_id !== meId) {
+              markRef.current();
+              // They've evidently stopped — leaving "typing…" under the message
+              // they just sent reads as broken.
+              clearTypistRef.current(row.sender_id);
+            }
           }
         )
         .on(
@@ -780,6 +811,10 @@ export function MessageThread({
     refs: SendRefs = { replyTo: null, task: null }
   ) {
     if (!clean && pending.length === 0 && !refs.task) return;
+    // The line is gone from the composer, so this burst of typing is over. Clear
+    // the throttle rather than announcing a stop — the next keystroke then
+    // re-announces immediately instead of waiting out the window.
+    resetThrottle();
     const tempId = `temp-${Date.now()}-${Math.random().toString(36).slice(2)}`;
     const now = new Date().toISOString();
     const temp: Message = {
@@ -1117,6 +1152,19 @@ export function MessageThread({
         <div ref={endRef} />
       </div>
 
+      {/* Outside the scroll container on purpose: appearing and vanishing inside
+          it would move the reader's place and fight the scroll anchoring above.
+          It reserves no height when nobody is typing — a permanently-reserved
+          row is more visually distracting than the line arriving. */}
+      {typists.length > 0 && (
+        <p
+          aria-live="polite"
+          className="px-1 pb-1 text-[calc(12px*var(--text-scale,1))] text-faint"
+        >
+          {typingLabel(members, typists)}
+        </p>
+      )}
+
       {readOnly ? (
         <div className="border-t border-line pt-3">
           <p className="py-2 text-center text-[calc(13px*var(--text-scale,1))] text-faint">
@@ -1131,6 +1179,7 @@ export function MessageThread({
           onSend={handleSend}
           autoFocus
           draftKey={`kagu:draft:${otherId ?? "team"}`}
+          onTyping={notifyTyping}
           // Group chat only: a DM's recipient is notified anyway, so @ there
           // would just be a second bell for the same message.
           mentionable={mentionable}
