@@ -70,6 +70,55 @@ Contracts w/ PDFs), **Debug** (everyone: per-project boards, self-claim-only, re
 - Chart colors are validated (dataviz skill): income `oklch(0.62 0.13 160)`, expense
   `oklch(0.55 0.16 25)` — L band 0.48–0.67 on dark; re-validate any new chart palette.
 
+## Current status (2026-09-13)
+
+### 🟢 NEW LEARN SPRINT: "KAGU DIGITAL MARKETING" — 90 days, 14 stages, SEEDED TO PROD (2026-09-13) — tsc clean · lint at the 2 known errors · build green · dry run + prod readback match · in-app page NOT yet eyeballed (no login creds on this machine)
+
+Parsa handed over a marketing-trainee curriculum ("Kagu Performance Academy", 15 modules + myths
+table + 90-day path) and asked for a Learn sprint. Built the Level 1/2 way: HTML syllabus in
+`public/learn/`, seeded by `scripts/seed-learn-levels.ts`.
+
+- **Sprint** `46f9d37e-d314-45a9-9ffc-4f88dd01d3d7`, open to join, 2026-09-13 → 2026-12-11.
+  Content: `scripts/learn-programs/digital-marketing.ts`. Syllabus:
+  `public/learn/kagu-digital-marketing.html` (the supplied fragment wrapped as a full document).
+- **Mapping decisions (agreed with Parsa):** module 00 is the "How to actually learn this" rules
+  panel, NOT a stage — stage nodes number from 01, so a stage 00 would have put Meta Ads (module 04)
+  under node 05. Modules 01–14 = stages; "You must be able to explain" bullets = goals (short title,
+  bullet verbatim as detail); key facts/tables/callouts = stage detail paragraphs. Days come from the
+  90-day path, and a row covering several modules gives each the whole range. 13 ("ongoing") and 14
+  are undated. **Proofs = the 90-day path's tasks** (11 stages); 07, 11 and 13 are tick-only.
+  No capstone.
+- **Source corrections (approved):** the syllabus header said ~60 h / 16 reviewed videos / 90+
+  resources; the truth is 84 h / 17 / 78 unique links. Module 09 "1–1.6 winners" became "0.7–1.6"
+  (3.7–8.2% of 20). Eight YouTube titles replaced with YouTube's exact titles (checked via oEmbed),
+  in both the sprint and the syllabus. The module-12 repeat of the AgencyAnalytics video keeps a
+  shortened title on purpose, because resource titles are the seed's identity key and must be unique.
+- **Link check:** every video exists with the claimed channel. Meta/Instagram pages return 400/403 to
+  scripted fetches and 200 with browser headers. The Ad Library blocks scripts entirely, and
+  Instagram's Account Status page is JS-rendered (loads, content unverified). Claims dated after
+  May 2026 were taken as written, not fact-checked.
+
+**Seed script changes (read before running it again):**
+- ⚠️ **Fixed a footgun:** every run used to reset `starts_on` to today on EXISTING sprints, so
+  `npm run seed:learn` would silently restart Level 1/2 (and Level 2 had been hand-edited to 15
+  days, which the seed would also have overwritten). Now an existing sprint keeps its start unless
+  `--start` is passed; `ends_on` follows `days`.
+- `--only level-1,level-2,digital-marketing` (default all) · `--dry-run` (validate + counts, no writes).
+- `validateProgram()` runs on every selected program BEFORE the first write. It checks: empty stages
+  (they never clear, so "current" would be pinned forever), duplicate stage/goal/resource titles,
+  day and hour ranges, proof/proofGoal pairing, URL shape. Before this, `reconcile` threw partway
+  through a seed.
+
+**Stats strip fix** (`program-stats.tsx`): columns now follow the cell count. A program without a
+capstone has 3 cells, and the fixed 4-column grid painted its `bg-line` background as a grey block
+where the 4th cell would be. Level 1/2 (4 cells) render unchanged.
+
+**Still to do:** open `/learn/46f9d37e-…` logged in, at desktop and 390px, and check: nodes 01–14,
+5 rules, stats "90 days · 84 hours · 14 stages" with no grey block, a proof block with criteria, the
+syllabus link opening behind login, and Level 1 still showing 4 stat cells. **Maintenance:** the
+document itself says to update module 13 in January 2027 (DST 5% → 2.5%). Edit the content file
+and run `npm run seed:learn -- --only digital-marketing`; reworded goals lose their ticks by design.
+
 ## Current status (2026-09-12)
 
 ### 🟢 REALTIME: THE HEARTBEAT REFRESH STORM KILLED + TYPING INDICATORS ON BROADCAST (2026-09-12) — tsc clean · lint unchanged (the 2 known pre-existing errors only) · build green, **migration 0083 APPLIED to prod and schema-verified**, live two-browser drive by Parsa PENDING

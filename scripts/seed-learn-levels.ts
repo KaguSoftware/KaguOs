@@ -1,8 +1,9 @@
 /**
- * Seeds the two Kagu Learn programs (Level 1 Beginner, Level 2 Intermediate)
- * as real, joinable sprints — stages, goals, proofs, and the resources that
- * hang off each. The source is the two syllabus documents in `public/learn/`;
- * this script is what turns them from a page you read into a sprint you run.
+ * Seeds the Kagu Learn programs (Level 1 Beginner, Level 2 Intermediate, Kagu
+ * Digital Marketing) as real, joinable sprints — stages, goals, proofs, and the
+ * resources that hang off each. The source is the syllabus documents in
+ * `public/learn/`; this script is what turns them from a page you read into a
+ * sprint you run.
  *
  * Idempotent: a program is matched by title, and so is every stage, goal and
  * resource inside it. Re-running edits rows in place rather than replacing
@@ -11,13 +12,22 @@
  * retire it: the old row (and the ticks on it) goes, because nobody has done
  * the new thing yet.
  *
- * Usage:  npx tsx scripts/seed-learn-levels.ts [--start YYYY-MM-DD]
+ * Dates: a sprint that doesn't exist yet starts today (Istanbul) unless
+ * `--start` says otherwise. A sprint that already exists KEEPS its start date —
+ * refreshing a program's wording must not quietly restart a run people are
+ * halfway through. Pass `--start` to move it on purpose.
+ *
+ * Usage:  npx tsx scripts/seed-learn-levels.ts
+ *           [--only level-1,level-2,digital-marketing]  (default: all)
+ *           [--start YYYY-MM-DD]
+ *           [--dry-run]  validate and count, write nothing
  */
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { DIGITAL_MARKETING } from "./learn-programs/digital-marketing";
 
-type ResourceSeed = {
+export type ResourceSeed = {
   title: string;
   url: string;
   /** Decides the row's mark: a play triangle or an open book. */
@@ -32,7 +42,7 @@ type ResourceSeed = {
  * seed with a `goal_id` (0060), which is what makes them render numbered under
  * their goal rather than in a reading list beside it.
  */
-type GoalSeed = {
+export type GoalSeed = {
   title: string;
   /** The sentence under the title: what the line actually means. */
   detail?: string;
@@ -41,12 +51,12 @@ type GoalSeed = {
 };
 
 /** Most goals are just a line of text; the terse form stays available. */
-type GoalEntry = string | GoalSeed;
+export type GoalEntry = string | GoalSeed;
 
 const asGoal = (entry: GoalEntry): GoalSeed =>
   typeof entry === "string" ? { title: entry } : entry;
 
-type StageSeed = {
+export type StageSeed = {
   title: string;
   summary?: string;
   /** The paragraphs behind the summary. Blank line = new paragraph. */
@@ -70,7 +80,7 @@ type StageSeed = {
   resources?: ResourceSeed[];
 };
 
-type ProgramSeed = {
+export type ProgramSeed = {
   title: string;
   /** Sits under the title: "Using Claude — the beginner program". */
   tagline: string;
@@ -1098,7 +1108,122 @@ const LEVEL_2: ProgramSeed = {
   ],
 };
 
-const PROGRAMS = [LEVEL_1, LEVEL_2];
+/** Keyed so one program can be seeded without touching the others (`--only`). */
+const PROGRAMS: Record<string, ProgramSeed> = {
+  "level-1": LEVEL_1,
+  "level-2": LEVEL_2,
+  "digital-marketing": DIGITAL_MARKETING,
+};
+
+/* --------------------------------------------------------------- validation */
+
+/**
+ * Everything that would otherwise fail halfway through a seed, checked before
+ * the first write. `reconcile` refuses duplicate titles too, but only once the
+ * sprint row and the stages before it are already written — a half-seeded
+ * program is worse than none, because it looks finished.
+ */
+function validateProgram(key: string, program: ProgramSeed): string[] {
+  const problems: string[] = [];
+  const at = (where: string, message: string) => problems.push(`${key} › ${where}: ${message}`);
+
+  if (!Number.isInteger(program.days) || program.days < 1) {
+    at("program", `days must be a positive integer, got ${program.days}`);
+  }
+
+  const dupes = (kind: string, titles: string[]) => {
+    const seen = new Set<string>();
+    for (const title of titles) {
+      if (seen.has(title)) at(kind, `duplicate title "${title}"`);
+      seen.add(title);
+    }
+  };
+
+  const goalTitles: string[] = [];
+  const resourceTitles: string[] = program.syllabus ? [program.syllabus.title] : [];
+  const urls: { where: string; url: string }[] = program.syllabus
+    ? [{ where: "syllabus", url: program.syllabus.url }]
+    : [];
+
+  for (const stage of program.stages) {
+    const where = `stage "${stage.title}"`;
+
+    // An empty stage is never "cleared" (buildStageViews), so it would pin the
+    // "you are here" marker to itself for everyone, forever.
+    if (stage.goals.length === 0 && !stage.proofGoal) at(where, "has no goals");
+
+    if (Boolean(stage.proof) !== Boolean(stage.proofGoal)) {
+      at(where, "proof and proofGoal must both be set or both be absent");
+    }
+    if ((stage.criteria?.length || stage.proofBrief || stage.proofSubmit) && !stage.proofGoal) {
+      at(where, "criteria / proofBrief / proofSubmit without a proof");
+    }
+
+    if ((stage.day_from === undefined) !== (stage.day_to === undefined)) {
+      at(where, "day_from and day_to must both be set or both be absent");
+    }
+    if (stage.day_from !== undefined && stage.day_to !== undefined) {
+      if (stage.day_from < 1 || stage.day_to > program.days || stage.day_from > stage.day_to) {
+        at(where, `days ${stage.day_from}–${stage.day_to} fall outside 1–${program.days}`);
+      }
+    }
+    if (
+      stage.hours_low !== undefined &&
+      stage.hours_high !== undefined &&
+      stage.hours_low > stage.hours_high
+    ) {
+      at(where, `hours ${stage.hours_low}–${stage.hours_high} are reversed`);
+    }
+
+    for (const entry of stage.goals) {
+      const goal = asGoal(entry);
+      goalTitles.push(goal.title);
+      for (const item of goal.teach ?? []) {
+        resourceTitles.push(item.title);
+        urls.push({ where: `${where} › "${item.title}"`, url: item.url });
+      }
+    }
+    if (stage.proofGoal) goalTitles.push(stage.proofGoal);
+    for (const resource of stage.resources ?? []) {
+      resourceTitles.push(resource.title);
+      urls.push({ where: `${where} › "${resource.title}"`, url: resource.url });
+    }
+  }
+
+  dupes("stages", program.stages.map((s) => s.title));
+  dupes("goals", goalTitles);
+  dupes("resources", resourceTitles);
+
+  for (const { where, url } of urls) {
+    if (!/^https:\/\/\S+$/.test(url) && !/^\/learn\/\S+$/.test(url)) {
+      at(where, `url must be https:// or /learn/…, got "${url}"`);
+    }
+  }
+
+  return problems;
+}
+
+/** Row counts a seed of this program would write — the dry run's report. */
+function countProgram(program: ProgramSeed) {
+  let goals = 0;
+  let resources = program.syllabus ? 1 : 0;
+  let criteria = 0;
+  for (const stage of program.stages) {
+    goals += stage.goals.length + (stage.proofGoal ? 1 : 0);
+    resources += stage.resources?.length ?? 0;
+    for (const entry of stage.goals) resources += asGoal(entry).teach?.length ?? 0;
+    criteria += stage.criteria?.length ?? 0;
+  }
+  return {
+    stages: program.stages.length,
+    goals,
+    resources,
+    practices:
+      (program.rules?.length ?? 0) + (program.session?.length ?? 0) + (program.build?.length ?? 0),
+    criteria,
+    proofs: program.stages.filter((s) => s.proofGoal).length,
+  };
+}
 
 /* ------------------------------------------------------------------- runner */
 
@@ -1208,19 +1333,23 @@ async function reconcile<T extends { title: string }>(
 async function seedProgram(
   supabase: SupabaseClient,
   program: ProgramSeed,
-  startsOn: string
+  /** From `--start`. Null = keep an existing sprint's date, or today for a new one. */
+  requestedStart: string | null
 ) {
-  const endsOn = addDays(startsOn, program.days - 1);
-
   // Match on title so re-running edits the same sprint rather than piling up
   // copies. Participants and ticks survive — see `reconcile` above.
   const { data: existing, error: findError } = await supabase
     .from("sprints")
-    .select("id")
+    .select("id, starts_on")
     .eq("title", program.title)
     .eq("is_demo", false)
     .maybeSingle();
   if (findError) throw new Error(`Looking up "${program.title}": ${findError.message}`);
+
+  // A refresh must not restart a run in progress: without an explicit --start,
+  // an existing sprint keeps its start and only its end follows `days`.
+  const startsOn = requestedStart ?? (existing?.starts_on as string | undefined) ?? istanbulToday();
+  const endsOn = addDays(startsOn, program.days - 1);
 
   const fields = {
     description: program.description,
@@ -1459,6 +1588,8 @@ async function seedProgram(
   return {
     id: sprintId,
     created: !existing,
+    startsOn,
+    endsOn,
     stages: program.stages.length,
     goals: goalRows.length,
     resources: resourceRows.length,
@@ -1467,7 +1598,52 @@ async function seedProgram(
   };
 }
 
+/** `--flag value` → value, or null when the flag is absent. */
+function flagValue(name: string): string | null {
+  const index = process.argv.indexOf(name);
+  if (index === -1) return null;
+  const value = process.argv[index + 1];
+  if (!value || value.startsWith("--")) throw new Error(`${name} needs a value`);
+  return value;
+}
+
 async function main() {
+  const onlyFlag = flagValue("--only");
+  const keys = onlyFlag
+    ? onlyFlag.split(",").map((k) => k.trim()).filter(Boolean)
+    : Object.keys(PROGRAMS);
+  const unknown = keys.filter((k) => !(k in PROGRAMS));
+  if (unknown.length > 0 || keys.length === 0) {
+    throw new Error(
+      `--only: unknown program ${unknown.map((k) => `"${k}"`).join(", ") || "(none given)"}. ` +
+        `Known: ${Object.keys(PROGRAMS).join(", ")}`
+    );
+  }
+
+  const requestedStart = flagValue("--start");
+  if (requestedStart !== null && !/^\d{4}-\d{2}-\d{2}$/.test(requestedStart)) {
+    throw new Error(`--start must be YYYY-MM-DD, got "${requestedStart}"`);
+  }
+
+  // Every selected program is validated before anything touches the database.
+  const problems = keys.flatMap((key) => validateProgram(key, PROGRAMS[key]));
+  if (problems.length > 0) {
+    throw new Error(`The seed has ${problems.length} problem(s):\n  ${problems.join("\n  ")}`);
+  }
+
+  if (process.argv.includes("--dry-run")) {
+    for (const key of keys) {
+      const c = countProgram(PROGRAMS[key]);
+      console.log(
+        `[dry run] ${key} "${PROGRAMS[key].title}" — ${PROGRAMS[key].days} days, ` +
+          `${c.stages} stages (${c.proofs} with a proof), ${c.goals} goals, ` +
+          `${c.resources} resources, ${c.practices} practice blocks, ${c.criteria} proof conditions`
+      );
+    }
+    console.log("\nValid. Nothing was written.");
+    return;
+  }
+
   loadEnvLocal();
 
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -1485,29 +1661,22 @@ async function main() {
     );
   }
 
-  const startFlag = process.argv.indexOf("--start");
-  const startsOn =
-    startFlag !== -1 && process.argv[startFlag + 1]
-      ? process.argv[startFlag + 1]
-      : istanbulToday();
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(startsOn)) {
-    throw new Error(`--start must be YYYY-MM-DD, got "${startsOn}"`);
-  }
-
   const supabase = createClient(url, serviceKey, {
     auth: { autoRefreshToken: false, persistSession: false },
   });
 
-  for (const program of PROGRAMS) {
-    const result = await seedProgram(supabase, program, startsOn);
+  for (const key of keys) {
+    const program = PROGRAMS[key];
+    const result = await seedProgram(supabase, program, requestedStart);
     console.log(
       `${result.created ? "Created" : "Refreshed"} "${program.title}" — ` +
+        `${result.startsOn} → ${result.endsOn}, ` +
         `${result.stages} stages, ${result.goals} goals, ${result.resources} resources, ` +
         `${result.practices} practice blocks, ${result.criteria} proof conditions ` +
         `(${result.id})`
     );
   }
-  console.log(`\nBoth programs start ${startsOn} and are open to join.`);
+  console.log("\nOpen to join.");
 }
 
 main().catch((error) => {

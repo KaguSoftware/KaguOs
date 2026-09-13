@@ -1,4 +1,17 @@
 import { hoursLabel, type ProgramStats } from "@/lib/learn";
+import { cn } from "@/lib/utils";
+
+/**
+ * Columns follow the cell count. The strip's hairlines are its background
+ * showing through a 1px gap, so an empty track isn't blank — it's a grey block.
+ * A program without a capstone has three cells, and a fixed four-column grid
+ * painted that block where the fourth would have been.
+ */
+const COLUMNS: Record<number, string> = {
+  2: "grid-cols-2",
+  3: "grid-cols-3",
+  4: "grid-cols-2 sm:grid-cols-4",
+};
 
 /**
  * The four numbers a program leads with. Every one is counted from the stages
@@ -33,7 +46,12 @@ export function ProgramStatsRow({ stats }: { stats: ProgramStats }) {
   if (cells.length < 2) return null;
 
   return (
-    <dl className="grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-line bg-line sm:grid-cols-4">
+    <dl
+      className={cn(
+        "grid gap-px overflow-hidden rounded-lg border border-line bg-line",
+        COLUMNS[cells.length]
+      )}
+    >
       {cells.map((cell) => (
         <div key={cell.label} className="bg-surface px-4 py-3">
           <dd className="font-mono text-lg leading-none tabular-nums text-ink">

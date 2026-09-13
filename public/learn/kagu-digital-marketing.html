@@ -1,0 +1,1801 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Kagu Performance Academy</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;800&family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+
+<style>
+:root{
+  --ground:#080D1A;
+  --panel:#0F1830;
+  --panel2:#15203C;
+  --line:#26324F;
+  --line-soft:#1B2540;
+  --text:#E9EDF7;
+  --muted:#8E9CBE;
+  --dim:#6A7797;
+  --accent:#FFA51F;
+  --accent-deep:#B36E00;
+  --ok:#5FD08A;
+  --warn:#FF6B6B;
+  --info:#63A9FF;
+  --tr:#E84B4B;
+
+  --display:"Archivo","Arial Black",Helvetica,sans-serif;
+  --body:"IBM Plex Sans","Segoe UI",Helvetica,Arial,sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,"SFMono-Regular",Menlo,Consolas,monospace;
+
+  --s1:6px; --s2:12px; --s3:18px; --s4:28px; --s5:44px; --s6:72px;
+  color-scheme: dark;
+}
+
+*{box-sizing:border-box;}
+
+body{
+  margin:0;
+  background:var(--ground);
+  color:var(--text);
+  font-family:var(--body);
+  font-size:16px;
+  line-height:1.62;
+  -webkit-font-smoothing:antialiased;
+}
+
+a{color:var(--accent);text-decoration:none;}
+a:hover{text-decoration:underline;}
+:focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius:2px;}
+
+/* ---------- shell ---------- */
+.wrap{
+  max-width:1240px;
+  margin:0 auto;
+  padding-inline:20px;
+  padding-block:0;
+}
+.layout{
+  display:grid;
+  grid-template-columns:230px minmax(0,1fr);
+  gap:var(--s6);
+  align-items:start;
+}
+@media (max-width:960px){
+  .layout{grid-template-columns:minmax(0,1fr);gap:var(--s4);}
+  .rail{position:static;max-height:none;}
+}
+
+/* ---------- masthead ---------- */
+.mast{
+  border-bottom:1px solid var(--line);
+  background:
+    radial-gradient(900px 340px at 12% -10%, rgba(255,165,31,.13), transparent 60%),
+    var(--ground);
+}
+.mast-in{
+  max-width:1240px;margin:0 auto;
+  padding-inline:20px;
+  padding-block:var(--s6) var(--s5);
+}
+.eyebrow{
+  font-family:var(--mono);
+  font-size:11px;
+  letter-spacing:.22em;
+  text-transform:uppercase;
+  color:var(--accent);
+  margin:0 0 var(--s3);
+}
+h1{
+  font-family:var(--display);
+  font-weight:800;
+  text-transform:uppercase;
+  letter-spacing:-.015em;
+  line-height:.94;
+  font-size:clamp(38px,7.2vw,76px);
+  margin:0 0 var(--s3);
+  text-wrap:balance;
+  max-width:15ch;
+}
+h1 em{font-style:normal;color:var(--accent);}
+.standfirst{
+  max-width:62ch;
+  font-size:clamp(16px,1.6vw,19px);
+  color:var(--muted);
+  margin:0 0 var(--s4);
+}
+.standfirst strong{color:var(--text);font-weight:600;}
+
+.facts{
+  display:flex;flex-wrap:wrap;gap:var(--s2) var(--s4);
+  font-family:var(--mono);font-size:11.5px;letter-spacing:.12em;
+  text-transform:uppercase;color:var(--dim);
+  border-top:1px solid var(--line-soft);
+  padding-top:var(--s3);
+}
+.facts b{color:var(--text);font-weight:600;}
+
+/* ---------- search bar ---------- */
+.toolbar{
+  position:sticky;top:0;z-index:20;
+  background:rgba(8,13,26,.93);
+  backdrop-filter:blur(10px);
+  border-bottom:1px solid var(--line);
+}
+.toolbar-in{
+  max-width:1240px;margin:0 auto;
+  padding-inline:20px;padding-block:10px;
+  display:flex;gap:var(--s2);align-items:center;flex-wrap:wrap;
+}
+#q{
+  flex:1 1 240px;min-width:0;
+  background:var(--panel);
+  border:1px solid var(--line);
+  color:var(--text);
+  font-family:var(--mono);font-size:13px;
+  padding:9px 12px;border-radius:3px;
+}
+#q::placeholder{color:var(--dim);}
+.chipset{display:flex;gap:6px;flex-wrap:wrap;}
+.chip{
+  font-family:var(--mono);font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;
+  background:transparent;border:1px solid var(--line);color:var(--muted);
+  padding:7px 10px;border-radius:3px;cursor:pointer;
+}
+.chip[aria-pressed="true"]{border-color:var(--accent);color:var(--ground);background:var(--accent);font-weight:600;}
+#count{font-family:var(--mono);font-size:11px;color:var(--dim);letter-spacing:.1em;text-transform:uppercase;}
+
+/* ---------- rail ---------- */
+.rail{
+  position:sticky;top:64px;
+  max-height:calc(100vh - 88px);
+  overflow:auto;
+  padding-block:var(--s5) var(--s4);
+  border-right:1px solid var(--line-soft);
+  padding-right:var(--s3);
+}
+.rail h2{
+  font-family:var(--mono);font-size:10.5px;letter-spacing:.2em;text-transform:uppercase;
+  color:var(--dim);margin:0 0 var(--s3);font-weight:400;
+}
+.rail ol{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:2px;}
+.rail a{
+  display:grid;grid-template-columns:26px 1fr;gap:8px;
+  color:var(--muted);font-size:13.5px;line-height:1.35;
+  padding:6px 6px 6px 0;border-left:2px solid transparent;padding-left:10px;
+  text-decoration:none;
+}
+.rail a:hover{color:var(--text);border-left-color:var(--accent-deep);text-decoration:none;}
+.rail a.on{color:var(--text);border-left-color:var(--accent);}
+.rail .n{font-family:var(--mono);font-size:11px;color:var(--dim);padding-top:2px;}
+.rail a.done .n::after{content:"✓";color:var(--ok);margin-left:2px;}
+
+/* ---------- modules ---------- */
+main{padding-block:var(--s5) var(--s6);}
+.module{
+  padding-block:var(--s5);
+  border-top:1px solid var(--line-soft);
+  scroll-margin-top:64px;
+}
+.module:first-of-type{border-top:0;padding-top:var(--s4);}
+.mhead{display:flex;gap:var(--s3);align-items:flex-start;flex-wrap:wrap;margin-bottom:var(--s3);}
+.mnum{
+  font-family:var(--display);font-weight:800;font-size:42px;line-height:.8;
+  color:var(--accent);opacity:.85;
+  font-variant-numeric:tabular-nums;
+}
+.mtitles{flex:1 1 260px;min-width:0;}
+.mkicker{
+  font-family:var(--mono);font-size:10.5px;letter-spacing:.2em;text-transform:uppercase;
+  color:var(--dim);margin:0 0 4px;
+}
+h3{
+  font-family:var(--display);font-weight:700;text-transform:uppercase;
+  font-size:clamp(21px,2.6vw,29px);line-height:1.06;letter-spacing:-.01em;
+  margin:0;text-wrap:balance;
+}
+.mark{
+  font-family:var(--mono);font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;
+  color:var(--dim);background:transparent;border:1px solid var(--line);
+  padding:6px 10px;border-radius:3px;cursor:pointer;align-self:center;white-space:nowrap;
+}
+.mark[aria-pressed="true"]{border-color:var(--ok);color:var(--ok);}
+.mark[aria-pressed="true"]::before{content:"✓ ";}
+
+.lede{max-width:66ch;color:var(--muted);margin:0 0 var(--s3);}
+.lede strong{color:var(--text);font-weight:600;}
+.module p{max-width:66ch;}
+
+/* learning outcomes */
+.outcomes{
+  margin:var(--s3) 0;padding:var(--s3) var(--s3) var(--s3) var(--s4);
+  background:var(--panel);border-left:3px solid var(--accent);border-radius:0 3px 3px 0;
+}
+.outcomes h4{
+  font-family:var(--mono);font-size:10.5px;letter-spacing:.18em;text-transform:uppercase;
+  color:var(--accent);margin:0 0 10px;font-weight:600;
+}
+.outcomes ul{margin:0;padding-left:18px;display:flex;flex-direction:column;gap:6px;}
+.outcomes li{color:var(--text);font-size:14.5px;max-width:70ch;}
+
+/* key facts */
+.keys{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:1px;background:var(--line-soft);border:1px solid var(--line-soft);margin:var(--s3) 0;}
+.key{background:var(--ground);padding:var(--s3);}
+.key dt{font-family:var(--mono);font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--dim);margin-bottom:6px;}
+.key dd{margin:0;font-size:14.5px;color:var(--text);}
+.key dd b{color:var(--accent);font-weight:600;font-variant-numeric:tabular-nums;}
+
+/* resources */
+.reshead{
+  font-family:var(--mono);font-size:10.5px;letter-spacing:.2em;text-transform:uppercase;
+  color:var(--dim);margin:var(--s4) 0 var(--s2);padding-bottom:6px;border-bottom:1px solid var(--line-soft);
+}
+.res-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(290px,1fr));gap:10px;}
+.res{
+  display:flex;flex-direction:column;gap:7px;
+  background:var(--panel);
+  border:1px solid var(--line-soft);
+  border-left:3px solid var(--accent-deep);
+  padding:14px 16px;border-radius:0 3px 3px 0;
+  color:var(--text);text-decoration:none;
+  transition:border-color .14s ease, background .14s ease, transform .14s ease;
+}
+.res:hover{background:var(--panel2);border-left-color:var(--accent);text-decoration:none;transform:translateX(2px);}
+.res-top{display:flex;gap:6px;align-items:center;flex-wrap:wrap;}
+.badge{
+  font-family:var(--mono);font-size:9.5px;letter-spacing:.14em;text-transform:uppercase;
+  padding:3px 7px;border-radius:2px;font-weight:600;white-space:nowrap;
+}
+.b-video{background:rgba(255,165,31,.15);color:var(--accent);}
+.b-doc{background:rgba(99,169,255,.14);color:var(--info);}
+.b-tool{background:rgba(95,208,138,.14);color:var(--ok);}
+.b-course{background:rgba(233,237,247,.1);color:var(--text);}
+.b-data{background:rgba(142,156,190,.14);color:var(--muted);}
+.b-law{background:rgba(232,75,75,.15);color:var(--tr);}
+.vet{font-family:var(--mono);font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--ok);}
+.vet.un{color:var(--dim);}
+.res-title{font-weight:600;font-size:15px;line-height:1.34;}
+.res-meta{font-family:var(--mono);font-size:11px;color:var(--dim);letter-spacing:.03em;}
+.res-note{font-size:13.5px;color:var(--muted);line-height:1.5;}
+
+/* turkey panel */
+.tr-panel{
+  margin:var(--s4) 0;
+  border:1px solid rgba(232,75,75,.35);
+  background:linear-gradient(180deg, rgba(232,75,75,.07), rgba(232,75,75,.02));
+  padding:var(--s3) var(--s4);
+}
+.tr-panel h4{
+  font-family:var(--mono);font-size:10.5px;letter-spacing:.18em;text-transform:uppercase;
+  color:var(--tr);margin:0 0 10px;font-weight:600;
+}
+.tr-panel p{margin:0 0 10px;font-size:14.5px;color:var(--text);max-width:70ch;}
+.tr-panel p:last-child{margin-bottom:0;}
+.tr-panel ul{margin:0;padding-left:18px;font-size:14.5px;display:flex;flex-direction:column;gap:5px;max-width:70ch;}
+
+/* warn panel */
+.callout{
+  margin:var(--s3) 0;padding:var(--s3) var(--s4);
+  border:1px solid var(--line);background:var(--panel);
+}
+.callout h4{
+  font-family:var(--mono);font-size:10.5px;letter-spacing:.18em;text-transform:uppercase;
+  color:var(--muted);margin:0 0 8px;font-weight:600;
+}
+.callout p{margin:0;font-size:14.5px;color:var(--text);max-width:70ch;}
+
+/* tables */
+.tablewrap{overflow-x:auto;margin:var(--s3) 0;border:1px solid var(--line-soft);}
+table{border-collapse:collapse;width:100%;min-width:520px;font-size:14px;}
+th,td{text-align:left;padding:10px 14px;border-bottom:1px solid var(--line-soft);vertical-align:top;}
+th{
+  font-family:var(--mono);font-size:10px;letter-spacing:.16em;text-transform:uppercase;
+  color:var(--dim);font-weight:600;background:var(--panel);position:sticky;top:0;
+}
+td{color:var(--muted);}
+td:first-child{color:var(--text);font-weight:500;}
+tbody tr:last-child td{border-bottom:0;}
+td b{color:var(--text);}
+.v-myth{color:var(--warn);font-weight:600;}
+.v-true{color:var(--ok);font-weight:600;}
+.v-half{color:var(--accent);font-weight:600;}
+
+/* formula */
+.formula{
+  font-family:var(--mono);font-size:14px;color:var(--accent);
+  background:var(--panel);border:1px dashed var(--line);
+  padding:12px 16px;margin:var(--s2) 0;overflow-x:auto;
+}
+
+/* footer */
+footer{
+  border-top:1px solid var(--line);
+  margin-top:var(--s5);
+}
+.foot-in{
+  max-width:1240px;margin:0 auto;padding-inline:20px;padding-block:var(--s4) var(--s5);
+  display:flex;gap:var(--s4);flex-wrap:wrap;justify-content:space-between;align-items:flex-start;
+}
+.foot-in p{font-size:13px;color:var(--dim);max-width:58ch;margin:0;}
+.foot-in .sig{font-family:var(--mono);font-size:10.5px;letter-spacing:.18em;text-transform:uppercase;color:var(--dim);}
+
+.hidden{display:none !important;}
+@media (prefers-reduced-motion:reduce){*{transition:none !important;animation:none !important;}}
+</style>
+</head>
+<body>
+
+<header class="mast">
+  <div class="mast-in">
+    <p class="eyebrow">Kagu Digital Marketing · Trainee Curriculum · September 2026</p>
+    <h1>From zero to <em>agency-ready</em> media buyer</h1>
+    <p class="standfirst">Everything a new Kagu marketing hire needs to learn, in the order they should learn it. <strong>Every link on this page is free.</strong> No paid courses, no paid tools, no gated downloads. Written for the Turkish market: the platforms, the tax stack, and the advertising law that actually applies here.</p>
+    <div class="facts">
+      <span><b>15</b> modules</span>
+      <span><b>17</b> videos reviewed frame-by-frame</span>
+      <span><b>78</b> free resources</span>
+      <span><b>~84 h</b> of study</span>
+      <span>English · Türkiye</span>
+    </div>
+  </div>
+</header>
+
+<div class="toolbar">
+  <div class="toolbar-in">
+    <input id="q" type="search" placeholder="Search the library — try &quot;CAPI&quot;, &quot;hook&quot;, &quot;stopaj&quot;, &quot;Reklam Kurulu&quot;" autocomplete="off">
+    <div class="chipset">
+      <button class="chip" data-f="all" aria-pressed="true" id="f-all">All</button>
+      <button class="chip" data-f="video" aria-pressed="false">Video</button>
+      <button class="chip" data-f="doc" aria-pressed="false">Official doc</button>
+      <button class="chip" data-f="course" aria-pressed="false">Free course</button>
+      <button class="chip" data-f="tool" aria-pressed="false">Tool</button>
+      <button class="chip" data-f="law" aria-pressed="false">Law / tax</button>
+    </div>
+    <span id="count"></span>
+  </div>
+</div>
+
+<div class="wrap">
+<div class="layout">
+
+  <nav class="rail" aria-label="Module index">
+    <h2>Modules</h2>
+    <ol id="rail-list">
+      <li><a href="#m00"><span class="n">00</span><span>How to use this</span></a></li>
+      <li><a href="#m01"><span class="n">01</span><span>The language of performance</span></a></li>
+      <li><a href="#m02"><span class="n">02</span><span>Account access &amp; governance</span></a></li>
+      <li><a href="#m03"><span class="n">03</span><span>Measurement first</span></a></li>
+      <li><a href="#m04"><span class="n">04</span><span>Meta Ads</span></a></li>
+      <li><a href="#m05"><span class="n">05</span><span>TikTok Ads</span></a></li>
+      <li><a href="#m06"><span class="n">06</span><span>Google Ads</span></a></li>
+      <li><a href="#m07"><span class="n">07</span><span>Instagram &amp; TikTok ranking</span></a></li>
+      <li><a href="#m08"><span class="n">08</span><span>Short-form craft</span></a></li>
+      <li><a href="#m09"><span class="n">09</span><span>Creative strategy &amp; the offer</span></a></li>
+      <li><a href="#m10"><span class="n">10</span><span>Scaling &amp; diagnosis</span></a></li>
+      <li><a href="#m11"><span class="n">11</span><span>Publishing operations</span></a></li>
+      <li><a href="#m12"><span class="n">12</span><span>Client work</span></a></li>
+      <li><a href="#m13"><span class="n">13</span><span>Türkiye: tax &amp; law</span></a></li>
+      <li><a href="#m14"><span class="n">14</span><span>Free certifications</span></a></li>
+      <li><a href="#myths"><span class="n">▲</span><span>Myths vs evidence</span></a></li>
+      <li><a href="#plan"><span class="n">▲</span><span>The 90-day path</span></a></li>
+    </ol>
+  </nav>
+
+  <main>
+
+  <!-- ============ 00 ============ -->
+  <section class="module" id="m00" data-mod="00">
+    <div class="mhead">
+      <div class="mnum">00</div>
+      <div class="mtitles">
+        <p class="mkicker">Start here · 20 minutes</p>
+        <h3>How to use this, and the one idea that holds it together</h3>
+      </div>
+      <button class="mark" data-m="00" aria-pressed="false">Mark done</button>
+    </div>
+
+    <p class="lede">Work the modules in order. They are sequenced so that nothing later depends on something you haven't met yet — measurement comes before campaign building, not after, because signal quality is where juniors do damage that can't be undone. Each module tells you what you must be able to <strong>explain out loud</strong> before moving on. If you can't, rewatch.</p>
+
+    <div class="outcomes">
+      <h4>The thesis for 2026 — read this twice</h4>
+      <ul>
+        <li>2025–26 was the year Meta, TikTok and Google all collapsed their manual controls into AI-driven campaign types. You are not learning "how to pick interests" any more.</li>
+        <li>You are learning <strong>how to feed and steer an automated system</strong>. That comes down to three things: conversion signal quality, creative volume, and structural discipline.</li>
+        <li>Meta's ranking system (Andromeda) now identifies buyers from <strong>creative signals</strong> rather than from your audience settings. The old sentence was "targeting decides who sees your ad." The new sentence is <strong>"your creative decides who sees your ad."</strong></li>
+        <li>Consequence: a creative brief is now a targeting specification. "Show a 35-year-old mother in a kitchen" is an instruction to the algorithm, not an aesthetic preference.</li>
+      </ul>
+    </div>
+
+    <p>Anything on this page written before mid-2026 is marked with its date so you can weigh it. Three facts here are less than three months old, and two more change in January 2027 — see the note at the bottom of the page.</p>
+
+    <div class="callout">
+      <h4>A habit worth building on day one</h4>
+      <p>Before you accept any marketing claim — from a YouTuber, a blog, a client, or this page — ask where the number came from and when. A Turkish law firm published a guide in February 2026 listing <span style="font-family:var(--mono)">#İşbirliği</span> as valid ad disclosure. It was correct when written and became illegal on 1 August 2026. Check the date, then check the primary source.</p>
+    </div>
+  </section>
+
+  <!-- ============ 01 ============ -->
+  <section class="module" id="m01" data-mod="01">
+    <div class="mhead">
+      <div class="mnum">01</div>
+      <div class="mtitles">
+        <p class="mkicker">Foundations · ~6 hours</p>
+        <h3>The language of performance marketing</h3>
+      </div>
+      <button class="mark" data-m="01" aria-pressed="false">Mark done</button>
+    </div>
+
+    <p class="lede">Every metric below is derived from the one above it. Learn them as a chain, not as a glossary. You should be able to write each formula from memory by the end of week one.</p>
+
+    <div class="outcomes">
+      <h4>You must be able to explain</h4>
+      <ul>
+        <li>Impressions vs reach vs frequency — and why impressions are not people.</li>
+        <li>CPM, CTR (link CTR vs all CTR), CPC, hook rate, hold rate, CVR, CPA/CPL, ROAS, AOV, LTV.</li>
+        <li>MER / blended ROAS, contribution margin, and break-even ROAS — and why only these three tell you whether the client is making money.</li>
+        <li>Why Google Search is <strong>intent capture</strong> and Meta/TikTok are <strong>demand generation</strong>, and what that means for a client with no search volume.</li>
+      </ul>
+    </div>
+
+    <div class="formula">CPC = CPM ÷ (CTR × 1,000)   ·   CPA = CPM ÷ (1,000 × CTR × CVR)   ·   Revenue = Impressions × CTR × CVR × AOV</div>
+    <p style="color:var(--muted);font-size:14.5px;">Memorise these. Every performance problem you will ever diagnose is one of those four terms moving. CPC never rises for a mystery third reason — either CPM went up or CTR went down.</p>
+
+    <dl class="keys">
+      <div class="key"><dt>Break-even ROAS</dt><dd><b>1 ÷ gross margin %</b>. A 40% margin means break-even is 2.5×. Compute this for every client on day one.</dd></div>
+      <div class="key"><dt>Healthy MER band</dt><dd>DTC target cited for 2026 is <b>3.0–5.0×</b> total revenue ÷ total marketing spend. Immune to attribution games.</dd></div>
+      <div class="key"><dt>Social vs search CVR</dt><dd>Paid social converts at <b>~1.5%</b>, paid search at <b>~3.2%</b>. Colder traffic, lower intent. Prepare for that client conversation.</dd></div>
+      <div class="key"><dt>Landing page median</dt><dd><b>6.6%</b> across all industries (Unbounce, 464M visits). Ecommerce ~2.35%; B2B services 1–3%.</dd></div>
+    </dl>
+
+    <p class="reshead">Resources</p>
+    <div class="res-grid">
+      <a class="res" data-type="course" href="https://skillshop.exceedlms.com/student/collection/1830706-fundamentals-of-digital-marketing" target="_blank" rel="noopener">
+        <span class="res-top"><span class="badge b-course">Free course</span><span class="vet">Verified live</span></span>
+        <span class="res-title">Fundamentals of Digital Marketing</span>
+        <span class="res-meta">Google Skillshop · 17 modules · ~40 hours · free</span>
+        <span class="res-note">The correct starting point for an absolute beginner. Free, certified, and it covers the vocabulary above properly. Note: Google Digital Garage no longer exists — it folded into Skillshop, and old learndigital.withgoogle.com links are dead.</span>
+      </a>
+      <a class="res" data-type="video" href="https://www.youtube.com/watch?v=kuSq-pmNfnM" target="_blank" rel="noopener">
+        <span class="res-top"><span class="badge b-video">Video</span><span class="vet">Reviewed</span></span>
+        <span class="res-title">The Complete Playbook To Running Meta Ads in 2026</span>
+        <span class="res-meta">Ben Heath · 9 Sep 2025 · 17:35</span>
+        <span class="res-note">Watch this early even though it is a Meta video. It sets the modern mental model — consolidation, broad targeting, creative as targeting — before you pick up legacy habits from older tutorials.</span>
+      </a>
+      <a class="res" data-type="doc" href="https://www.jonloomer.com/" target="_blank" rel="noopener">
+        <span class="res-top"><span class="badge b-doc">Reference</span><span class="vet">Verified live</span></span>
+        <span class="res-title">Jon Loomer</span>
+        <span class="res-meta">Independent · free blog · updated continuously</span>
+        <span class="res-note">The best independent English-language source on Meta Ads. When a platform change breaks your account, he usually explains it before Meta does.</span>
+      </a>
+      <a class="res" data-type="doc" href="https://ppc.land/" target="_blank" rel="noopener">
+        <span class="res-top"><span class="badge b-doc">Reference</span><span class="vet">Verified live</span></span>
+        <span class="res-title">PPC Land</span>
+        <span class="res-meta">Independent · free · API-level change reporting</span>
+        <span class="res-note">Fast, accurate reporting on platform changes at the API level. Where you find out that a campaign type was deprecated before your client does.</span>
+      </a>
+    </div>
+  </section>
+
+  <!-- ============ 02 ============ -->
+  <section class="module" id="m02" data-mod="02">
+    <div class="mhead">
+      <div class="mnum">02</div>
+      <div class="mtitles">
+        <p class="mkicker">Governance · ~3 hours</p>
+        <h3>Account access, before you touch a single campaign</h3>
+      </div>
+      <button class="mark" data-m="02" aria-pressed="false">Mark done</button>
+    </div>
+
+    <p class="lede">The single most damaging structural mistake a junior account manager makes has nothing to do with advertising. It is taking a client's personal login, or creating the client's ad account inside Kagu's own portfolio. Learn the correct way once and never deviate.</p>
+
+    <div class="outcomes">
+      <h4>You must be able to explain</h4>
+      <ul>
+        <li>The rule: <strong>the client owns the assets, the agency gets permissioned access.</strong> Partner access, never a shared password.</li>
+        <li>Meta Business Portfolio (the old "Business Manager") vs Meta Business Suite vs Ads Manager — three different things people use interchangeably.</li>
+        <li>The full asset checklist — and why requesting only the ad account means you can't select the Page on launch day.</li>
+        <li>Why the pixel/dataset must live in the client's portfolio, not yours.</li>
+        <li>Google MCC linking and TikTok Business Center partner access.</li>
+      </ul>
+    </div>
+
+    <div class="callout">
+      <h4>The complete Meta asset checklist</h4>
+      <p>Ad account (Advertiser role is enough) · Facebook Page · Instagram account, linked <em>in the Business Portfolio</em> not just "connected to the Page" · Pixel / Dataset · Catalogue if ecommerce · Custom Conversions · WhatsApp Business Account — essential in Turkey for click-to-WhatsApp · Domain verification completed in <em>their</em> portfolio. Approval takes 24–48 hours; build it into the launch timeline.</p>
+    </div>
+
+    <div class="tr-panel">
+      <h4>Türkiye gotcha</h4>
+      <p>Turkish clients very often hand you an Instagram account that is <strong>personal</strong>, not professional. Convert it first — nothing else works until you do. Also check whether the client actually has a Business Portfolio at all; many local businesses have never created one, and "just add me in Ads Manager" is a stopgap, not the destination.</p>
+    </div>
+
+    <p class="reshead">Resources</p>
+    <div class="res-grid">
+      <a class="res" data-type="video" href="https://www.youtube.com/watch?v=BM-uvTzZfIc" target="_blank" rel="noopener">
+        <span class="res-top"><span class="badge b-video">Video</span><span class="vet">Reviewed</span></span>
+        <span class="res-title">7-STEP Client Onboarding Checklist for Agencies! (+FREE TEMPLATE)</span>
+        <span class="res-meta">AgencyAnalytics · 5 Sep 2024 · 5:50</span>
+        <span class="res-note">Short, structured, no fluff. Signed agreement → internal kickoff → intake questionnaire → technical access handoff → launch meeting → baseline reporting → scope-creep prevention. Free template included.</span>
+      </a>
+      <a class="res" data-type="doc" href="https://support.google.com/google-ads/answer/7459601" target="_blank" rel="noopener">
+        <span class="res-top"><span class="badge b-doc">Official doc</span><span class="vet">Verified live</span></span>
+        <span class="res-title">Link a client account to a manager (MCC) account</span>
+        <span class="res-meta">Google Ads Help</span>
+        <span class="res-note">Step by step. You need the client's 10-digit Customer ID; they accept under Access and security → Managers. Standard access is right for day-to-day work.</span>
+      </a>
+      <a class="res" data-type="doc" href="https://ads.tiktok.com/help/article/invite-partners-into-tiktok-business-center?lang=en" target="_blank" rel="noopener">
+        <span class="res-top"><span class="badge b-doc">Official doc</span><span class="vet">Verified live</span></span>
+        <span class="res-title">Invite partners into TikTok Business Center</span>
+        <span class="res-meta">TikTok Ads Help Centre</span>
+        <span class="res-note">Both methods and every permission level. Watch the trap: the TikTok organic profile and the advertiser account are separate assets and must be shared separately — Spark Ads need the organic one.</span>
+      </a>
+      <a class="res" data-type="tool" href="https://business.tiktok.com/" target="_blank" rel="noopener">
+        <span class="res-top"><span class="badge b-tool">Tool</span><span class="vet">Verified live</span></span>
+        <span class="res-title">TikTok Business Center</span>
+        <span class="res-meta">TikTok · free</span>
+        <span class="res-note">Where agency asset access actually lives. Set up Kagu's own Business Center before onboarding your first TikTok client.</span>
+      </a>
+    </div>
+  </section>
+
+  <!-- ============ 03 ============ -->
+  <section class="module" id="m03" data-mod="03">
+    <div class="mhead">
+      <div class="mnum">03</div>
+      <div class="mtitles">
+        <p class="mkicker">Measurement · ~8 hours · do not skip</p>
+        <h3>Measurement first: datasets, CAPI, GA4, UTMs</h3>
+      </div>
+      <button class="mark" data-m="03" aria-pressed="false">Mark done</button>
+    </div>
+
+    <p class="lede">This module sits <strong>before</strong> campaign building on purpose. Everything downstream depends on signal quality, and a broken pixel is invisible for weeks while you optimise toward nothing. In 2026 the browser pixel alone captures roughly <strong>40% of actual conversions</strong>. An account running browser-only tracking is optimising on less than half its data.</p>
+
+    <div class="outcomes">
+      <h4>You must be able to explain</h4>
+      <ul>
+        <li>Why the Meta Pixel is now called a <strong>Dataset</strong>, and that your old Pixel ID <em>is</em> the Dataset ID.</li>
+        <li>Pixel + Conversions API running together, deduplicated on a shared <span style="font-family:var(--mono)">event_id</span>. This is the single most important technical skill in the whole curriculum.</li>
+        <li>Event Match Quality: what it is, what a good score is, and which parameter moves it most.</li>
+        <li>Aggregated Event Measurement and the 8-event prioritisation exercise.</li>
+        <li>Why Meta and GA4 will never agree, and why that is not a bug.</li>
+        <li>UTM conventions, and why one uppercase letter breaks a client's whole GA4 channel report.</li>
+      </ul>
+    </div>
+
+    <dl class="keys">
+      <div class="key"><dt>Event Match Quality</dt><dd>Under 5 = significant data loss, fix now. <b>7–8</b> = good, the target. At EMQ 4 Meta learns from ~40% of conversions; at EMQ 8, ~80%.</dd></div>
+      <div class="key"><dt>Biggest EMQ lever</dt><dd>Hashed <b>phone number</b>. Email gets you to ~5–6; adding phone pushes past 7. Phone is near-universal in Turkey, so this is unusually easy here.</dd></div>
+      <div class="key"><dt>Normal Meta vs GA4 gap</dt><dd>Meta reports <b>20–50% more</b> conversions than GA4. Different models, windows, identity and date basis. Expecting agreement is the error.</dd></div>
+      <div class="key"><dt>The 25% rule</dt><dd>If view-through conversions exceed <b>25%</b> of total reported conversions, your ROAS is probably inflated. Cross-check the backend before scaling.</dd></div>
+    </dl>
+
+    <div class="callout">
+      <h4>Meta attribution changed twice in 2026 — this is the most out-of-date topic in every older tutorial</h4>
+      <p><strong>12 January 2026:</strong> Meta removed the 7-day-view and 28-day-view windows entirely. The longest view window is now 1-day view. Some advertisers saw reported conversions drop 15–30% overnight. <strong>3 March 2026:</strong> click-through was narrowed to <em>link clicks only</em>; likes, comments, shares, saves and profile taps moved into a new "engage-through" bucket with a fixed 1-day window. That reclassification inflated reported ROAS by a median <b>~38%</b> while actual CRM revenue rose only ~8%. If a trainee compares February to April in Ads Manager and reports "ROAS up 38%", they have reported a reporting change as a business result. Don't be that trainee.</p>
+    </div>
+
+    <div class="formula">Never mix them: use Meta's numbers to optimise inside Meta. Use blended/backend numbers to decide budgets.</div>
+
+    <p class="reshead">Resources</p>
+    <div class="res-grid">
+      <a class="res" data-type="video" href="https://www.youtube.com/watch?v=ZaBycjPJztk" target="_blank" rel="noopener">
+        <span class="res-top"><span class="badge b-video">Video</span><span class="vet">Reviewed</span></span>
+        <span class="res-title">Full Google Analytics 4 Course for Beginners</span>
+        <span class="res-meta">MeasureSchool · 13 Sep 2023 · 56:24</span>
+        <span class="res-note">Data streams, GTM deployment, custom events, acquisition reports, Explore. Interface details have shifted since 2023 but the event model and reporting fundamentals are intact — and no newer free course of this quality exists.</span>
+      </a>
+      <a class="res" data-type="course" href="https://skillshop.exceedlms.com/student/catalog/browse" target="_blank" rel="noopener">
+        <span class="res-top"><span class="badge b-course">Free course</span><span class="vet">Verified live</span></span>
+        <span class="res-title">Google Analytics 101 → 301 + certification</span>
+        <span class="res-meta">Google Skillshop · free · 10–15 h for newcomers</span>
+        <span class="res-note">Google Analytics Academy no longer exists as a separate site — it redirects here. Four levels plus a free certification: 50 questions, 75 minutes, 80% to pass.</span>
+      </a>
+      <a class="res" data-type="tool" href="https://ga-dev-tools.google/campaign-url-builder/" target="_blank" rel="noopener">
+        <span class="res-top"><span class="badge b-tool">Tool</span><span class="vet">Verified live</span></span>
+        <span class="res-title">Campaign URL Builder</span>
+        <span class="res-meta">Google · free</span>
+        <span class="res-note">Google's own UTM builder. Use Meta's dynamic macros so utm_content self-populates and never drifts: <span style="font-family:var(--mono);font-size:12px">&amp;utm_content={{ad.name}}&amp;utm_id={{ad.id}}</span></span>
+      </a>
+      <a class="res" data-type="doc" href="https://ads.tiktok.com/help/article/event-deduplication?lang=en" target="_blank" rel="noopener">
+        <span class="res-top"><span class="badge b-doc">Official doc</span><span class="vet">Verified live</span></span>
+        <span class="res-title">TikTok — About Event Deduplication</span>
+        <span class="res-meta">TikTok Ads Help Centre</span>
+        <span class="res-note">The exact rules: keyed on event_id, TikTok keeps the first event, 48-hour window, and between Pixel and Events API the merge happens after 5 minutes and within 48 hours.</span>
+      </a>
+      <a class="res" data-type="doc" href="https://ads.tiktok.com/help/article/events-api?lang=en" target="_blank" rel="noopener">
+        <span class="res-top"><span class="badge b-doc">Official doc</span><span class="vet">Verified live</span></span>
+        <span class="res-title">TikTok — About Events API</span>
+        <span class="res-meta">TikTok Ads Help Centre</span>
+        <span class="res-note">Server-to-server events for web, app and offline. TikTok's own words: pixel or Events API setup is a prerequisite for the Web Conversions objective.</span>
+      </a>
+      <a class="res" data-type="doc" href="https://support.google.com/analytics/answer/9304153" target="_blank" rel="noopener">
+        <span class="res-top"><span class="badge b-doc">Official doc</span><span class="vet">Verified live</span></span>
+        <span class="res-title">Set up Google Analytics 4</span>
+        <span class="res-meta">Google Analytics Help</span>
+        <span class="res-note">Account → property → data stream → tag → verify in Realtime. For Turkish local businesses, set the <strong>WhatsApp click</strong> as a key event — it is usually the real conversion.</span>
+      </a>
+      <a class="res" data-type="doc" href="https://support.google.com/google-ads/answer/10000067?hl=en" target="_blank" rel="noopener">
+        <span class="res-top"><span class="badge b-doc">Official doc</span><span class="vet">Verified live</span></span>
+        <span class="res-title">About consent mode</span>
+        <span class="res-meta">Google Ads Help</span>
+        <span class="res-note">Basic vs advanced consent mode and the four signals. Matters in Turkey because of KVKK — see module 13 — and for any client with EU-facing traffic.</span>
+      </a>
+      <a class="res" data-type="video" href="https://www.youtube.com/watch?v=ytNnSVodsA4" target="_blank" rel="noopener">
+        <span class="res-top"><span class="badge b-video">Video</span><span class="vet un">Link verified, not reviewed</span></span>
+        <span class="res-title">How to Correctly Install Facebook / Meta Conversions API + Event Deduplication</span>
+        <span class="res-meta">Stape · advanced / optional</span>
+        <span class="res-note">Only once you've done modules 03–04. Stape is the leading server-side tracking vendor and their free tier covers 10K requests, which is enough for a small client. Skip on first pass.</span>
+      </a>
+    </div>
+  </section>
+
+  <!-- ============ 04 ============ -->
+  <section class="module" id="m04" data-mod="04">
+    <div class="mhead">
+      <div class="mnum">04</div>
+      <div class="mtitles">
+        <p class="mkicker">Paid · ~12 hours · the core module</p>
+        <h3>Meta Ads</h3>
+      </div>
+      <button class="mark" data-m="04" aria-pressed="false">Mark done</button>
+    </div>
+
+    <p class="lede">Instagram reaches <strong>70.9%</strong> of Turkey's population — nearly double Facebook. For a Kagu client, Meta means Instagram-first, and Facebook is additional inventory rather than the home page. Everything you read in English-language training assumes Facebook-first; correct for it.</p>
+
+    <div class="outcomes">
+      <h4>You must be able to explain</h4>
+      <ul>
+        <li>The three-level hierarchy and the rule that what you choose at each level constrains what you may choose below it.</li>
+        <li>The six ODAX objectives: Awareness, Traffic, Engagement, Leads, App promotion, Sales.</li>
+        <li>Why "Advantage+ Shopping Campaigns" is a <strong>historical</strong> term in 2026 — clients will still say "ASC" and you translate it to "an Advantage+ Sales campaign".</li>
+        <li>CBO (now labelled "Advantage campaign budget") vs ABO, and when to use each.</li>
+        <li>Hard controls vs audience suggestions — the conceptual key to 2026 targeting.</li>
+        <li>The learning phase, the 50-event rule, and what "Learning Limited" actually means.</li>
+        <li>The personal-attributes policy rule, which causes more surprise rejections than anything else.</li>
+      </ul>
+    </div>
+
+    <dl class="keys">
+      <div class="key"><dt>Advantage+ is not a campaign type</dt><dd>Since API v24.0 (Oct 2025) it is three toggles — <b>Advantage+ budget, audience, placements</b> — applied to a normal campaign. Enough of them on, and the campaign enters an Advantage+ state.</dd></div>
+      <div class="key"><dt>Learning phase exit</dt><dd><b>~50 optimization events per ad set per rolling 7 days.</b> Below that: Learning Limited, and waiting does not fix it — the arithmetic doesn't work.</dd></div>
+      <div class="key"><dt>Minimum daily budget</dt><dd><b>(Target CPA × 50) ÷ 7.</b> At a ₺500 target CPA that's ~₺3,570/day per ad set. This is why small accounts must run one ad set, not five.</dd></div>
+      <div class="key"><dt>Detailed-targeting exclusions</dt><dd>Eliminated <b>31 March 2025</b>. You can no longer exclude by interest. Older tutorials that teach exclusion stacks are teaching a dead feature.</dd></div>
+      <div class="key"><dt>Feed creative</dt><dd><b>4:5 · 1080×1350</b> minimum. Stories and Reels <b>9:16 · 1080×1920</b>. Meta's upload flow asks for 1:1 while its own guidance recommends 4:5 — a real mismatch you'll hit.</dd></div>
+      <div class="key"><dt>9:16 safe zones</dt><dd>Top <b>14%</b>, bottom <b>35%</b>, sides <b>6%</b>. Meta's own published percentages. Use the strict version for anything that might get boosted.</dd></div>
+    </dl>
+
+    <div class="callout">
+      <h4>The rejection that catches everyone: personal attributes</h4>
+      <p>An ad may not state or imply that it knows the viewer's race, ethnicity, religion, age, sexual orientation, gender identity, health condition or financial status. Learn the rewrite: <em>"Are you struggling with acne?"</em> → <em>"Our cream helps clear skin."</em> Appeals run through Account Quality and take 7–10 business days, so getting it right first time is a scheduling issue as much as a policy one.</p>
+    </div>
+
+    <p class="reshead">Video course — watch in this order</p>
+    <div class="res-grid">
+      <a class="res" data-type="video" href="https://www.youtube.com/watch?v=fysbqw31UvA" target="_blank" rel="noopener">
+        <span class="res-top"><span class="badge b-video">Video</span><span class="vet">Reviewed</span></span>
+        <span class="res-title">Master Facebook Ads In 2026 With This Video (FREE COURSE)</span>
+        <span class="res-meta">Nick Theriot · 2 Feb 2026 · 1:09:19</span>
+        <span class="res-note">The operational anchor for this module. Unit economics → pre-launch checklist → modern campaign architecture → creative testing → disciplined scaling. Long, but it builds methodically and it is current.</span>
+      </a>
+      <a class="res" data-type="video" href="https://www.youtube.com/watch?v=13s-G9Uj51A" target="_blank" rel="noopener">
+        <span class="res-top"><span class="badge b-video">Video</span><span class="vet">Reviewed</span></span>
+        <span class="res-title">The BEST Facebook Ad Campaign Structure for 2026</span>
+        <span class="res-meta">Ben Heath · 17 Feb 2026 · ~19 min</span>
+        <span class="res-note">Campaign structure is the hardest concept for a new account manager and the most expensive to get wrong. This is the short, visual answer to "how many ad sets should I run" — and it is fewer than you think.</span>
+      </a>
+      <a class="res" data-type="video" href="https://www.youtube.com/watch?v=IO0hAgX8Bx8" target="_blank" rel="noopener">
+        <span class="res-top"><span class="badge b-video">Video</span><span class="vet">Reviewed</span></span>
+        <span class="res-title">The BEST Way to Test Facebook Ads in 2026 (I show everything)</span>
+        <span class="res-meta">Nick Theriot · 1 Apr 2026 · 54:37</span>
+        <span class="res-note">Week 2–3 material, not day one. Sourcing angles from reviews and Reddit, 3-hook testing inside CBO, and a real decision matrix for killing and scaling. This is what the job actually looks like.</span>
+      </a>
+    </div>
+
+    <p class="reshead">Official documentation and free training</p>
+    <div class="res-grid">
+      <a class="res" data-type="course" href="https://www.facebookblueprint.com/" target="_blank" rel="noopener">
+        <span class="res-top"><span class="badge b-course">Free course</span><span class="vet">Verified live</span></span>
+        <span class="res-title">Meta Blueprint</span>
+        <span class="res-meta">Meta · free courses · most modules 1–5 minutes</span>
+        <span class="res-note">A microlearning library rather than a course — filter by level and work through the Advantage+, placements and fragmentation modules. The <em>courses</em> are free; Meta's certification <em>exams</em> cost money, so treat the exams as optional.</span>
+      </a>
+      <a class="res" data-type="tool" href="https://www.facebook.com/ads/library/" target="_blank" rel="noopener">
+        <span class="res-top"><span class="badge b-tool">Tool</span><span class="vet">Verified live</span></span>
+        <span class="res-title">Meta Ad Library</span>
+        <span class="res-meta">Meta · free · no login required</span>
+        <span class="res-note">Set country to Türkiye and search your client's competitors. The launch date is the gold: an ad running 60+ days is almost certainly profitable. Track ten competitors weekly and log what persists.</span>
+      </a>
+      <a class="res" data-type="doc" href="https://transparency.meta.com/policies/ad-standards/" target="_blank" rel="noopener">
+        <span class="res-top"><span class="badge b-doc">Official doc</span><span class="vet">Verified live</span></span>
+        <span class="res-title">Meta Advertising Standards</span>
+        <span class="res-meta">Meta Transparency Center</span>
+        <span class="res-note">Prohibited content, restricted content, and the Special Ad Categories (Credit, Employment, Housing, Social Issues) that strip your targeting options at campaign level.</span>
+      </a>
+      <a class="res" data-type="doc" href="https://developers.facebook.com/docs/marketing-api/" target="_blank" rel="noopener">
+        <span class="res-top"><span class="badge b-doc">Official doc</span><span class="vet">Verified live</span></span>
+        <span class="res-title">Meta Marketing API docs</span>
+        <span class="res-meta">Meta for Developers</span>
+        <span class="res-note">The authoritative source for objective and bid-strategy constants when a reporting tool shows you OUTCOME_SALES instead of "Sales". You will need this more often than you expect.</span>
+      </a>
+    </div>
+  </section>
+
+  <!-- ============ 05 ============ -->
+  <section class="module" id="m05" data-mod="05">
+    <div class="mhead">
+      <div class="mnum">05</div>
+      <div class="mtitles">
+        <p class="mkicker">Paid · ~6 hours</p>
+        <h3>TikTok Ads</h3>
+      </div>
+      <button class="mark" data-m="05" aria-pressed="false">Mark done</button>
+    </div>
+
+    <p class="lede">TikTok uses the same three-level structure as Meta, so learn it as a delta rather than from scratch. It reaches <strong>68.6% of Turkish adults</strong> — effectively matching Instagram — and the platform is fully operational and officially supported here, with its own Turkey VAT documentation.</p>
+
+    <div class="outcomes">
+      <h4>You must be able to explain</h4>
+      <ul>
+        <li>The eight objectives across Awareness, Consideration and Conversion.</li>
+        <li><strong>Spark Ads</strong> and why they are strategically different from every other ad format.</li>
+        <li>Smart+ campaigns, the August 2026 unified creation flow, and how Smart+ differs from the older Smart Performance Campaign.</li>
+        <li>TikTok's own creative specs, and why sound is not optional.</li>
+        <li>That the Creator Marketplace <strong>no longer exists</strong> — it became TikTok One on 1 April 2025.</li>
+      </ul>
+    </div>
+
+    <div class="callout">
+      <h4>Why Spark Ads matter more than any other TikTok format</h4>
+      <p>Spark Ads promote an existing organic post — yours, or a creator's via an authorisation code. Every view, like, comment, share and follow is attributed to <strong>the original organic post</strong>. So the value compounds beyond the campaign flight and builds the account, where a standard in-feed ad simply disappears when the spend stops. Video up to 10 minutes, no ratio or file-type restriction, max 10,000 Spark Ads per Ads Manager account.</p>
+    </div>
+
+    <dl class="keys">
+      <div class="key"><dt>Creative specs</dt><dd><b>9:16, min 720p.</b> Land engagement in the first 6 seconds; state the proposition in the first 3. Captions at 5–10 words per second.</dd></div>
+      <div class="key"><dt>Creative volume</dt><dd><b>3–5 creatives per ad group, 3–5 diversified ad groups per campaign.</b> TikTok's own guidance, not folklore.</dd></div>
+      <div class="key"><dt>Budget rule</dt><dd>TikTok's stated guidance is that an ad group budget should cover <b>at least 5× target CPA</b>. The widely-quoted "$50/day minimum" does not appear in TikTok's own CBO docs — check inside a live Turkish account.</dd></div>
+      <div class="key"><dt>Learning &amp; scaling</dt><dd>~<b>50 conversions</b> to exit learning. Scale in <b>20–30%</b> steps. Creative fatigues faster than on Meta — plan a higher refresh cadence.</dd></div>
+    </dl>
+
+    <p class="reshead">Resources</p>
+    <div class="res-grid">
+      <a class="res" data-type="video" href="https://www.youtube.com/watch?v=T1xOxbGUB-A" target="_blank" rel="noopener">
+        <span class="res-top"><span class="badge b-video">Video</span><span class="vet">Reviewed</span></span>
+        <span class="res-title">The FULL TikTok Ads Course (Learn Tiktok Ads 2026)</span>
+        <span class="res-meta">ZoCo Marketing · 21 Apr 2026 · ~1:04</span>
+        <span class="res-note">The cleanest technical onboarding available. Business Center setup, Events API and pixel, objectives, bid strategies, interface navigation — screen-recorded, methodical, and with zero dropshipping hype. Three better-known TikTok tutorials were rejected for pushing burner accounts and proxy tricks.</span>
+      </a>
+      <a class="res" data-type="course" href="https://www.tiktokacademy.com/" target="_blank" rel="noopener">
+        <span class="res-top"><span class="badge b-course">Free course</span><span class="vet">Verified live</span></span>
+        <span class="res-title">TikTok Academy</span>
+        <span class="res-meta">TikTok · free registration · certification prep included</span>
+        <span class="res-note">Two learning paths — Creative Expert and Media Buying Expert — plus ad policy, measurement, research and TikTok Shop. The Media Buying Professional certification prep path is free too.</span>
+      </a>
+      <a class="res" data-type="tool" href="https://ads.tiktok.com/business/creativecenter/inspiration/topads/pc/en" target="_blank" rel="noopener">
+        <span class="res-top"><span class="badge b-tool">Tool</span><span class="vet">Verified live</span></span>
+        <span class="res-title">TikTok Top Ads library</span>
+        <span class="res-meta">TikTok Creative Center · free · no ad account needed</span>
+        <span class="res-note">The single best free creative-research tool in this entire curriculum, and most agencies underuse it. Filter by Region (Türkiye is available), Objective, Ad Language, Format and Likes, with CTR and CVR percentile data attached.</span>
+      </a>
+      <a class="res" data-type="tool" href="https://ads.tiktok.com/business/creativecenter/pc/en" target="_blank" rel="noopener">
+        <span class="res-top"><span class="badge b-tool">Tool</span><span class="vet">Verified live</span></span>
+        <span class="res-title">TikTok Creative Center</span>
+        <span class="res-meta">TikTok · free</span>
+        <span class="res-note">Trends, Keyword Insights, Creative Studio / Symphony, and the Commercial Music Library — licensed audio that is safe to use in ads.</span>
+      </a>
+      <a class="res" data-type="doc" href="https://ads.tiktok.com/help/article/spark-ads" target="_blank" rel="noopener">
+        <span class="res-top"><span class="badge b-doc">Official doc</span><span class="vet">Verified live</span></span>
+        <span class="res-title">About Spark Ads</span>
+        <span class="res-meta">TikTok Ads Help Centre</span>
+        <span class="res-note">Which objectives support them, authorisation codes and durations, and the limits.</span>
+      </a>
+      <a class="res" data-type="doc" href="https://ads.tiktok.com/help/article/about-updates-to-smart-plus?lang=en" target="_blank" rel="noopener">
+        <span class="res-top"><span class="badge b-doc">Official doc</span><span class="vet">Verified live</span></span>
+        <span class="res-title">Smart+ Upgraded Experience</span>
+        <span class="res-meta">TikTok · updated August 2026</span>
+        <span class="res-note">TikTok unified the manual and Smart+ flows into one creation flow with selectable automation levels. Very recent — this is the page that makes older TikTok tutorials look wrong.</span>
+      </a>
+      <a class="res" data-type="doc" href="https://ads.tiktok.com/help/article/creative-best-practices?lang=en" target="_blank" rel="noopener">
+        <span class="res-top"><span class="badge b-doc">Official doc</span><span class="vet">Verified live</span></span>
+        <span class="res-title">Creative best practices</span>
+        <span class="res-meta">TikTok Ads Help Centre</span>
+        <span class="res-note">TikTok's own numbers for hook timing, caption density, creative counts and structure. Quote this to clients rather than a blog.</span>
+      </a>
+      <a class="res" data-type="doc" href="https://ads.tiktok.com/help/article/choose-right-objective?lang=en" target="_blank" rel="noopener">
+        <span class="res-top"><span class="badge b-doc">Official doc</span><span class="vet">Verified live</span></span>
+        <span class="res-title">Choose the right objective</span>
+        <span class="res-meta">TikTok Ads Help Centre</span>
+        <span class="res-note">The authoritative objective list, including Community Interaction and Branded Mission, which most third-party guides omit.</span>
+      </a>
+    </div>
+  </section>
+
+  <!-- ============ 06 ============ -->
+  <section class="module" id="m06" data-mod="06">
+    <div class="mhead">
+      <div class="mnum">06</div>
+      <div class="mtitles">
+        <p class="mkicker">Paid · ~10 hours</p>
+        <h3>Google Ads</h3>
+      </div>
+      <button class="mark" data-m="06" aria-pressed="false">Mark done</button>
+    </div>
+
+    <p class="lede">Google holds roughly <strong>90%</strong> of Turkish search. Search is a different discipline from social: you harvest demand that already exists rather than creating it. A client with no search volume for their category cannot be fixed with better Google ads — learn to say that out loud.</p>
+
+    <div class="outcomes">
+      <h4>You must be able to explain</h4>
+      <ul>
+        <li>MCC → account → campaign → ad group → ads/keywords, and why agencies link rather than own.</li>
+        <li>The 2026 campaign types, and that <strong>Display is being retired into Demand Gen</strong>.</li>
+        <li>Broad, phrase and exact match — and the 2026 reality that all three are now AI-interpreted at auction time, which makes negative keywords <em>more</em> important, not less.</li>
+        <li>That Quality Score is a diagnostic, <strong>not an auction input</strong>. Ad Rank is the actual mechanism. Most training material gets this wrong.</li>
+        <li>Performance Max, its real controls, and its two honest criticisms.</li>
+        <li>AI Max for Search, which Google auto-enabled on eligible campaigns during September 2026.</li>
+      </ul>
+    </div>
+
+    <div class="callout">
+      <h4>The two PMax criticisms you must be able to discuss with a client</h4>
+      <p><strong>Brand cannibalisation:</strong> PMax absorbs branded queries that Search should win, inflating apparent ROAS and destroying keyword-level insight. Fix with exact-match brand keywords in Search and brand terms as negatives in PMax. <strong>Lead quality:</strong> reported 20–40% lower than Search for most B2B and service businesses — volume rises while qualified conversions fall. Budget heuristic: B2B / professional services / regulated → 60–70% Search. Ecommerce with 50+ SKUs → 60–70% PMax.</p>
+    </div>
+
+    <dl class="keys">
+      <div class="key"><dt>Quality Score</dt><dd>1–10, keyword level, three components rated against competitors over the previous <b>90 days</b>. Google states plainly it is <b>not an input in the ad auction</b>.</dd></div>
+      <div class="key"><dt>PMax controls that now exist</dt><dd>Negative keywords raised from 100 to <b>10,000</b> per campaign; search themes from 25 to <b>50</b>; brand exclusions; channel and search-term reporting.</dd></div>
+      <div class="key"><dt>AI Max, Sept 2026</dt><dd>Auto-upgraded campaigns using campaign-level broad match or automatically created assets between <b>1–30 September 2026</b>. Dynamic Search Ads move on a February 2027 timeline.</dd></div>
+      <div class="key"><dt>Turkey CPC, median</dt><dd>E-commerce <b>₺5.8–9.2</b>; restaurant/cafe ₺5.8–25.8; education ₺15.3–40.3; healthcare/dental ₺21.4–114.7. Treat as orientation, not client-facing benchmarks.</dd></div>
+    </dl>
+
+    <p class="reshead">Resources</p>
+    <div class="res-grid">
+      <a class="res" data-type="video" href="https://www.youtube.com/watch?v=_XNJilszSvk" target="_blank" rel="noopener">
+        <span class="res-top"><span class="badge b-video">Video</span><span class="vet">Reviewed</span></span>
+        <span class="res-title">How I Would Learn Google Ads... if I could start over</span>
+        <span class="res-meta">Aaron Young · Define Digital Academy · 14 Aug 2023 · 15:49</span>
+        <span class="res-note">Watch this first. A four-stage roadmap and honest expectation-setting about how long Google Ads takes to learn. The career advice is evergreen even though the 2023 screenshots aren't.</span>
+      </a>
+      <a class="res" data-type="video" href="https://www.youtube.com/watch?v=h7xOSw1i7Jw" target="_blank" rel="noopener">
+        <span class="res-top"><span class="badge b-video">Video</span><span class="vet un">Link verified, not reviewed</span></span>
+        <span class="res-title">Google Ads Tutorial for Beginers [Updated for 2026]</span>
+        <span class="res-meta">Aaron Young · Define Digital Academy · re-cut for 2026</span>
+        <span class="res-note">The main hands-on course for this module — setting up a profitable search campaign, ad groups and match types. Aaron Young is the strongest Google Ads educator on YouTube. (The typo in "Beginers" is in the real title.)</span>
+      </a>
+      <a class="res" data-type="video" href="https://www.youtube.com/watch?v=16X5a0Ii7kg" target="_blank" rel="noopener">
+        <span class="res-top"><span class="badge b-video">Video</span><span class="vet un">Link verified, not reviewed</span></span>
+        <span class="res-title">Google Ads Beginners Tutorial for 2026 (Step By Step)</span>
+        <span class="res-meta">Grow My Ads · 2026</span>
+        <span class="res-note">A second walkthrough if Aaron Young's pacing doesn't suit you. Seeing the same build twice from different people is genuinely useful here.</span>
+      </a>
+      <a class="res" data-type="video" href="https://www.youtube.com/watch?v=N9XNZCyAIrM" target="_blank" rel="noopener">
+        <span class="res-top"><span class="badge b-video">Video</span><span class="vet">Reviewed · advanced</span></span>
+        <span class="res-title">Performance Max Campaign Set Up in 2026 | Step by Step Tutorial</span>
+        <span class="res-meta">Aaron Young · Define Digital Academy · 5 Jan 2026 · 15:04</span>
+        <span class="res-note">Accurate and current, but it assumes you already understand conversion baselines, smart bidding and Merchant Center feeds. Do standard Search first, then come back to this.</span>
+      </a>
+      <a class="res" data-type="course" href="https://skillshop.withgoogle.com/" target="_blank" rel="noopener">
+        <span class="res-top"><span class="badge b-course">Free course</span><span class="vet">Verified live</span></span>
+        <span class="res-title">Google Skillshop</span>
+        <span class="res-meta">Google · free · six Google Ads certifications</span>
+        <span class="res-note">Search, Display, Video, Shopping, Apps and Measurement certifications — each roughly 75 minutes, 46–50 questions, 80% to pass, valid one year. All free. Start with Search.</span>
+      </a>
+      <a class="res" data-type="doc" href="https://support.google.com/google-ads/answer/7478529?hl=en" target="_blank" rel="noopener">
+        <span class="res-top"><span class="badge b-doc">Official doc</span><span class="vet">Verified live</span></span>
+        <span class="res-title">About keyword matching options</span>
+        <span class="res-meta">Google Ads Help</span>
+        <span class="res-note">Broad, phrase and exact in Google's own words. Note that Broad Match Modifier no longer exists, and that negative keywords follow different matching rules — always teach them separately.</span>
+      </a>
+      <a class="res" data-type="doc" href="https://support.google.com/google-ads/answer/6167118?hl=en" target="_blank" rel="noopener">
+        <span class="res-top"><span class="badge b-doc">Official doc</span><span class="vet">Verified live</span></span>
+        <span class="res-title">Quality Score</span>
+        <span class="res-meta">Google Ads Help</span>
+        <span class="res-note">Read this specifically to unlearn "Quality Score determines your position." It doesn't. Ad Rank does.</span>
+      </a>
+      <a class="res" data-type="doc" href="https://support.google.com/google-ads/answer/10724817" target="_blank" rel="noopener">
+        <span class="res-top"><span class="badge b-doc">Official doc</span><span class="vet">Verified live</span></span>
+        <span class="res-title">About Performance Max</span>
+        <span class="res-meta">Google Ads Help</span>
+        <span class="res-note">Asset groups, audience signals, listing groups and final URL expansion, from the source.</span>
+      </a>
+      <a class="res" data-type="doc" href="https://support.google.com/google-ads/answer/15910366?hl=en" target="_blank" rel="noopener">
+        <span class="res-top"><span class="badge b-doc">Official doc</span><span class="vet">Verified live</span></span>
+        <span class="res-title">About AI Max for Search campaigns</span>
+        <span class="res-meta">Google Ads Help · new</span>
+        <span class="res-note">Search term matching, final URL expansion and text customisation. Warning for anyone touching analytics: final URL expansion serves landing pages other than your configured URL, which silently breaks UTM parsing.</span>
+      </a>
+      <a class="res" data-type="doc" href="https://support.google.com/google-ads/answer/17051545?hl=en" target="_blank" rel="noopener">
+        <span class="res-top"><span class="badge b-doc">Official doc</span><span class="vet">Verified live</span></span>
+        <span class="res-title">Display campaigns move into Demand Gen</span>
+        <span class="res-meta">Google Ads Help · migration began June 2026</span>
+        <span class="res-note">Migrated campaigns keep their settings and up to 42 days of history. Learn Demand Gen as the consolidated visual channel and treat Display as legacy context.</span>
+      </a>
+      <a class="res" data-type="doc" href="https://support.google.com/google-ads/announcements/9048695?hl=en" target="_blank" rel="noopener">
+        <span class="res-top"><span class="badge b-doc">Official doc</span><span class="vet">Verified live</span></span>
+        <span class="res-title">Google Ads — new features &amp; announcements</span>
+        <span class="res-meta">Google Ads Help · rolling feed</span>
+        <span class="res-note">Bookmark this. It is how this curriculum stays current, and how you avoid being surprised by an auto-upgrade like the September 2026 AI Max migration.</span>
+      </a>
+    </div>
+  </section>
+
+  <!-- ============ 07 ============ -->
+  <section class="module" id="m07" data-mod="07">
+    <div class="mhead">
+      <div class="mnum">07</div>
+      <div class="mtitles">
+        <p class="mkicker">Organic · ~6 hours</p>
+        <h3>How Instagram and TikTok ranking actually works</h3>
+      </div>
+      <button class="mark" data-m="07" aria-pressed="false">Mark done</button>
+    </div>
+
+    <p class="lede">Two reframes before any tactic. First: <strong>Instagram is not one algorithm</strong> — Feed, Stories, Explore, Reels and Search each rank separately with different signal weights, and anyone saying "the algorithm" as one thing will make wrong decisions. Second: ranking is a <strong>per-post prediction</strong>, not an account reputation. Reach is an outcome of early performance, not a property your account has.</p>
+
+    <div class="outcomes">
+      <h4>You must be able to explain</h4>
+      <ul>
+        <li>Instagram's stated ranking signals per surface, and the four things Reels optimises for — including "goes to the audio page", which is why audio choice is an algorithmic input rather than a taste decision.</li>
+        <li><strong>Sends per reach</strong>: the formula, where to find it, and why there is no credible benchmark for it.</li>
+        <li>Mosseri's May 2026 position: <em>like rates matter more for your followers; send rates matter more for people who don't follow you.</em></li>
+        <li>The two distinct suppression mechanisms — content removal vs "not eligible for recommendation" — and where to check (Account Status).</li>
+        <li>TikTok's three official signal families, and its published line that <strong>follower count is not a direct ranking factor</strong>.</li>
+        <li>The originality policy, and why a TikTok watermark on a client Reel is the most common junior error there is.</li>
+      </ul>
+    </div>
+
+    <div class="formula">Sends per reach = Sends ÷ Reach.  350 sends on 10,000 reach = 3.5%.  Coach against the account's own trailing median, never an invented industry benchmark.</div>
+
+    <div class="callout">
+      <h4>The design question to drill into every junior</h4>
+      <p>"Who is the specific person a viewer would send this to, and what would they type when they send it?" If there is no answer, the post will not travel to non-followers. That is the whole of Instagram growth strategy in one sentence.</p>
+    </div>
+
+    <dl class="keys">
+      <div class="key"><dt>Hashtags, Dec 2025</dt><dd>Capped at <b>5 per post</b>, down from 30. They appear in no official ranking-signal list on any surface. Use 3–5 niche tags as topic labels, not as a reach lever.</dd></div>
+      <div class="key"><dt>Reels reach rate</dt><dd>By account size: 1–5K <b>9.78%</b>; 10–50K 7.10%; 100K–1M 5.00%. Skip rate is <b>60–65%</b> — two in three viewers swipe away. Set client expectations with this.</dd></div>
+      <div class="key"><dt>Only 21% grew</dt><dd>Just <b>21%</b> of accounts under 10,000 followers grew at all in 2026. The single most useful number for an honest client conversation.</dd></div>
+      <div class="key"><dt>Format deltas</dt><dd>Reels drive <b>4×</b> the interactions of single images; carousels drive <b>9×</b> the saves. Single-image engagement fell <b>46%</b> year on year.</dd></div>
+      <div class="key"><dt>TikTok, official</dt><dd>"Neither follower count nor whether the account has had previous high-performing videos are direct factors in the recommendation system." That is the structural difference from Instagram.</dd></div>
+      <div class="key"><dt>Trial Reels</dt><dd>Public accounts, generally 1,000+ followers. Goes only to non-followers, metrics at ~24 h, auto-publish option at 72 h. <b>Schedulable since early 2026</b> — the only native A/B test on Instagram.</dd></div>
+    </dl>
+
+    <p class="reshead">Resources</p>
+    <div class="res-grid">
+      <a class="res" data-type="video" href="https://www.youtube.com/watch?v=gLeeMc_Injw" target="_blank" rel="noopener">
+        <span class="res-top"><span class="badge b-video">Video</span><span class="vet">Reviewed</span></span>
+        <span class="res-title">Instagram Algorithm 2026: How It REALLY Works (New Updates Explained)</span>
+        <span class="res-meta">Jade Beason · 15 Feb 2026 · ~18 min</span>
+        <span class="res-note">The best standalone breakdown of Instagram's ranking engine. Surfaces ranked independently, DM shares and watch-time velocity over likes. Clean and honest — two more sensational "algorithm change" videos were rejected for pushing volume hacks and timing folklore.</span>
+      </a>
+      <a class="res" data-type="video" href="https://www.youtube.com/watch?v=diJ172jDsxA" target="_blank" rel="noopener">
+        <span class="res-top"><span class="badge b-video">Video</span><span class="vet">Reviewed</span></span>
+        <span class="res-title">THE TIKTOK ALGORITHM EXPLAINED | Your 2026 Guide To TikTok Success!</span>
+        <span class="res-meta">Modern Millie · 23 Jul 2025 · ~16 min</span>
+        <span class="res-note">Clear diagrams, no jargon, and it covers TikTok SEO — keyword indexing across spoken words, captions and on-screen text. Read TikTok's own newsroom page alongside it, because the "traffic pool" tiers everyone repeats are not in TikTok's documentation.</span>
+      </a>
+      <a class="res" data-type="video" href="https://www.youtube.com/watch?v=JkMhBKi12q4" target="_blank" rel="noopener">
+        <span class="res-top"><span class="badge b-video">Video</span><span class="vet">Reviewed</span></span>
+        <span class="res-title">The Complete Instagram For Business Tutorial 2026</span>
+        <span class="res-meta">Learn With Shopify · 6 Apr 2026 · ~15 min</span>
+        <span class="res-note">Bridges organic strategy into lead generation and sales — profile optimisation, Story engagement, Reels strategy, Shop connection. Exactly the account-manager use case.</span>
+      </a>
+      <a class="res" data-type="doc" href="https://about.instagram.com/blog/announcements/instagram-ranking-explained" target="_blank" rel="noopener">
+        <span class="res-top"><span class="badge b-doc">Official doc</span><span class="vet">Verified live</span></span>
+        <span class="res-title">Instagram Ranking Explained</span>
+        <span class="res-meta">Instagram · the canonical signal list</span>
+        <span class="res-note">The per-surface ranking signals in Instagram's own words. Dated but still the authoritative inventory. Required reading — read it side by side with TikTok's newsroom page.</span>
+      </a>
+      <a class="res" data-type="doc" href="https://newsroom.tiktok.com/en-us/how-tiktok-recommends-videos-for-you" target="_blank" rel="noopener">
+        <span class="res-top"><span class="badge b-doc">Official doc</span><span class="vet">Verified live</span></span>
+        <span class="res-title">How TikTok recommends videos #ForYou</span>
+        <span class="res-meta">TikTok Newsroom</span>
+        <span class="res-note">The primary source. Three signal families with explicit weighting, the follower-count statement, and the diversification rules. Mandatory.</span>
+      </a>
+      <a class="res" data-type="doc" href="https://www.tiktok.com/community-guidelines/en/fyf-standards" target="_blank" rel="noopener">
+        <span class="res-top"><span class="badge b-doc">Official doc</span><span class="vet">Verified live</span></span>
+        <span class="res-title">For You Feed eligibility standards</span>
+        <span class="res-meta">TikTok Community Guidelines</span>
+        <span class="res-note">Content that stays up but is withheld from the For You feed. The agency-critical entries are watermarks, fake engagement, QR codes, and alcohol and tobacco — which any Turkish F&amp;B or hospitality client will hit constantly.</span>
+      </a>
+      <a class="res" data-type="doc" href="https://help.instagram.com/313829416281232" target="_blank" rel="noopener">
+        <span class="res-top"><span class="badge b-doc">Official doc</span><span class="vet">Verified live</span></span>
+        <span class="res-title">Instagram Recommendations Guidelines</span>
+        <span class="res-meta">Instagram Help Centre</span>
+        <span class="res-note">The "not eligible for recommendation" categories: reposted content, watermarks, low-resolution video, engagement bait, clickbait, sensitive categories. Content stays up; distribution to non-followers doesn't.</span>
+      </a>
+      <a class="res" data-type="doc" href="https://help.instagram.com/1584158414160055" target="_blank" rel="noopener">
+        <span class="res-top"><span class="badge b-doc">Official doc</span><span class="vet">Verified live</span></span>
+        <span class="res-title">Account Status</span>
+        <span class="res-meta">Instagram Help Centre</span>
+        <span class="res-note">Settings → Account Status shows recommendation eligibility and violations. Teach every junior to check this <em>before</em> blaming the algorithm — and note that "shadowbanning" is not a real mechanism.</span>
+      </a>
+      <a class="res" data-type="data" href="https://datareportal.com/reports/digital-2026-turkey" target="_blank" rel="noopener">
+        <span class="res-top"><span class="badge b-data">Data</span><span class="vet">Verified live</span></span>
+        <span class="res-title">Digital 2026: Turkey</span>
+        <span class="res-meta">DataReportal · free · update annually</span>
+        <span class="res-note">The authoritative Turkey audience dataset. Instagram 62.3M · YouTube 57.9M · TikTok 44.9M adults · Facebook 34.7M. Also the gender splits, which are unusually strong: Facebook skews 64% male, Snapchat 60% female.</span>
+      </a>
+    </div>
+  </section>
+
+  <!-- ============ 08 ============ -->
+  <section class="module" id="m08" data-mod="08">
+    <div class="mhead">
+      <div class="mnum">08</div>
+      <div class="mtitles">
+        <p class="mkicker">Craft · ~8 hours · heavy lab time</p>
+        <h3>Short-form craft: hooks, retention, specs, audio</h3>
+      </div>
+      <button class="mark" data-m="08" aria-pressed="false">Mark done</button>
+    </div>
+
+    <p class="lede">Do not teach the "3-second rule" as a law. Teach it as this: <strong>you have roughly one second to stop the scroll and roughly three to justify it</strong>, and the first three seconds are the only part of the video most people will ever see, so they must carry the value proposition.</p>
+
+    <div class="outcomes">
+      <h4>You must be able to explain</h4>
+      <ul>
+        <li>Seven hook patterns, and the critical failure mode: a strong pattern interrupt with a weak payload produces high 1-second retention and a steep drop — the algorithm reads that as bait-and-switch.</li>
+        <li>Retention curve diagnosis: the Cliff, the Hump and the Plateau, and the different fix each one calls for.</li>
+        <li>Why loops are a ranking tactic and not a style choice.</li>
+        <li>Safe zones, and the one number to memorise.</li>
+        <li>The music licensing trap — the single biggest legal risk in this module.</li>
+      </ul>
+    </div>
+
+    <p class="reshead" style="border:0;margin-bottom:6px;">Retention curve diagnosis</p>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>Shape</th><th>Signature</th><th>Diagnosis</th><th>Fix</th></tr></thead>
+        <tbody>
+          <tr><td>The Cliff</td><td>30–50% drop between second 1 and second 3, then gradual decay</td><td>The opening is dead — an intro, a logo, a slow setup, a greeting</td><td>Trim ruthlessly. Delete everything before the first substantive frame.</td></tr>
+          <tr><td>The Hump</td><td>Holds above 60% through the middle, declines at the end</td><td>Strong mid-video payoff</td><td>Good share-rate content. Move the payoff earlier and tighten the tail.</td></tr>
+          <tr><td>The Plateau</td><td>Flat above 70% end to end, with a spike <em>above 100%</em> at second 1</td><td>Clean loop plus rewatches. The algorithm's preferred shape.</td><td>Nothing. Replicate the structure — this is your template.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p style="color:var(--muted);font-size:14.5px;">A sharp drop at a specific second is almost always a talking-head cut, a slow text card, or a pacing pause. Scrub to it and cut that beat. A spike above 100% at second 1 means your loop closed — it is the strongest positive indicator available.</p>
+
+    <dl class="keys">
+      <div class="key"><dt>The one number to memorise</dt><dd>Design inside the centre <b>1010 × 1160 px</b> of a 1080×1920 canvas and nothing will ever be covered by UI on any platform.</dd></div>
+      <div class="key"><dt>Length, Instagram Reels</dt><dd><b>30–60 s</b> peaks at 5.60% reach rate. Falls to 4.30% above 90 s and 3.50% above 120 s.</dd></div>
+      <div class="key"><dt>Length, TikTok</dt><dd>Engagement rate is nearly flat across all lengths (4.2–6.0%), but median views rise sharply with length — <b>120–180 s</b> peaks at 11,136 median views. Two-track it: short for engagement, long for reach.</dd></div>
+      <div class="key"><dt>The 80% heuristic</dt><dd>Average view duration at or above <b>80%</b> of video length is the informal threshold where algorithmic push expands. Unofficial, but a useful working target.</dd></div>
+      <div class="key"><dt>Creative hit rate by format</dt><dd>Text only <b>11.6%</b> · product image 8.75% · UGC 7.56% · <b>high production 6.87%</b>. High-production video is the worst performer per asset. You do not need a film crew.</dd></div>
+      <div class="key"><dt>Turkish typography</dt><dd>Check every font renders <b>ç ğ ı İ ö ş ü</b> — dotless ı versus dotted i especially. Turkish runs 10–20% longer than English, so fewer words per card and wider margins.</dd></div>
+    </dl>
+
+    <div class="callout">
+      <h4>The music licensing trap — non-negotiable agency rule</h4>
+      <p>Business accounts see a <strong>restricted</strong> music library; the popular label-licensed tracks visible on personal accounts are not available to them, and that is licensing, not a bug. Worse: a Reel that performs organically with library music <strong>can fail when you boost it</strong> — paid distribution triggers extra checks, and tracks get muted, delivery-limited or rejected in ad review. So: for anything that might ever be boosted, use Meta Sound Collection or separately licensed music only; build two cuts of every asset, an organic cut and an ad-ready cut; and keep a proof pack of licences and track IDs. Labels have pursued business accounts over library music. The in-app picker is not a licence.</p>
+    </div>
+
+    <div class="callout">
+      <h4>Cross-posting: yes, with three hard conditions</h4>
+      <p><strong>1. Remove the watermark.</strong> Always export the clean master from the editor; never download your own post from the platform. Watermarked content is recommendation-ineligible on Instagram, listed in TikTok's FYF ineligibility standards, and flagged as non-native by YouTube. <strong>2. Respect the reused/inauthentic content policies</strong> — YouTube's July 2025 rename now also catches mass-produced templated uploads even when original. <strong>3. Adapt, don't dump</strong> — reposition text per platform, re-cut the hook, rewrite the caption keywords. Cross-posting works; cross-dumping doesn't.</p>
+    </div>
+
+    <p class="reshead">Resources</p>
+    <div class="res-grid">
+      <a class="res" data-type="video" href="https://www.youtube.com/watch?v=SE1aIOgO-lM" target="_blank" rel="noopener">
+        <span class="res-top"><span class="badge b-video">Video</span><span class="vet">Reviewed</span></span>
+        <span class="res-title">How to Write Ad Hooks That Scale</span>
+        <span class="res-meta">Blue Sense Digital · 29 Jan 2026 · 32:53</span>
+        <span class="res-note">Hook anatomy across visual, audio and on-screen text layers, why cheap scroll-stopping memes damage Meta's targeting, and — the part most videos skip — how to bridge into the body without an instant retention drop.</span>
+      </a>
+      <a class="res" data-type="video" href="https://www.youtube.com/watch?v=2-d64pcmYEk" target="_blank" rel="noopener">
+        <span class="res-top"><span class="badge b-video">Video</span><span class="vet un">Link verified, not reviewed</span></span>
+        <span class="res-title">How To Make Scroll-Stopping Meta Video Ad Creatives [Full Masterclass]</span>
+        <span class="res-meta">Evan Seech · masterclass length</span>
+        <span class="res-note">Visual framing, presenter environment and pain-focused messaging. Bridges editing craft and paid creative, which most editing tutorials don't.</span>
+      </a>
+      <a class="res" data-type="video" href="https://www.youtube.com/watch?v=_o3KwJ0gUZI" target="_blank" rel="noopener">
+        <span class="res-top"><span class="badge b-video">Video</span><span class="vet un">Link verified, not reviewed</span></span>
+        <span class="res-title">How to Edit SHORTS &amp; REELS Like a PRO For FREE! | CapCut Video Editing Tutorial</span>
+        <span class="res-meta">Joris Hermans · CapCut is free</span>
+        <span class="res-note">Practical editing on a free tool. Enough to produce agency-standard short-form without buying anything. A more advanced CapCut retention-editing course was rejected as too fiddly for beginners.</span>
+      </a>
+      <a class="res" data-type="doc" href="https://houseofmarketers.com/guide-to-safe-zones-tiktok-facebook-instagram-stories-reels/" target="_blank" rel="noopener">
+        <span class="res-top"><span class="badge b-doc">Reference</span><span class="vet">Verified live</span></span>
+        <span class="res-title">Safe zones across TikTok, Facebook, Instagram Stories &amp; Reels</span>
+        <span class="res-meta">Free guide · includes Meta's own percentages</span>
+        <span class="res-note">Meta's published percentage safe zones — 14% top, 35% bottom, 6% sides — which is the strictest, ad-safe version. Published safe-zone numbers genuinely disagree between sources; always verify with each platform's own preview before final export.</span>
+      </a>
+      <a class="res" data-type="doc" href="https://www.socialinsider.io/blog/instagram-reels-statistics/" target="_blank" rel="noopener">
+        <span class="res-top"><span class="badge b-data">Data</span><span class="vet">Verified live</span></span>
+        <span class="res-title">Instagram Reels benchmarks — 140,000 Reels analysed</span>
+        <span class="res-meta">Socialinsider · Jan–Jun 2026 · free</span>
+        <span class="res-note">Reach rate by account size and by duration, skip rates, posting cadence. The best free source for setting realistic expectations with a client.</span>
+      </a>
+      <a class="res" data-type="doc" href="https://www.socialinsider.io/blog/how-long-are-tiktok-videos/" target="_blank" rel="noopener">
+        <span class="res-top"><span class="badge b-data">Data</span><span class="vet">Verified live</span></span>
+        <span class="res-title">TikTok video length — 6 million brand videos analysed</span>
+        <span class="res-meta">Socialinsider · Jan–Jun 2026 · free</span>
+        <span class="res-note">The largest public dataset on this, and it kills the "21–34 second sweet spot" myth. Engagement rate is flat across lengths; median views rise with length.</span>
+      </a>
+      <a class="res" data-type="doc" href="https://metricool.com/press-release-instagram-study-2026/" target="_blank" rel="noopener">
+        <span class="res-top"><span class="badge b-data">Data</span><span class="vet">Verified live</span></span>
+        <span class="res-title">Instagram study 2026 — 24.36M posts, 375,118 accounts</span>
+        <span class="res-meta">Metricool · free</span>
+        <span class="res-note">Format performance and year-on-year declines. Also the finding that questions in captions lift comments 36.7% and comment-focused CTAs lift engagement 203% — which matters disproportionately in Turkey, where users comment heavily.</span>
+      </a>
+    </div>
+  </section>
+
+  <!-- ============ 09 ============ -->
+  <section class="module" id="m09" data-mod="09">
+    <div class="mhead">
+      <div class="mnum">09</div>
+      <div class="mtitles">
+        <p class="mkicker">Creative · ~6 hours</p>
+        <h3>Creative strategy and the offer</h3>
+      </div>
+      <button class="mark" data-m="09" aria-pressed="false">Mark done</button>
+    </div>
+
+    <p class="lede">Beginners work bottom-up from budget mechanics. Professionals work top-down from the offer. Get the leverage hierarchy straight and most of your decisions make themselves.</p>
+
+    <div class="formula">1 · Product/market (can't fix with ads) → 2 · OFFER → 3 · CREATIVE → 4 · Landing page → 5 · Targeting (largely automated) → 6 · Budget mechanics (smallest)</div>
+
+    <div class="outcomes">
+      <h4>You must be able to explain</h4>
+      <ul>
+        <li>Concept vs format vs variation — and the rule that when a concept fatigues, a <em>variation</em> will not save it.</li>
+        <li>The six-field creative brief, on one page, with the hook written word for word.</li>
+        <li>Modular testing: hook rate tests the hook, hold rate tests the body, CTR tests the offer framing, CVR tests the landing page.</li>
+        <li>Why creative <strong>volume</strong> beats hit rate: 50 ads at a 10% hit rate produces 5 winners; 5 ads at 20% produces 1.</li>
+        <li>Why frameworks like AIDA and PAS structure arguments but don't generate insight — and why AI defaults to framework-shaped copy, which is the most recognisable slop in advertising.</li>
+      </ul>
+    </div>
+
+    <dl class="keys">
+      <div class="key"><dt>The real hit rate</dt><dd>Roughly <b>49–54% of launched ads are outright losers</b>; only <b>3.7–8.2%</b> are winners. Launch 20 ads, expect 0.7–1.6 winners. Plan production accordingly.</dd></div>
+      <div class="key"><dt>Weekly launch volume</dt><dd>Under $10K/month, the median account launches <b>2.8</b> creatives a week; the top quartile launches <b>4.8</b>. That gap is most of the performance gap.</dd></div>
+      <div class="key"><dt>Hook variety</dt><dd>Ten ads with <b>ten different hooks</b> on one concept outperform ten ads with one hook and ten different bodies. Test hooks first — most variance, cheapest to reshoot.</dd></div>
+      <div class="key"><dt>CRO levers</dt><dd>Only <b>17%</b> of marketers A/B test landing pages, yet testing yields <b>~37%</b> average gains. Adding a second CTA roughly <b>halves</b> conversion rate.</dd></div>
+    </dl>
+
+    <div class="tr-panel">
+      <h4>Offers that work in Türkiye</h4>
+      <ul>
+        <li><strong>Taksit</strong> options stated near the price are often a bigger conversion lever than the price itself.</li>
+        <li><strong>WhatsApp-first CTAs</strong> beat forms and beat link-in-bio in most verticals. The standard Turkish funnel is Instagram → DM → WhatsApp → sale. "DM'den yazın" outperforms "link in bio".</li>
+        <li>Risk reversal — <em>memnun kalmazsanız iade</em>, <em>ücretsiz ilk seans</em>, <em>ücretsiz keşif</em>.</li>
+        <li>Write Turkish copy in Turkish. Direct translations of English direct-response copy fail: English headlines expand 20–30% in characters and break layouts, and imperative CTAs that read as energetic in English read as pushy in Turkish. <em>Hemen inceleyin</em> usually beats <em>Get yours now!</em></li>
+        <li>Scarcity must be genuine. Fake countdowns are a Reklam Kurulu problem — see module 13.</li>
+      </ul>
+    </div>
+
+    <p class="reshead">Resources</p>
+    <div class="res-grid">
+      <a class="res" data-type="video" href="https://www.youtube.com/watch?v=Yi_1Vb4sfoQ" target="_blank" rel="noopener">
+        <span class="res-top"><span class="badge b-video">Video</span><span class="vet">Reviewed</span></span>
+        <span class="res-title">The Recipe for the Perfect UGC Ad (Facebook Ads &amp; TikTok Ads)</span>
+        <span class="res-meta">Dara Denney · 2 Aug 2022 · 14:05</span>
+        <span class="res-note">Older than most things here and still the clearest explanation of modular direct-response scripting — hook, agitate, solution, features, CTA — plus how performance creative directors actually read hook rate and hold rate. The framework has not aged.</span>
+      </a>
+      <a class="res" data-type="video" href="https://www.youtube.com/watch?v=rNsOaXtlmRM" target="_blank" rel="noopener">
+        <span class="res-top"><span class="badge b-video">Video</span><span class="vet un">Link verified, not reviewed</span></span>
+        <span class="res-title">How to Develop a Creative Strategy That Converts (Facebook Ads &amp; TikTok Ads)</span>
+        <span class="res-meta">Dara Denney · chaptered, ~17 min</span>
+        <span class="res-note">The five-step system above individual ads: creative foundation → competitive research → features/benefits/testimonials → creative roadmap → ongoing process. Chapters are in the description if you want to skip around.</span>
+      </a>
+      <a class="res" data-type="video" href="https://www.youtube.com/watch?v=Ss7bdFf0bsk" target="_blank" rel="noopener">
+        <span class="res-top"><span class="badge b-video">Video</span><span class="vet un">Link verified, not reviewed</span></span>
+        <span class="res-title">How to Brief UGC Creators (My Exact Template)</span>
+        <span class="res-meta">Dara Denney · template included</span>
+        <span class="res-note">Directly operational — you will brief creators weekly. Covers where to give creative freedom and where not to, and what to negotiate on usage rights.</span>
+      </a>
+      <a class="res" data-type="tool" href="https://www.facebook.com/ads/library/" target="_blank" rel="noopener">
+        <span class="res-top"><span class="badge b-tool">Tool</span><span class="vet">Verified live</span></span>
+        <span class="res-title">Meta Ad Library — competitor research method</span>
+        <span class="res-meta">Meta · free · set country to Türkiye</span>
+        <span class="res-note">Build a tracked list of ten competitors. Check weekly. Log which ads persist. What a competitor <em>keeps running</em> tells you far more than what they launch.</span>
+      </a>
+    </div>
+  </section>
+
+  <!-- ============ 10 ============ -->
+  <section class="module" id="m10" data-mod="10">
+    <div class="mhead">
+      <div class="mnum">10</div>
+      <div class="mtitles">
+        <p class="mkicker">Paid · ~6 hours · the money module</p>
+        <h3>Scaling, and diagnosing an account that stopped working</h3>
+      </div>
+      <button class="mark" data-m="10" aria-pressed="false">Mark done</button>
+    </div>
+
+    <p class="lede">Scaling is not "spend more money". Scaling is <strong>buying more of a result at an acceptable cost</strong>. Three levers: vertical (budget), horizontal (more ad sets, audiences, placements, platforms), and creative (more concepts, faster refresh). The hierarchy is <strong>creative &gt; offer &gt; budget mechanics</strong>, and budget mechanics is the smallest lever and the one beginners obsess over.</p>
+
+    <div class="outcomes">
+      <h4>You must be able to explain</h4>
+      <ul>
+        <li>The signal-density ladder, and why the famous "20% rule" is a useful default rather than a law.</li>
+        <li>Why duplicating winning ad sets is mostly a 2026 myth, and the one case where it still makes sense.</li>
+        <li>The kill table, and the Poisson arithmetic behind it — so you trust it rather than memorise it.</li>
+        <li>Gradual substitution instead of the kill switch when a winner starts to tire.</li>
+        <li>The seven-layer diagnostic tree, top-down, stopping at the first layer where evidence contradicts expectation.</li>
+      </ul>
+    </div>
+
+    <p class="reshead" style="border:0;margin-bottom:6px;">The signal-density ladder — replace the "20% rule" with this</p>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>Ad set's daily conversions</th><th>Safe daily budget increase</th><th>What happens if you overshoot</th></tr></thead>
+        <tbody>
+          <tr><td>Under 30</td><td>5–10%</td><td>Learning resets. Measured penalty: 35–60% CPA increase for 48–72 hours.</td></tr>
+          <tr><td>50–100</td><td>10–20% — the classic "20% rule" zone</td><td>Usually survivable; space steps 3–4 days apart for a clean read.</td></tr>
+          <tr><td>200+, CPA stable 5 days</td><td>30–50%</td><td>Typically only a 10–15% CPA bump that normalises within 24 hours.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p style="color:var(--muted);font-size:14.5px;">Meta has never published "20%" as a threshold anywhere in official documentation. It is a practitioner heuristic that hardened into folklore. The real variable is signal density. This is a good first lesson in flagging a myth and then giving the conditional truth — exactly what you need when a client quotes a blog post at you.</p>
+
+    <p class="reshead" style="border:0;margin-bottom:6px;">The kill table — zero conversions at 3× target CPA is ~95% confidence the ad won't hit target</p>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>Conversions so far</th><th>Kill at (90% confidence)</th><th>Kill at (95% confidence)</th></tr></thead>
+        <tbody>
+          <tr><td>0</td><td>~2.3× target CPA</td><td>~3.0× target CPA</td></tr>
+          <tr><td>1 or fewer</td><td>~3.9×</td><td>~4.7×</td></tr>
+          <tr><td>2 or fewer</td><td>~5.3×</td><td>~6.3×</td></tr>
+          <tr><td>3 or fewer</td><td>~6.7×</td><td>~7.8×</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p style="color:var(--muted);font-size:14.5px;">Hard rules: never kill on data less than 48–72 hours old — attribution lags, and this is the most common beginner error. Pause, don't delete. Document the rationale so the agency doesn't re-test dead concepts in six months. And always have replacements ready before you kill, so you never create a creative vacuum.</p>
+
+    <p class="reshead" style="border:0;margin-bottom:6px;">Fast triage: "results dropped"</p>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>Symptom</th><th>Most likely layer</th><th>First move</th></tr></thead>
+        <tbody>
+          <tr><td>CPM up · CTR stable · CVR stable</td><td>Auction</td><td>Check competitors and seasonality. Consider new placements or geos.</td></tr>
+          <tr><td>CPM stable · CTR down · CVR stable</td><td>Creative</td><td>A new <em>concept</em>, not a new variant of the tired one.</td></tr>
+          <tr><td>CPM stable · CTR stable · CVR down</td><td>Landing page or funnel</td><td>Page speed, offer, checkout, stock.</td></tr>
+          <tr><td>Everything stable · reported revenue down</td><td>Attribution</td><td>Compare to backend before touching anything. A measurement problem is not a performance problem.</td></tr>
+          <tr><td>CPM up <em>and</em> CTR down together</td><td>Ad fatigue, confirmed</td><td>Substitute creative gradually — don't pause the winner.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="callout">
+      <h4>Before any of this: ask the client what they changed</h4>
+      <p>Layer one of the diagnostic tree is business economics — AOV, margin, price changes, discount depth, stock. Did the client change price, promo or stock without telling you? It is usually yes. Layer two is demand: Ramazan, bayram, school term, salary dates, an exchange-rate shock. Only then do you look at the auction, the creative, the click, the site, and finally attribution. Generic fixes fail because they're applied without knowing which layer broke — raising budget doesn't help a creative problem, and broadening an audience doesn't help an attribution problem.</p>
+    </div>
+
+    <div class="tr-panel">
+      <h4>Small-budget reality — most Kagu clients live here</h4>
+      <p>₺30,000 a month spread across five ad sets gives each ₺200 a day and <strong>none of them will ever learn</strong>. The same ₺30,000 in one ad set at ₺1,000 a day might. On small budgets the real constraint is statistical, not financial: you physically cannot generate enough events to decide quickly, so you need 7–14 days for a read, you test creative <em>inside</em> the live ad set rather than in a separate test budget, you stay on Highest Volume because cost caps starve small budgets, and you accept Learning Limited while optimising for a cheaper upstream event such as a lead or add-to-cart instead of a purchase.</p>
+    </div>
+
+    <p class="reshead">Resources</p>
+    <div class="res-grid">
+      <a class="res" data-type="video" href="https://www.youtube.com/watch?v=FyWyHJh_6Ng" target="_blank" rel="noopener">
+        <span class="res-top"><span class="badge b-video">Video</span><span class="vet">Reviewed</span></span>
+        <span class="res-title">The BEST Way To Scale Meta Ads (from $300M ad spend)</span>
+        <span class="res-meta">Ben Heath · 19 May 2026 · 23:18</span>
+        <span class="res-note">Automated rules that step budgets up or down against CPA and ROAS thresholds, plus manual stepped scaling and safe guardrails. It also explains clearly why duplicating campaigns causes auction overlap. Three other scaling videos were rejected as too shallow, too niche, or commentary rather than tutorial.</span>
+      </a>
+      <a class="res" data-type="video" href="https://www.youtube.com/watch?v=Lhl4o7yyuDQ" target="_blank" rel="noopener">
+        <span class="res-top"><span class="badge b-video">Video</span><span class="vet un">Link verified, not reviewed</span></span>
+        <span class="res-title">Dara Denney Reveals the BIGGEST Creative Analysis Mistake in 2026 (Most Strategists Do This)</span>
+        <span class="res-meta">Motion (Creative Analytics) with Dara Denney</span>
+        <span class="res-note">Once Advantage+ controls budget distribution, spend share stops being a quality signal — you can no longer read "this ad set got the most budget, so it's the best". This is about evaluating at the creative level instead.</span>
+      </a>
+    </div>
+  </section>
+
+  <!-- ============ 11 ============ -->
+  <section class="module" id="m11" data-mod="11">
+    <div class="mhead">
+      <div class="mnum">11</div>
+      <div class="mtitles">
+        <p class="mkicker">Operations · ~4 hours</p>
+        <h3>Publishing operations: cadence, batching, scheduling</h3>
+      </div>
+      <button class="mark" data-m="11" aria-pressed="false">Mark done</button>
+    </div>
+
+    <p class="lede">"Best time to post" is the most over-claimed topic in social media, and it makes an excellent case study in reading evidence critically. Clock time appears in <strong>no official ranking-signal list</strong> on Instagram, TikTok or YouTube. It has a real but second-order effect, by improving the odds of early engagement density — which <em>is</em> a ranking input. A junior who spends an hour optimising post time and five minutes on the hook has the ratio exactly backwards.</p>
+
+    <div class="outcomes">
+      <h4>You must be able to explain</h4>
+      <ul>
+        <li>Why aggregate "best times to post" tables are near-worthless for a specific account, and the only defensible method: read the account's own Insights → Audience → Most Active Times, pick two or three windows, hold them constant for four weeks, then compare.</li>
+        <li>That scheduled posts are <strong>not</strong> penalised. No platform exposes upload method as a ranking signal.</li>
+        <li>Batch by <strong>stage</strong>, not by client. Context-switching between clients mid-stage is the largest hidden cost in agency social.</li>
+        <li>The account-scoping safeguard — publishing to the wrong client account is the most damaging routine error in this job.</li>
+      </ul>
+    </div>
+
+    <p class="reshead" style="border:0;margin-bottom:6px;">Free scheduling — what each native tool can actually do</p>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>Tool</th><th>Cost</th><th>Horizon &amp; limits</th><th>The catch</th></tr></thead>
+        <tbody>
+          <tr><td>Instagram in-app</td><td>Free</td><td>75 days ahead, 25 scheduled posts/day. Posts, carousels, Reels.</td><td>No Stories. Any public account since March 2026 — professional account no longer required.</td></tr>
+          <tr><td>Meta Business Suite</td><td>Free</td><td>Does schedule Instagram <em>Stories</em>, which the app can't. Plus FB Page scheduling, unified inbox, basic analytics.</td><td>One Instagram account and one Facebook Page at a time. Fine for one brand, unworkable for a roster.</td></tr>
+          <tr><td>TikTok Studio</td><td>Free</td><td>10 days ahead. Creator or Business account required.</td><td>Browser only, not in the mobile app. Cannot edit after scheduling — delete and re-upload.</td></tr>
+          <tr><td>Buffer free</td><td>Free</td><td>3 channels, 10 scheduled posts per channel, 1 user. Instagram and TikTok auto-publish both work.</td><td>The post cap. Enough to learn on, and enough for one small client.</td></tr>
+          <tr><td>Metricool free</td><td>Free</td><td>1 brand, 20 posts/month, with genuinely good analytics for the price.</td><td>One brand only. Best free analytics of the group.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p style="color:var(--muted);font-size:14.5px;">Learn the native tools first so you understand what is actually possible, then add a third-party tool only when the roster demands it. One technical constraint to remember: third-party tools publish via the platform APIs, and the TikTok Content Posting API caps at 10 minutes regardless of the account's native limit. Always verify a format publishes before promising a client a workflow.</p>
+
+    <dl class="keys">
+      <div class="key"><dt>Cadence, Instagram</dt><dd><b>3–5 posts a week</b> yields 12–24% more reach per post than 1–2, with diminishing returns above. Stories daily, 3–7 frames.</dd></div>
+      <div class="key"><dt>Cadence, TikTok</dt><dd><b>2–5 a week</b> minimum; 1–2 a day in growth phases. Moving from 1 to 2–5 a week lifts views ~17%.</dd></div>
+      <div class="key"><dt>Turkish peak</dt><dd>Primary evening peak <b>20:00–23:00</b>, secondary 12:00–14:00, tertiary 17:00–19:00. Turkey is UTC+3 year-round with no DST, which removes a whole class of scheduling errors.</dd></div>
+      <div class="key"><dt>Ramazan</dt><dd>Iftar creates a hard usage trough followed by a very large spike. During Ramazan, rebuild the schedule around iftar rather than the standard evening peak.</dd></div>
+    </dl>
+
+    <div class="callout">
+      <h4>The monthly cycle to run for every client</h4>
+      <p><strong>W−4</strong> strategy review, pillar check, Turkish key dates, brief written · <strong>W−3</strong> ideation, scripts, shot list · <strong>W−2</strong> batch shoot day — one day yields 4–6 weeks of raw footage · <strong>W−1</strong> edit, caption, internal QA, client approval, schedule · <strong>W0</strong> publish, engage, monitor · <strong>W+1</strong> report, and feed the learnings into the next brief. Set an explicit client-side approval SLA in the contract — approvals are the number one bottleneck in agency social.</p>
+    </div>
+
+    <div class="tr-panel">
+      <h4>Turkish content calendar — build these into every annual plan</h4>
+      <p>Ramazan (shifts ~11 days earlier each year) · Ramazan Bayramı · Kurban Bayramı · <strong>23 Nisan</strong> · <strong>19 Mayıs</strong> · <strong>30 Ağustos</strong> · <strong>29 Ekim</strong>, very high engagement and brand posts are expected · <strong>10 Kasım</strong> — solemn; commercial posting reads badly, plan a respectful post or go dark · Efsane Cuma, 11.11, back-to-school in September, and the July–August coastal holiday shift.</p>
+    </div>
+
+    <p class="reshead">Resources</p>
+    <div class="res-grid">
+      <a class="res" data-type="video" href="https://www.youtube.com/watch?v=cvzsihm4qU8" target="_blank" rel="noopener">
+        <span class="res-top"><span class="badge b-video">Video</span><span class="vet">Reviewed</span></span>
+        <span class="res-title">How to schedule and grow your social platforms (Full Metricool Tutorial)</span>
+        <span class="res-meta">Modern Millie · 4 Mar 2026 · 8:24</span>
+        <span class="res-note">Short and practical. Connecting multiple channels, scheduling against engagement heatmaps, a unified inbox for comments and DMs, and reading 30-day growth analytics. Metricool's free tier covers one brand.</span>
+      </a>
+      <a class="res" data-type="video" href="https://www.youtube.com/watch?v=_5GWhkr6EUo" target="_blank" rel="noopener">
+        <span class="res-top"><span class="badge b-video">Video</span><span class="vet un">Link verified, not reviewed</span></span>
+        <span class="res-title">Complete guide to Metricool! | 2026 Social Media Management Tool</span>
+        <span class="res-meta">Jade Beason · 2026</span>
+        <span class="res-note">A longer second take on the same tool if you want more depth on reporting and competitor benchmarking.</span>
+      </a>
+      <a class="res" data-type="doc" href="https://buffer.com/resources/social-media-frequency-guide/" target="_blank" rel="noopener">
+        <span class="res-top"><span class="badge b-data">Data</span><span class="vet">Verified live</span></span>
+        <span class="res-title">Posting frequency guide — 100,000+ accounts</span>
+        <span class="res-meta">Buffer · free</span>
+        <span class="res-note">Cadence data per platform with the actual deltas. Set cadence from production capacity, not from this table — a cadence the team can't sustain at quality does more damage than a lower one held consistently.</span>
+      </a>
+      <a class="res" data-type="tool" href="https://metricool.com/pricing/" target="_blank" rel="noopener">
+        <span class="res-top"><span class="badge b-tool">Tool</span><span class="vet">Verified live</span></span>
+        <span class="res-title">Metricool — free tier</span>
+        <span class="res-meta">Free plan: 1 brand, 20 posts/month</span>
+        <span class="res-note">Instagram and TikTok auto-publish both work on the free plan. Good enough to run one client and learn the workflow properly.</span>
+      </a>
+      <a class="res" data-type="tool" href="https://buffer.com/pricing" target="_blank" rel="noopener">
+        <span class="res-top"><span class="badge b-tool">Tool</span><span class="vet">Verified live</span></span>
+        <span class="res-title">Buffer — free tier</span>
+        <span class="res-meta">Free plan: 3 channels, 10 posts per channel</span>
+        <span class="res-note">The simplest UI for a junior to learn on, and the free plan supports Instagram and TikTok auto-publishing.</span>
+      </a>
+    </div>
+  </section>
+
+  <!-- ============ 12 ============ -->
+  <section class="module" id="m12" data-mod="12">
+    <div class="mhead">
+      <div class="mnum">12</div>
+      <div class="mtitles">
+        <p class="mkicker">Client work · ~4 hours</p>
+        <h3>Onboarding, expectations, reporting, and bad news</h3>
+      </div>
+      <button class="mark" data-m="12" aria-pressed="false">Mark done</button>
+    </div>
+
+    <p class="lede">Commit to <strong>inputs and process</strong> with certainty, and to <strong>outcomes</strong> with ranges and conditions. That one distinction prevents most of the relationships that go wrong.</p>
+
+    <div class="outcomes">
+      <h4>You must be able to explain</h4>
+      <ul>
+        <li>What you can safely commit to — creatives produced, tests run, reporting cadence, tracking verified — versus what needs a range and a condition attached.</li>
+        <li>The month-one script, word for word.</li>
+        <li>What a real strategy document contains, and its test: a new account manager can pick it up and run the account without asking anyone anything.</li>
+        <li>The three situations when an account isn't working — measurement problem, execution problem, fundamentals problem — and that each needs a different conversation.</li>
+        <li>Why lead quality is <em>your</em> job, not the client's.</li>
+      </ul>
+    </div>
+
+    <div class="callout">
+      <h4>The month-one conversation, scripted</h4>
+      <p>"Month one we are buying data, not results. Expect volatile costs while the algorithm learns. We need roughly 50 conversion events per week before anything is stable. I'll show you the learning-phase status in the first report so you can see it directly." Then record a baseline before launch: monthly leads, CPA if known, conversion rate, AOV, average response time. Without a baseline, every future conversation is opinion.</p>
+    </div>
+
+    <div class="callout">
+      <h4>Never commit to</h4>
+      <p>A guaranteed number of sales. "First page", "viral", or a follower count. A ROAS figure before you've seen a month of data. And never let a monthly report be the first time a client hears bad news — if something breaks on the 8th, they hear it on the 8th.</p>
+    </div>
+
+    <div class="tr-panel">
+      <h4>Questions to add to the onboarding form for a Turkish local client</h4>
+      <ul>
+        <li>Which cities and districts do you actually serve? Default radius targeting is usually wrong.</li>
+        <li>Is your Instagram a business account linked to a Business Portfolio?</li>
+        <li>Do you have a website, or is Instagram the whole business?</li>
+        <li>Do you want leads by WhatsApp, phone, DM or form? (WhatsApp is usually the honest answer.)</li>
+        <li><strong>Who answers the WhatsApp, and how fast?</strong> Lead response time destroys more accounts than targeting ever will.</li>
+        <li>Do you have e-fatura set up, and ETBİS registration if you sell online?</li>
+        <li>Is there a vergi levhası that matches the ad account?</li>
+      </ul>
+    </div>
+
+    <p class="reshead" style="border:0;margin-bottom:6px;">What a monthly client report contains</p>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>Section</th><th>Content</th></tr></thead>
+        <tbody>
+          <tr><td>1 · Headline</td><td>One sentence, plain language: what happened and what it means. Never lead with impressions and reach.</td></tr>
+          <tr><td>2 · Business metrics</td><td>Spend, leads or sales, CPA/CPL, revenue, MER — each against target.</td></tr>
+          <tr><td>3 · Trend</td><td>This month vs last month vs the same month last year, on the same calendar window every time.</td></tr>
+          <tr><td>4 · What we did</td><td>Actions taken, tests run.</td></tr>
+          <tr><td>5 · What we learned</td><td>Including the failures.</td></tr>
+          <tr><td>6 · Next month</td><td>Three specific commitments.</td></tr>
+          <tr><td>7 · Appendix</td><td>Creative-level and campaign-level tables, plus a backend cross-check line.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p style="color:var(--muted);font-size:14.5px;">Annotate platform changes in the report. "Meta changed attribution on 3 March; the +38% in reported ROAS is a reporting change, not a performance change." Doing that once buys years of credibility.</p>
+
+    <div class="callout">
+      <h4>Escalation triggers — automatic, not discretionary</h4>
+      <p>CPA above target for 7 consecutive days · spend pacing off by more than 20% against plan · any ad account or Page restriction · pixel or CAPI events stop firing for more than 24 hours · client stops responding for more than 5 business days · client mentions "results" and "contract" in the same message.</p>
+    </div>
+
+    <div class="callout">
+      <h4>AI in the workflow: drafts, never signatures</h4>
+      <p>AI is genuinely good at volume variations on a human-validated winner, reading 200 reviews to extract recurring objections in the customer's own vocabulary, first drafts, and Turkish voiceover. It is a liability for unverified factual claims in ads, and <strong>AI-cloned likenesses of real people are outright illegal in Turkey since 1 August 2026</strong>, with no disclosure exemption. Three gates before anything ships: every claim traceable to a document the client can produce; a native Turkish speaker reads it aloud; AI disclosure applied where required. And never paste a client's customer list or CRM export into a consumer AI tool — that is a KVKK transfer abroad with no legal basis.</p>
+    </div>
+
+    <p class="reshead">Resources</p>
+    <div class="res-grid">
+      <a class="res" data-type="video" href="https://www.youtube.com/watch?v=G2PI12jWz1o" target="_blank" rel="noopener">
+        <span class="res-top"><span class="badge b-video">Video</span><span class="vet">Reviewed</span></span>
+        <span class="res-title">HOW TO ONBOARD A SOCIAL MEDIA CLIENT IN 2026 (Our Exact Agency Workflow)</span>
+        <span class="res-meta">Milou Pietersz · 21 May 2026 · 13:31</span>
+        <span class="res-note">A real end-to-end workflow: contracts and payment capture in a CRM, automated scheduling links, internal team handoffs, then delegating strategy, design and engagement tasks before the monthly calendar goes out.</span>
+      </a>
+      <a class="res" data-type="video" href="https://www.youtube.com/watch?v=BM-uvTzZfIc" target="_blank" rel="noopener">
+        <span class="res-top"><span class="badge b-video">Video</span><span class="vet">Reviewed</span></span>
+        <span class="res-title">7-STEP Client Onboarding Checklist for Agencies!</span>
+        <span class="res-meta">AgencyAnalytics · 5 Sep 2024 · 5:50</span>
+        <span class="res-note">Also listed in module 02. Rewatch it here with the client conversation in mind rather than the access checklist.</span>
+      </a>
+      <a class="res" data-type="tool" href="https://lookerstudio.google.com/" target="_blank" rel="noopener">
+        <span class="res-top"><span class="badge b-tool">Tool</span><span class="vet">Verified live</span></span>
+        <span class="res-title">Looker Studio</span>
+        <span class="res-meta">Google · free tier, unlimited dashboards</span>
+        <span class="res-note">Genuinely sufficient for a small agency. The paid part is the connectors — Meta and TikTok are not native Google sources. The free workaround that actually works: schedule Meta and TikTok exports into Google Sheets, then connect Sheets to Looker Studio. About an hour of setup per client, refreshes daily, zero connector cost.</span>
+      </a>
+    </div>
+  </section>
+
+  <!-- ============ 13 ============ -->
+  <section class="module" id="m13" data-mod="13">
+    <div class="mhead">
+      <div class="mnum">13</div>
+      <div class="mtitles">
+        <p class="mkicker">Türkiye · ~5 hours · highest liability in the programme</p>
+        <h3>Türkiye: the tax stack, the law, and the invoice conversation</h3>
+      </div>
+      <button class="mark" data-m="13" aria-pressed="false">Mark done</button>
+    </div>
+
+    <p class="lede">This module is the difference between a competent account manager and one who loses client trust at invoice time. It is also the module where a mistake costs real money — advertising fines in Turkey reach <strong>8,635,800 TL</strong> for internet ads, multiplied up to tenfold for a repeat violation within a year.</p>
+
+    <div class="tr-panel">
+      <h4>⚠ The 1 August 2026 advertising regulation — the single most important thing on this page</h4>
+      <p>Amendment to the <em>Ticari Reklam ve Haksız Ticari Uygulamalar Yönetmeliği</em>, Resmî Gazete 1 July 2026, issue 33297, Article 23/A. In force since 1 August 2026, enforced by the <strong>Reklam Kurulu</strong>.</p>
+      <ul>
+        <li>Only <strong>"Reklam"</strong> or <strong>"Tanıtım"</strong> satisfy disclosure. <strong>#işbirliği, #sponsorlu, #ortaklık and #hediye no longer do</strong> — and neither does Instagram's built-in "Paid partnership" label on its own. This catches every agency, because #işbirliği was the universal convention for five years.</li>
+        <li>The disclosure must identify the advertiser — the brand name directly, or <em>@[marka] tarafından sağlandı</em>, or <em>@[marka]'a teşekkürler</em>. Expected format: <strong>REKLAM | @brand</strong>.</li>
+        <li>Placement: visible at first glance without scrolling or tapping "daha fazla", before all other hashtags, high contrast, not overlapping platform icons.</li>
+        <li><strong>Every frame</strong> of a carousel or Story needs its own disclosure. Reposting from feed to Story means adding it again.</li>
+        <li><strong>Video requires a spoken disclosure</strong> in addition to the written label. Podcasts: stated twice.</li>
+        <li>Scope now includes gifted products, affiliate arrangements, giveaways and event invitations — not just classic paid posts.</li>
+        <li>AI-generated content and digital characters must be disclosed. <strong>Deepfake endorsements using a real person's cloned likeness are strictly prohibited</strong>, with no disclosure exemption.</li>
+        <li>Discounts: the reference price must be the <strong>lowest price in the 10 days</strong> before the discount starts. Reviews: only verified purchasers. Environmental claims need third-party certification.</li>
+        <li><strong>Brands are liable alongside creators.</strong> Assuming creator compliance is not a defence — put the exact wording in every creator contract.</li>
+      </ul>
+      <p>Operationally: make disclosure a <strong>blocking item</strong> in internal QA, build a Turkish disclosure snippet library so juniors copy-paste rather than compose, and re-brief every creator on the roster — most are still using #işbirliği.</p>
+    </div>
+
+    <p class="reshead" style="border:0;margin-bottom:6px;">The tax stack on Meta spend — three separate things people constantly confuse</p>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>What</th><th>Rate</th><th>Who pays</th><th>Notes</th></tr></thead>
+        <tbody>
+          <tr><td>Stopaj — withholding on internet advertising</td><td><b>15%</b></td><td><b>You / the payer</b></td><td>Presidential Decision 476, in force since 1 Jan 2019. Applies to payments to foreign entities without a Turkish presence. 0% to resident Turkish companies. Declared on the monthly Muhtasar Beyanname. The Danıştay has rejected the treaty defence — withhold.</td></tr>
+          <tr><td>KDV (VAT)</td><td><b>20%</b></td><td>You</td><td>If the client's VKN is registered with Meta, Meta charges no VAT and the client self-assesses via <b>KDV-2</b>, then deducts it. If no VKN is registered, Meta charges 20% directly and <b>it cannot be recovered</b>. A five-minute fix worth real money — put it on the onboarding checklist.</td></tr>
+          <tr><td>Dijital Hizmet Vergisi (DST)</td><td><b>5%</b> in 2026, dropping to <b>2.5%</b> on 1 Jan 2027</td><td>Meta and Google, not you</td><td>Presidential Decision 10767, RG 25 Dec 2025. Levied on the platform's gross revenue. Clients will ask — the answer is "DST is levied on Meta, not on you."</td></tr>
+          <tr><td>Google "Turkey Regulatory Operating Cost"</td><td><b>4.5%</b> since 1 Jan 2026, down from 7%</td><td>You</td><td>A separate line item on the invoice, applied wherever ads serve in Turkey regardless of where the advertiser is.</td></tr>
+          <tr><td>Meta "Location Fee"</td><td><b>5%</b>, new since 1 July 2026</td><td>You</td><td>Charged on <em>where the audience is</em>, not where the business is. Added on top of spend after delivery. <b>Appears only on invoices and in Billing, never in Ads Manager</b> — which is why the two now disagree.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="callout">
+      <h4>The worked example every account manager must be able to do live</h4>
+      <p>₺100,000 of Meta spend delivered in Turkey: ₺100,000 media + ₺5,000 location fee = ₺105,000, plus 20% VAT = <strong>₺126,000 billed</strong> — before any withholding obligation. Ads Manager will show ₺100,000. Budget an extra <strong>15–17.6%</strong> beyond stated ad spend for the tax stack, and decide <em>in the contract</em> whether Kagu's card or the client's card pays Meta, because that determines who carries the stopaj and the KDV-2. Most Turkish agencies push ad spend onto the client's card and invoice only the management fee. It is administratively far cleaner.</p>
+    </div>
+
+    <div class="tr-panel">
+      <h4>KVKK — yes, cookie consent is required in Turkey</h4>
+      <p>Explicit consent (<em>açık rıza</em>) before setting marketing <strong>and analytics</strong> cookies — KVKK's guidance explicitly puts Google Analytics outside the exemption. Banners need opt-in defaults, equal prominence for accept and reject, no cookie walls, and withdrawal as easy as granting. Per Board Decision 2026/347, combining the <em>aydınlatma metni</em> and the <em>açık rıza metni</em> into one document is now prohibited.</p>
+      <p>Meta Pixel, TikTok Pixel and GA4 all transfer personal data abroad, which triggers the Article 9 transfer regime and needs a lawful mechanism — in practice the standard contractual clauses, notified to the Board within 5 business days. <strong>Server-side tracking does not create a legal basis</strong>; vendors market it as "recovering lost data", which is legally misleading.</p>
+      <p>The practical consequence you must warn the client about <em>before</em> it shows up in a report: a compliant banner means the pixel fires only after consent, so you lose signal — worse EMQ, fewer events, a bigger Meta-vs-backend gap. This is the most common "why did our numbers drop" conversation in the Turkish market.</p>
+    </div>
+
+    <p class="reshead">Resources</p>
+    <div class="res-grid">
+      <a class="res" data-type="law" href="https://www.cbhukuk.com/en/influencer-advertising-rules-turkey/" target="_blank" rel="noopener">
+        <span class="res-top"><span class="badge b-law">Law</span><span class="vet">Verified live</span></span>
+        <span class="res-title">Influencer advertising rules in Türkiye</span>
+        <span class="res-meta">CBHukuk · covers the 1 Aug 2026 regime</span>
+        <span class="res-note">The exact required Turkish wording, placement rules, per-frame requirements, the list of hashtags that are now invalid, and the penalty figures. Print this and keep it next to the QA checklist.</span>
+      </a>
+      <a class="res" data-type="law" href="https://vibemetri.com/en/blog/ad-regulation-2026-guide" target="_blank" rel="noopener">
+        <span class="res-top"><span class="badge b-law">Law</span><span class="vet">Verified live</span></span>
+        <span class="res-title">Türkiye's new advertising regulation, in force 1 August 2026</span>
+        <span class="res-meta">Vibemetri · cites RG 1.7.2026 no. 33297</span>
+        <span class="res-note">Second independent read on the same amendment — required labels, AI rules, shared brand liability. Two sources on a regulation this new is not paranoia.</span>
+      </a>
+      <a class="res" data-type="law" href="https://www.erdem-erdem.av.tr/en/insights/withholding-tax-issue-in-digital-advertising-services" target="_blank" rel="noopener">
+        <span class="res-top"><span class="badge b-law">Law</span><span class="vet">Verified live</span></span>
+        <span class="res-title">The withholding tax issue in digital advertising services</span>
+        <span class="res-meta">Erdem &amp; Erdem · Presidential Decision 476</span>
+        <span class="res-note">The 15% stopaj explained properly, including the treaty arguments and why they have failed at the Danıştay. Read before you have the billing conversation with a client's mali müşavir.</span>
+      </a>
+      <a class="res" data-type="doc" href="https://ads.tiktok.com/help/article/turkey-vat?lang=en" target="_blank" rel="noopener">
+        <span class="res-top"><span class="badge b-doc">Official doc</span><span class="vet">Verified live</span></span>
+        <span class="res-title">TikTok — Türkiye: Value Added Tax</span>
+        <span class="res-meta">TikTok Ads Help Centre</span>
+        <span class="res-note">20% VAT since 10 July 2023, and how to supply your Turkish VAT ID. Note the trap: review takes 24–72 hours and <strong>VAT charged during the review window is non-refundable</strong>. Do this on day one of onboarding.</span>
+      </a>
+      <a class="res" data-type="doc" href="https://support.google.com/google-ads/answer/9750227?hl=en" target="_blank" rel="noopener">
+        <span class="res-top"><span class="badge b-doc">Official doc</span><span class="vet">Verified live</span></span>
+        <span class="res-title">Jurisdiction-specific surcharges</span>
+        <span class="res-meta">Google Ads Help · has the Turkey 4.5% figure</span>
+        <span class="res-note">Google's own page, so you can show a client the number rather than assert it.</span>
+      </a>
+      <a class="res" data-type="law" href="https://www.kvkk.gov.tr/" target="_blank" rel="noopener">
+        <span class="res-top"><span class="badge b-law">Law</span><span class="vet">Verified live</span></span>
+        <span class="res-title">KVKK — Kişisel Verileri Koruma Kurumu</span>
+        <span class="res-meta">Official regulator</span>
+        <span class="res-note">Board decisions, guidance and VERBİS registration. VERBİS has no GDPR equivalent, so anyone importing a GDPR checklist will miss it — and an agency processing client customer data is itself a data controller.</span>
+      </a>
+      <a class="res" data-type="law" href="https://iys.org.tr/" target="_blank" rel="noopener">
+        <span class="res-top"><span class="badge b-law">Law</span><span class="vet">Verified live</span></span>
+        <span class="res-title">İYS — İleti Yönetim Sistemi</span>
+        <span class="res-meta">State-run consent platform</span>
+        <span class="res-note">Marketing by email, SMS or automated call needs prior consent deposited here. This bites paid social directly: if a Meta Lead Form collects a phone number and the client then SMSes that lead, İYS consent is required. Fines are per message.</span>
+      </a>
+      <a class="res" data-type="data" href="https://avangardreklam.com/en/blog/google-ads-pricing-turkey-2026/" target="_blank" rel="noopener">
+        <span class="res-top"><span class="badge b-data">Data</span><span class="vet">Verified live</span></span>
+        <span class="res-title">Google Ads CPC benchmarks, Turkey 2026</span>
+        <span class="res-meta">Median CPCs by sector, in TRY</span>
+        <span class="res-note">Useful for orientation only. There is no credible public Meta CPM benchmark for Turkey at all — pull Kagu's own blended CPM, CPC and CTR from live accounts and teach those as the house benchmark. That is more useful anyway, and a good first-week exercise.</span>
+      </a>
+    </div>
+  </section>
+
+  <!-- ============ 14 ============ -->
+  <section class="module" id="m14" data-mod="14">
+    <div class="mhead">
+      <div class="mnum">14</div>
+      <div class="mtitles">
+        <p class="mkicker">Credentials · free exams only</p>
+        <h3>The free certification track</h3>
+      </div>
+      <button class="mark" data-m="14" aria-pressed="false">Mark done</button>
+    </div>
+
+    <p class="lede">Certifications don't make anyone good at this job, but they force structured coverage and they look right on a proposal. Take them in this order. Everything here is free — <strong>Meta's Blueprint courses are free but its certification exams are not</strong>, so treat those as optional and skip them unless a client asks.</p>
+
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>Order</th><th>Certification</th><th>Where</th><th>Effort</th><th>Cost</th></tr></thead>
+        <tbody>
+          <tr><td>1</td><td>Fundamentals of Digital Marketing</td><td>Google Skillshop</td><td>17 modules, ~40 hours</td><td>Free</td></tr>
+          <tr><td>2</td><td>Google Analytics Certification</td><td>Google Skillshop</td><td>50 questions, 75 min, 80% to pass</td><td>Free</td></tr>
+          <tr><td>3</td><td>Google Ads Search Certification</td><td>Google Skillshop</td><td>~75 min, 46–50 questions, valid 1 year</td><td>Free</td></tr>
+          <tr><td>4</td><td>Google Ads Measurement Certification</td><td>Google Skillshop</td><td>Same format</td><td>Free</td></tr>
+          <tr><td>5</td><td>TikTok Media Buying Expert path</td><td>TikTok Academy</td><td>Learning path + exam prep</td><td>Free</td></tr>
+          <tr><td>6</td><td>Meta Blueprint learning paths</td><td>Meta Blueprint</td><td>Microlearning, 1–5 min modules</td><td>Courses free · exams paid, skip</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="callout">
+      <h4>Two corrections to what you'll find by googling</h4>
+      <p><strong>Google Digital Garage no longer exists</strong> as a separate platform — learndigital.withgoogle.com redirects to grow.google, and Fundamentals of Digital Marketing now lives on Skillshop. <strong>Google Analytics Academy no longer exists</strong> either; it redirects to Skillshop too. Don't send a trainee to either old URL. And <span style="font-family:var(--mono)">metacertified.com</span> is <strong>not</strong> Meta's site — it is a parked domain for sale.</p>
+    </div>
+  </section>
+
+  <!-- ============ MYTHS ============ -->
+  <section class="module" id="myths">
+    <div class="mhead">
+      <div class="mnum">▲</div>
+      <div class="mtitles">
+        <p class="mkicker">Quick reference</p>
+        <h3>Myths vs evidence</h3>
+      </div>
+    </div>
+    <p class="lede">Clients and YouTubers will quote these at you. Know which are real, which are half-true, and which are folklore.</p>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>Claim</th><th>Verdict</th><th>What's actually true</th></tr></thead>
+        <tbody>
+          <tr><td>"Never raise budget more than 20%"</td><td class="v-half">Half-myth</td><td>Never published by Meta. The reset penalty is real — 35–60% CPA spike for 48–72 h — but the real variable is signal density, not a percentage.</td></tr>
+          <tr><td>"Duplicate winners to scale"</td><td class="v-myth">Mostly myth in 2026</td><td>Auction overlap is real and Meta's budget flexibility removed the original justification. Raise budget on the working ad set instead.</td></tr>
+          <tr><td>"50 conversions a week to exit learning"</td><td class="v-true">True</td><td>Meta's documented threshold. Every source agrees.</td></tr>
+          <tr><td>"Learning Limited resolves if you wait"</td><td class="v-myth">Myth</td><td>It means the arithmetic doesn't work at current budget and CPA. Consolidate, or change the optimisation event.</td></tr>
+          <tr><td>"Pause the tired winner and launch new ads"</td><td class="v-myth">Myth, and harmful</td><td>Forces all spend into unproven in-learning creative. Substitute gradually instead.</td></tr>
+          <tr><td>"ROAS is up 38%, great quarter"</td><td class="v-myth">Reporting artefact</td><td>Meta's 3 March 2026 engage-through change inflated reported ROAS ~38% median while CRM revenue rose ~8%.</td></tr>
+          <tr><td>"Meta and GA4 should match"</td><td class="v-myth">Myth</td><td>Different models, windows, identity and date basis. A 20–50% gap is normal.</td></tr>
+          <tr><td>"The pixel tracks everything"</td><td class="v-myth">Myth</td><td>Browser pixel captures ~40% of actual conversions in 2026. CAPI is mandatory, not optional.</td></tr>
+          <tr><td>"Server-side tracking gets around cookie consent"</td><td class="v-myth">Myth, and legally dangerous</td><td>It avoids technical restrictions, not KVKK obligations.</td></tr>
+          <tr><td>"High-production video wins"</td><td class="v-myth">Myth</td><td>Hit rate by format: text-only 11.6%, product image 8.75%, UGC 7.56%, high production 6.87% — the worst.</td></tr>
+          <tr><td>"Higher hit rate means a better creative programme"</td><td class="v-myth">Myth</td><td>50 ads at 10% gives 5 winners; 5 ads at 20% gives 1. Absolute winner volume is the goal.</td></tr>
+          <tr><td>"Retargeting has amazing ROAS"</td><td class="v-half">Usually an artefact</td><td>Retargeting harvests conversions that would have happened anyway. Run a holdout before you believe it.</td></tr>
+          <tr><td>"TikTok shows new videos to 300–500 people first"</td><td class="v-myth">Myth</td><td>Not in any TikTok documentation. TikTok describes ranking a <em>large</em> candidate pool per individual viewer. Optimise retention, not the first 200 views.</td></tr>
+          <tr><td>"Shadowbanning"</td><td class="v-myth">Myth</td><td>What people call shadowbanning is normal ranking, documented recommendation ineligibility (check Account Status), or regression to the mean.</td></tr>
+          <tr><td>"Posting too often triggers a spam filter"</td><td class="v-myth">Myth</td><td>Mosseri: posting more does not cost you followers or reach. The real constraints are quality, burnout and audience fatigue.</td></tr>
+          <tr><td>"Scheduled posts get less reach"</td><td class="v-myth">Explicitly false</td><td>No platform exposes upload method as a ranking signal.</td></tr>
+          <tr><td>"The 21–34 second TikTok sweet spot"</td><td class="v-myth">Myth</td><td>TikTok has never published it and 6 million videos of data show no narrow optimum.</td></tr>
+          <tr><td>"Use 30 hashtags in the first comment"</td><td class="v-myth">Myth, and impossible</td><td>Instagram capped hashtags at 5 per post in December 2025.</td></tr>
+          <tr><td>"#işbirliği is proper disclosure in Türkiye"</td><td class="v-myth">Was true, false since 1 Aug 2026</td><td>Only "Reklam" or "Tanıtım" satisfy Article 23/A. Fines to 8,635,800 TL.</td></tr>
+          <tr><td>"Turkey's DST is 7.5%"</td><td class="v-myth">Outdated</td><td>5% for 2026, 2.5% from 1 January 2027.</td></tr>
+          <tr><td>"You don't pay tax on Meta ads, Meta does"</td><td class="v-myth">Myth</td><td>15% stopaj plus the 20% KDV-2 self-assessment fall on the Turkish payer. Budget +15–17.6%.</td></tr>
+          <tr><td>"Facebook is the main platform in Türkiye"</td><td class="v-myth">Myth</td><td>Instagram 62.3M vs Facebook 34.7M. TikTok reaches 68.6% of adults.</td></tr>
+          <tr><td>"Meta's AI tools mean we need less creative"</td><td class="v-myth">Backwards</td><td>Andromeda made creative the targeting layer. Creative volume requirements went up, not down.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ============ PLAN ============ -->
+  <section class="module" id="plan">
+    <div class="mhead">
+      <div class="mnum">▲</div>
+      <div class="mtitles">
+        <p class="mkicker">Putting it together</p>
+        <h3>The 90-day path to running a client alone</h3>
+      </div>
+    </div>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>Weeks</th><th>Modules</th><th>What you do, not just watch</th></tr></thead>
+        <tbody>
+          <tr><td>1–2</td><td>00 · 01 · 02</td><td>Start Fundamentals of Digital Marketing. Compute break-even ROAS for three real Kagu clients. Set up a sandbox Business Portfolio and request partner access to a test asset.</td></tr>
+          <tr><td>3–4</td><td>03</td><td>Install a pixel and a Conversions API connection on a real site. Get Event Match Quality above 7. Build the UTM spreadsheet and the agency naming convention. Set a WhatsApp click as a GA4 key event.</td></tr>
+          <tr><td>5–7</td><td>04 · 05</td><td>Build and launch one real Meta campaign and one TikTok campaign on a small budget. Get one ad set out of the learning phase. Run a Spark Ad. Sit the TikTok Media Buying path.</td></tr>
+          <tr><td>8–9</td><td>06</td><td>Build one Search campaign end to end with proper negatives. Sit the Google Ads Search certification.</td></tr>
+          <tr><td>10–11</td><td>07 · 08 · 09</td><td>Write five hooks for one concept and test them. Read three retention curves and name the shape. Produce a one-page creative brief with the hook written word for word.</td></tr>
+          <tr><td>12</td><td>10 · 11 · 12</td><td>Scale one ad set using the signal-density ladder. Run the diagnostic tree on a live account. Write one full monthly client report and present it internally.</td></tr>
+          <tr><td>Ongoing</td><td>13</td><td>Module 13 is not a one-off. Re-read the disclosure rules before every creator brief and the tax table before every billing conversation.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="callout">
+      <h4>Maintenance — whoever owns this page, read this</h4>
+      <p>Three facts here are less than three months old: the AI Max auto-upgrade (September 2026), Meta location fees (July 2026), and the Turkish advertising regulation (August 2026). Two more change on 1 January 2027: Turkey's DST drops from 5% to 2.5%, and the Meta and Google surcharges are expected to follow. Review this page quarterly against the Google Ads announcements feed and the TikTok help centre, and diary a January 2027 update for module 13 specifically.</p>
+    </div>
+  </section>
+
+  </main>
+</div>
+</div>
+
+<footer>
+  <div class="foot-in">
+    <p><strong style="color:var(--text)">Every link on this page is free to use.</strong> Where a source is paid or partly paid, it says so. Videos marked <em>Reviewed</em> were watched end to end and checked for accuracy against 2026 platform documentation before being included; nine candidates were rejected for being outdated, non-English, or for teaching burner accounts and proxy tricks. Videos marked <em>Link verified, not reviewed</em> have confirmed titles and channels but were not watched — treat them with slightly more scepticism.</p>
+    <p class="sig">Kagu Digital Marketing · v1.0 · September 2026</p>
+  </div>
+</footer>
+
+<script>
+(function(){
+  "use strict";
+
+  /* ---- progress, per viewer ---- */
+  var KEY = "kagu-academy-progress-v1";
+  var done = {};
+  try { done = JSON.parse(localStorage.getItem(KEY) || "{}") || {}; } catch (e) { done = {}; }
+
+  function save(){
+    try { localStorage.setItem(KEY, JSON.stringify(done)); } catch (e) { /* private mode */ }
+  }
+
+  var railLinks = {};
+  document.querySelectorAll('.rail a').forEach(function(a){
+    var id = a.getAttribute('href').slice(1);
+    railLinks[id] = a;
+  });
+
+  document.querySelectorAll('.mark').forEach(function(btn){
+    var m = btn.getAttribute('data-m');
+    function paint(){
+      var on = !!done[m];
+      btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+      btn.textContent = on ? 'Done' : 'Mark done';
+      var link = railLinks['m' + m];
+      if (link) link.classList.toggle('done', on);
+    }
+    btn.addEventListener('click', function(){
+      done[m] = !done[m];
+      if (!done[m]) delete done[m];
+      save();
+      paint();
+    });
+    paint();
+  });
+
+  /* ---- search + type filter ---- */
+  var q = document.getElementById('q');
+  var chips = Array.prototype.slice.call(document.querySelectorAll('.chip'));
+  var resources = Array.prototype.slice.call(document.querySelectorAll('.res'));
+  var modules = Array.prototype.slice.call(document.querySelectorAll('.module'));
+  var countEl = document.getElementById('count');
+  var activeType = 'all';
+
+  resources.forEach(function(r){ r.dataset.hay = r.textContent.toLowerCase(); });
+  modules.forEach(function(m){ m.dataset.hay = m.textContent.toLowerCase(); });
+
+  function apply(){
+    var term = (q.value || '').trim().toLowerCase();
+    var filtering = term.length > 0 || activeType !== 'all';
+    var shown = 0;
+
+    resources.forEach(function(r){
+      var okType = activeType === 'all' || r.dataset.type === activeType;
+      var okTerm = !term || r.dataset.hay.indexOf(term) !== -1;
+      var vis = okType && okTerm;
+      r.classList.toggle('hidden', !vis);
+      if (vis) shown++;
+    });
+
+    modules.forEach(function(m){
+      if (!filtering) { m.classList.remove('hidden'); return; }
+      var hasVisibleRes = m.querySelector('.res:not(.hidden)') !== null;
+      var textMatch = activeType === 'all' && term && m.dataset.hay.indexOf(term) !== -1;
+      m.classList.toggle('hidden', !(hasVisibleRes || textMatch));
+    });
+
+    countEl.textContent = filtering ? (shown + ' link' + (shown === 1 ? '' : 's')) : '';
+  }
+
+  q.addEventListener('input', apply);
+  chips.forEach(function(c){
+    c.addEventListener('click', function(){
+      activeType = c.getAttribute('data-f');
+      chips.forEach(function(x){ x.setAttribute('aria-pressed', x === c ? 'true' : 'false'); });
+      apply();
+    });
+  });
+
+  /* ---- rail highlight ---- */
+  var sections = Array.prototype.slice.call(document.querySelectorAll('main section[id]'));
+  if ('IntersectionObserver' in window) {
+    var io = new IntersectionObserver(function(entries){
+      entries.forEach(function(en){
+        var link = railLinks[en.target.id];
+        if (!link) return;
+        if (en.isIntersecting) {
+          Object.keys(railLinks).forEach(function(k){ railLinks[k].classList.remove('on'); });
+          link.classList.add('on');
+        }
+      });
+    }, { rootMargin: '-64px 0px -70% 0px', threshold: 0 });
+    sections.forEach(function(s){ io.observe(s); });
+  }
+})();
+</script>
+</body>
+</html>
