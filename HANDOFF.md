@@ -72,7 +72,7 @@ Contracts w/ PDFs), **Debug** (everyone: per-project boards, self-claim-only, re
 
 ## Current status (2026-09-19)
 
-### 🟡 PERF AUDIT QUICK WINS (2026-09-19) — build green · lint unchanged · charts driven in a real browser (prod build, admin) · **migration 0084 WRITTEN BUT NOT APPLIED**
+### 🟡 PERF AUDIT QUICK WINS (2026-09-19) — build green · lint unchanged · charts driven in a real browser (prod build, admin) · **migration 0084 APPLIED to prod + history repaired (2026-09-19)**
 
 Ran the `/perf-audit` skill. The app was already in good shape (2 DB round-trips per page, `after()`
 for fan-out, realtime cleans up, no N+1). What changed:
@@ -90,9 +90,16 @@ for fan-out, realtime cleans up, no N+1). What changed:
   `sprint_proof_submissions.user_id`, `sprint_goal_progress.user_id`,
   `sprint_resource_progress.user_id`, `idea_votes.user_id`, `notifications.actor_id`) + drops
   `notifications_recipient_idx`, an exact duplicate of 0018's `notifications_recipient_created_idx`.
-  **Not applied** — the agent's prod query was refused by the permission classifier. To apply:
+  **Applied by Parsa 2026-09-19** (201 []; `migration list` shows 0084 both sides). How it was applied:
   `node scripts/apply-migration.mjs supabase/migrations/0084_fk_indexes.sql`, verify in
   `pg_indexes`, then `npx supabase migration repair --status applied 0084` (standing rule).
+
+⚠️ **`migration list --linked` (2026-09-19) shows 0068–0083 local-only again** (remote blank), and
+there are **two files numbered 0078** (`custom_payment_schedules`, `milestone_sub_phases`) — remote
+has one `0078` row, the second shows local-only forever. The schema for these IS live (the app runs
+on it). **Do NOT `db push`** — it would re-run 0068, which drops tables. Fix is history-only, after
+confirming each is applied: `npx supabase migration repair --status applied 0068 … 0083`; the
+duplicate 0078 needs one file renumbered.
 
 Deliberately not done (the audit's "later"): paginate/virtualize the debug board past ~500 tasks;
 rate-limit `searchContent`/client email if client access widens; React Compiler if UI lags.
