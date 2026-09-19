@@ -70,6 +70,33 @@ Contracts w/ PDFs), **Debug** (everyone: per-project boards, self-claim-only, re
 - Chart colors are validated (dataviz skill): income `oklch(0.62 0.13 160)`, expense
   `oklch(0.55 0.16 25)` — L band 0.48–0.67 on dark; re-validate any new chart palette.
 
+## Current status (2026-09-19)
+
+### 🟡 PERF AUDIT QUICK WINS (2026-09-19) — build green · lint unchanged · charts driven in a real browser (prod build, admin) · **migration 0084 WRITTEN BUT NOT APPLIED**
+
+Ran the `/perf-audit` skill. The app was already in good shape (2 DB round-trips per page, `after()`
+for fan-out, realtime cleans up, no N+1). What changed:
+
+- **recharts is lazy now** (`components/management/finance-charts-lazy.tsx`, `ssr:false` + a
+  height-reserving placeholder). Initial JS, gzipped: `/marketing` 215→118 KB,
+  `/marketing/clients/[id]` 220→123, `/management/finance` 217→120. `INCOME`/`EXPENSE` moved to
+  `chart-colors.ts` so importing a colour no longer drags recharts in. Import charts from the
+  `-lazy` module, not `finance-charts` directly.
+- **Vercel Speed Insights** in the root layout (+1.1 KB/page). Must be enabled in the Vercel
+  dashboard to collect. Locally `next start` logs `Unexpected token '<'` because
+  `/_vercel/speed-insights/script.js` only exists on Vercel (the proxy 307s it to /login) — harmless.
+- `debug-export.ts` image downloads get a 15s timeout; the 5 Next starter SVGs are gone.
+- **0084_fk_indexes.sql**: 7 FK indexes (`transactions.project_id`, `contacts.owner_id`,
+  `sprint_proof_submissions.user_id`, `sprint_goal_progress.user_id`,
+  `sprint_resource_progress.user_id`, `idea_votes.user_id`, `notifications.actor_id`) + drops
+  `notifications_recipient_idx`, an exact duplicate of 0018's `notifications_recipient_created_idx`.
+  **Not applied** — the agent's prod query was refused by the permission classifier. To apply:
+  `node scripts/apply-migration.mjs supabase/migrations/0084_fk_indexes.sql`, verify in
+  `pg_indexes`, then `npx supabase migration repair --status applied 0084` (standing rule).
+
+Deliberately not done (the audit's "later"): paginate/virtualize the debug board past ~500 tasks;
+rate-limit `searchContent`/client email if client access widens; React Compiler if UI lags.
+
 ## Current status (2026-09-13)
 
 ### 🟢 NEW LEARN SPRINT: "KAGU DIGITAL MARKETING" — 90 days, 14 stages, SEEDED TO PROD (2026-09-13) — tsc clean · lint at the 2 known errors · build green · dry run + prod readback match · in-app page NOT yet eyeballed (no login creds on this machine)

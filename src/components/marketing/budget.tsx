@@ -2,7 +2,7 @@ import { ReceiptText } from "lucide-react";
 import { Panel, PanelHeader } from "@/components/ui/panel";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Badge } from "@/components/ui/badge";
-import { CashflowChart } from "@/components/management/finance-charts";
+import { CashflowChart } from "@/components/management/finance-charts-lazy";
 import {
   buildCashflowSeries,
   formatTRY,

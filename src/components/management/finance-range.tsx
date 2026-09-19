@@ -2,7 +2,7 @@
 
 import { useMemo, useState, type ReactNode } from "react";
 import { DateRangeControl, rangeForPreset } from "@/components/ui/date-range-control";
-import { EXPENSE, INCOME } from "@/components/management/finance-charts";
+import { EXPENSE, INCOME } from "@/components/management/chart-colors";
 import {
   formatRangeLabel,
   formatTRY,

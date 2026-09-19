@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono, Noto_Sans_Arabic } from "next/font/google";
 import { cookies } from "next/headers";
+import { SpeedInsights } from "@vercel/speed-insights/next";
 import { dict } from "@/lib/i18n";
 import { LOCALE_COOKIE, dirFor, parseLocale } from "@/lib/locale";
 import "./globals.css";
@@ -109,7 +110,11 @@ export default async function RootLayout({
       dir={dirFor(locale)}
       className={`${geistSans.variable} ${geistMono.variable} ${notoArabic.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="min-h-full flex flex-col">
+        {children}
+        {/* Real-user Core Web Vitals, reported to the Vercel dashboard. */}
+        <SpeedInsights />
+      </body>
     </html>
   );
 }

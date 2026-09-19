@@ -4,11 +4,8 @@ import { Panel, PanelHeader } from "@/components/ui/panel";
 import { Badge, type BadgeTone } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import { FxEditor } from "@/components/management/fx-editor";
-import {
-  CashflowChart,
-  RecurringBreakdown,
-  type BreakdownItem,
-} from "@/components/management/finance-charts";
+import { CashflowChart, RecurringBreakdown } from "@/components/management/finance-charts-lazy";
+import type { BreakdownItem } from "@/components/management/finance-charts";
 import { RangeSummary } from "@/components/management/finance-range";
 import { RecurringRow, TransactionRow } from "@/components/management/finance-rows";
 import { ExportButton } from "@/components/management/export-button";

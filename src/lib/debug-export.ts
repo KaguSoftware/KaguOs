@@ -144,7 +144,10 @@ export async function downloadTaskImages(
     const url = urls[i];
     if (!url) continue;
     try {
-      const res = await fetch(url);
+      // Sequential means one stalled request would hold up every image after
+      // it; the timeout (which also covers reading the body) turns a hang
+      // into a skip.
+      const res = await fetch(url, { signal: AbortSignal.timeout(15_000) });
       if (!res.ok) continue;
       downloadBlob(await res.blob(), imageFilename(job.task, job.image, job.index));
       saved += 1;
