@@ -94,12 +94,13 @@ for fan-out, realtime cleans up, no N+1). What changed:
   `node scripts/apply-migration.mjs supabase/migrations/0084_fk_indexes.sql`, verify in
   `pg_indexes`, then `npx supabase migration repair --status applied 0084` (standing rule).
 
-⚠️ **`migration list --linked` (2026-09-19) shows 0068–0083 local-only again** (remote blank), and
-there are **two files numbered 0078** (`custom_payment_schedules`, `milestone_sub_phases`) — remote
-has one `0078` row, the second shows local-only forever. The schema for these IS live (the app runs
-on it). **Do NOT `db push`** — it would re-run 0068, which drops tables. Fix is history-only, after
-confirming each is applied: `npx supabase migration repair --status applied 0068 … 0083`; the
-duplicate 0078 needs one file renumbered.
+✅ **Migration history fully repaired (2026-09-19).** `migration list --linked` had shown 0068–0083
+local-only, and two files shared version 0078. Every one was verified live first (schema fingerprints
+for each + the Touch Padel seed from 0080: 4 top-level phases × 4 sub-phases), then
+`migration repair --status applied 0068…0083` (0078 was already recorded). The orphan
+`0078_milestone_sub_phases.sql` was **folded into `0078_custom_payment_schedules.sql`** (each half
+keeps its own transaction, same replay order). Now local == remote for all 84, and
+`db push --dry-run` says "Remote database is up to date" — `db push` is safe again.
 
 Deliberately not done (the audit's "later"): paginate/virtualize the debug board past ~500 tasks;
 rate-limit `searchContent`/client email if client access widens; React Compiler if UI lags.

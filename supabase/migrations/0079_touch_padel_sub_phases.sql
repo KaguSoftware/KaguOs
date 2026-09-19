@@ -36,7 +36,7 @@ begin
       and column_name = 'parent_id'
   ) then
     raise exception
-      '0079 requires 0078: project_milestones.parent_id does not exist. Apply 0078_milestone_sub_phases.sql first, then re-run this file.';
+      '0079 requires 0078: project_milestones.parent_id does not exist. Apply 0078_custom_payment_schedules.sql (its sub-phases half) first, then re-run this file.';
   end if;
 end $$;
 
