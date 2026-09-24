@@ -1,4 +1,4 @@
-import { Skeleton } from "@/components/ui/skeleton";
+import { PageHeaderSkeleton, Skeleton } from "@/components/ui/skeleton";
 
 // Route-specific skeleton mirroring the debug board (focus banner, board tab
 // strip, preset + filter row, task list) so a cold navigation shows the real
@@ -6,10 +6,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 export default function DebugLoading() {
   return (
     <div>
-      <div className="mb-6 space-y-2">
-        <Skeleton className="h-7 w-40" />
-        <Skeleton className="h-4 w-56" />
-      </div>
+      <PageHeaderSkeleton width="w-40" />
 
       {/* focus banner */}
       <Skeleton className="mb-4 h-12 w-full" />

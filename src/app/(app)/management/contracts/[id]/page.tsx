@@ -41,7 +41,7 @@ export default async function ContractPage({
         <ArrowLeft className="size-3.5" aria-hidden />
         All contracts
       </Link>
-      <PageHeader title={contract.title} description={contract.client} />
+      <PageHeader text title={contract.title} description={contract.client} />
 
       <div className="grid max-w-3xl gap-6">
         <Panel>

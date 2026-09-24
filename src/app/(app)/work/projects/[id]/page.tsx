@@ -129,6 +129,7 @@ export default async function ProjectPage({
       </Link>
       <PageHeader
         title={project.name}
+        text
         description={project.client ? `Client: ${project.client}` : "Internal project"}
         action={
           <LinkButton href={`/work/projects/${id}/ideas`} variant="outline">

@@ -7,6 +7,7 @@ import { getMembersMap } from "@/lib/data/members";
 import { rowsOrThrow, selectOrThrow } from "@/lib/data/query";
 import { LiveRefresh } from "@/components/shell/live-refresh";
 import { Badge } from "@/components/ui/badge";
+import { PageHeader } from "@/components/shell/page-header";
 import { PostFields } from "@/components/marketing/post-fields";
 import { POST_STATUS_HINTS, POST_STATUS_LABELS, POST_STATUS_TONE } from "@/lib/posts";
 import type { Client, MarketingPost } from "@/lib/types";
@@ -55,7 +56,7 @@ export default async function PostPage({
     <>
       <LiveRefresh tables={["marketing_posts"]} />
 
-      <div className="mb-5">
+      <div>
         <Link
           href={`/marketing/clients/${row.client_id}`}
           className="inline-flex items-center gap-1.5 text-[calc(13px*var(--text-scale,1))] text-muted transition-colors duration-150 hover:text-ink"
@@ -63,14 +64,17 @@ export default async function PostPage({
           <ArrowLeft className="size-3.5" aria-hidden />
           {(client as Pick<Client, "name"> | null)?.name ?? "Client"}
         </Link>
-        <div className="mt-2 flex flex-wrap items-start justify-between gap-3">
-          <div className="min-w-0">
-            <h1 className="text-[calc(22px*var(--text-scale,1))] font-semibold tracking-tight">{row.title}</h1>
-            <p className="mt-1 text-sm text-muted">{POST_STATUS_HINTS[row.status]}</p>
-          </div>
-          <Badge tone={POST_STATUS_TONE[row.status]}>
-            {POST_STATUS_LABELS[row.status]}
-          </Badge>
+        <div className="mt-3">
+          <PageHeader
+            text
+            title={row.title}
+            description={POST_STATUS_HINTS[row.status]}
+            action={
+              <Badge tone={POST_STATUS_TONE[row.status]}>
+                {POST_STATUS_LABELS[row.status]}
+              </Badge>
+            }
+          />
         </div>
       </div>
 

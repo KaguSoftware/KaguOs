@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import { AlertTriangle, RotateCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { AccentRule, RiseText } from "@/components/ui/rise-text";
 import { dict, type PortalDict } from "@/lib/i18n";
 
 /**
@@ -105,14 +106,15 @@ function ErrorCard({
       className={`flex min-h-[60vh] items-center justify-center px-4 ${className}`}
     >
       <div className="w-full max-w-md rounded-lg border border-line bg-surface p-6">
-        <div className="flex items-start gap-3">
-          <AlertTriangle className="mt-0.5 size-5 shrink-0 text-danger" aria-hidden />
-          <div className="min-w-0 space-y-2">
-            <h1 className="text-base font-semibold text-ink">{t.errorTitle}</h1>
-            {/* Says what to do, and says it wasn't their doing — a client who
-                cannot see the cause will otherwise assume they caused it. */}
-            <p className="text-sm text-muted">{t.errorBlurb}</p>
-          </div>
+        <div className="min-w-0">
+          <AlertTriangle className="mb-3 size-5 text-danger" aria-hidden />
+          <h1 className="text-[calc(28px*var(--text-scale,1))] leading-[1.02] font-semibold uppercase tracking-[-0.04em] text-ink md:text-[calc(34px*var(--text-scale,1))]">
+            <RiseText>{t.errorTitle}</RiseText>
+          </h1>
+          <AccentRule color="var(--danger)" />
+          {/* Says what to do, and says it wasn't their doing — a client who
+              cannot see the cause will otherwise assume they caused it. */}
+          <p className="mt-3 text-sm text-muted">{t.errorBlurb}</p>
         </div>
 
         {/* The digest only, never `error.message`. In production Next redacts

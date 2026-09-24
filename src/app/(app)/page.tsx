@@ -533,6 +533,7 @@ export default async function DashboardPage() {
       )}
       <PageHeader
         title={`Hey, ${firstName}`}
+        text
         description={
           canAccess(ctx, "debug") && myTasks > 0
             ? `You have ${myTasks} debug ${myTasks === 1 ? "task" : "tasks"} on your plate.`

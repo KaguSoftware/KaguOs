@@ -4,10 +4,15 @@ export function PageHeader({
   title,
   description,
   action,
+  text,
 }: {
   title: string;
   description?: string;
   action?: React.ReactNode;
+  /** The title is user-written (a project, a person, a greeting) — keep its
+      case. Fixed titles ("Kagu Work", "Admin") are UPPERCASE: the casing rule
+      in DESIGN.md → Typography. */
+  text?: boolean;
 }) {
   return (
     <header className="mb-8 flex flex-wrap items-end justify-between gap-4">
@@ -26,7 +31,7 @@ export function PageHeader({
       <div className="min-w-0">
         {/* pb gives descenders room so the mask doesn't clip them. */}
         <div className="overflow-hidden pb-[0.12em]">
-          <h1 className="origin-bottom text-[calc(34px*var(--text-scale,1))] leading-[1.02] font-semibold tracking-[-0.04em] text-balance md:text-[calc(48px*var(--text-scale,1))] motion-safe:animate-[line-rise_650ms_var(--ease-mac)_both]">
+          <h1 className={`${text ? "" : "uppercase "}origin-bottom text-[calc(34px*var(--text-scale,1))] leading-[1.02] font-semibold tracking-[-0.04em] text-balance md:text-[calc(48px*var(--text-scale,1))] motion-safe:animate-[line-rise_650ms_var(--ease-mac)_both]`}>
             {title}
           </h1>
         </div>

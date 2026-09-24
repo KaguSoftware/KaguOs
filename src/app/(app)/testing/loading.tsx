@@ -1,14 +1,11 @@
-import { Skeleton } from "@/components/ui/skeleton";
+import { PageHeaderSkeleton, Skeleton } from "@/components/ui/skeleton";
 
 // Mirrors the testing board: header, project tabs, progress bar, filter row,
 // then the checklist.
 export default function TestingLoading() {
   return (
     <div>
-      <div className="mb-6 space-y-2">
-        <Skeleton className="h-7 w-40" />
-        <Skeleton className="h-4 w-56" />
-      </div>
+      <PageHeaderSkeleton width="w-40" />
       <Skeleton className="mb-4 h-9 w-80" />
       <Skeleton className="mb-4 h-14 w-full" />
       <div className="mb-3 flex flex-wrap items-center gap-2">

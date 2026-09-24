@@ -105,6 +105,7 @@ export default async function ClientWorkspacePage({
       />
       <TabbedPanels
         title={row.name}
+        text
         description={
           row.monthly_deliverables !== null
             ? `${row.monthly_deliverables} posts a month · ${posted} posted so far`

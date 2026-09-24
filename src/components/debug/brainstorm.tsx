@@ -14,6 +14,8 @@ import { TaskImages } from "@/components/debug/task-images";
 import { MAX_TASKS_PER_BATCH, overflowNote } from "@/lib/debug-limits";
 import { useAction } from "@/lib/use-action";
 import { cn } from "@/lib/utils";
+import { CURRENT_ACCENT } from "@/lib/section-accent";
+import { AccentRule, RiseText } from "@/components/ui/rise-text";
 import type { DebugPriority, DebugTask, DebugTaskImage } from "@/lib/types";
 
 const PRIORITY_OPTIONS = [
@@ -236,10 +238,13 @@ export function Brainstorm({
   if (phase === "capture") {
     return (
       <div className="mx-auto max-w-2xl">
-        <header className="mb-6 flex items-start justify-between gap-3">
+        <header className="mb-8 flex items-start justify-between gap-3">
           <div>
-            <h1 className="text-[calc(22px*var(--text-scale,1))] font-semibold tracking-tight">Brainstorm</h1>
-            <p className="mt-1 text-sm text-muted">
+            <h1 className="text-[calc(28px*var(--text-scale,1))] leading-[1.02] font-semibold uppercase tracking-[-0.04em] text-ink md:text-[calc(40px*var(--text-scale,1))]">
+              <RiseText>Brainstorm</RiseText>
+            </h1>
+            <AccentRule color={CURRENT_ACCENT} />
+            <p className="mt-3 text-sm text-muted">
               Spam titles — Enter adds a line, nothing posts until you hit Done.
             </p>
           </div>
@@ -379,10 +384,13 @@ export function Brainstorm({
   // navigating away.
   return (
     <div className="mx-auto max-w-2xl">
-      <header className="mb-4 flex items-start justify-between gap-3">
+      <header className="mb-6 flex items-end justify-between gap-3">
         <div>
-          <h1 className="text-[calc(22px*var(--text-scale,1))] font-semibold tracking-tight">Add details</h1>
-          <p className="mt-1 text-sm text-muted">
+          <h1 className="text-[calc(28px*var(--text-scale,1))] leading-[1.02] font-semibold uppercase tracking-[-0.04em] text-ink md:text-[calc(40px*var(--text-scale,1))]">
+            <RiseText>Add details</RiseText>
+          </h1>
+          <AccentRule color={CURRENT_ACCENT} />
+          <p className="mt-3 text-sm text-muted">
             All {tasks.length} are posted already — open the ones worth filling in.
           </p>
         </div>

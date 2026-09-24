@@ -7,6 +7,25 @@ import type { ActionResult } from "@/lib/actions/account";
 import { Button, SubmitButton } from "@/components/ui/button";
 import { useToast } from "@/components/ui/toast";
 import { cn } from "@/lib/utils";
+import { CURRENT_ACCENT } from "@/lib/section-accent";
+import { AccentRule, RiseText } from "@/components/ui/rise-text";
+
+/**
+ * A create surface's title — display type, like PageHeader, so arriving from
+ * a 48px list page onto its "New …" form isn't a drop to 22px. Mixed case:
+ * "New project" is sentence text, not a fixed label.
+ */
+function CreateTitle({ title, hint }: { title: string; hint?: string }) {
+  return (
+    <div className="min-w-0">
+      <h1 className="text-[calc(30px*var(--text-scale,1))] leading-[1.02] font-semibold tracking-[-0.04em] md:text-[calc(40px*var(--text-scale,1))]">
+        <RiseText>{title}</RiseText>
+      </h1>
+      <AccentRule color={CURRENT_ACCENT} />
+      {hint && <p className="mt-3 text-sm text-muted">{hint}</p>}
+    </div>
+  );
+}
 
 /**
  * The one way to add things in KaguOs: a spacious, focused create surface.
@@ -136,11 +155,8 @@ export function CreatePage({
   const router = useRouter();
   return (
     <div className={cn("mx-auto", wide ? "max-w-2xl" : "max-w-xl")}>
-      <div className="mb-6 flex items-start justify-between gap-3">
-        <div>
-          <h1 className="text-[calc(22px*var(--text-scale,1))] font-semibold tracking-tight">{title}</h1>
-          {hint && <p className="mt-1 text-sm text-muted">{hint}</p>}
-        </div>
+      <div className="mb-8 flex items-start justify-between gap-3">
+        <CreateTitle title={title} hint={hint} />
         <Button
           type="button"
           variant="ghost"
@@ -189,11 +205,8 @@ export function CreateOverlay({
       className={cn("fixed inset-0 z-40 overflow-y-auto bg-bg")}
     >
       <div className="mx-auto max-w-xl animate-overlay-in px-6 py-10 md:py-16">
-        <div className="mb-6 flex items-start justify-between gap-3">
-          <div>
-            <h1 className="text-[calc(22px*var(--text-scale,1))] font-semibold tracking-tight">{title}</h1>
-            {hint && <p className="mt-1 text-sm text-muted">{hint}</p>}
-          </div>
+        <div className="mb-8 flex items-start justify-between gap-3">
+          <CreateTitle title={title} hint={hint} />
           <Button type="button" variant="ghost" size="sm" onClick={onClose} aria-label="Close">
             <X className="size-4" aria-hidden />
           </Button>

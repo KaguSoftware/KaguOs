@@ -79,6 +79,7 @@ export default async function ContactPage({
       </Link>
       <PageHeader
         title={c.name}
+        text
         description={c.company ?? (c.kind === "client" ? "Client" : "Lead")}
         action={
           <ContactStatusPicker contactId={c.id} kind={c.kind} status={c.status} />

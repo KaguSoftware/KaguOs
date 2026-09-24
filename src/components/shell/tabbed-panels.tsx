@@ -28,8 +28,11 @@ export function TabbedPanels({
   description,
   panels,
   ariaLabel,
+  text,
 }: {
   title: string;
+  /** User-written title — keep its case (see PageHeader). */
+  text?: boolean;
   description?: string;
   panels: TabPanel[];
   ariaLabel: string;
@@ -57,6 +60,7 @@ export function TabbedPanels({
     <>
       <PageHeader
         title={title}
+        text={text}
         description={description}
         action={activePanel?.action}
       />

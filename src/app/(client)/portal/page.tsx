@@ -156,6 +156,7 @@ export default async function PortalDashboardPage() {
 
       <PageHeader
         title={greetingName ? t.hello(greetingName) : t.yourDashboard}
+        text
         description={t.headline(packsOpen.length, overdueCount, blockedCount)}
       />
 

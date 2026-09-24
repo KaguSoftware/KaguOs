@@ -293,6 +293,7 @@ export default async function SprintPage({
       </Link>
       <PageHeader
         title={sprint.title}
+        text
         description={
           sprint.tagline ??
           `${formatDate(sprint.starts_on)} → ${formatDate(sprint.ends_on)}`

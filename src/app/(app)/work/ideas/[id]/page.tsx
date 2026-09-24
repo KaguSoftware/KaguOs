@@ -88,6 +88,7 @@ export default async function IdeaPage({
         All ideas
       </Link>
       <PageHeader
+        text
         title={idea.title}
         description={formatDate(idea.created_at)}
         action={

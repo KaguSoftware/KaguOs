@@ -1,14 +1,11 @@
-import { Skeleton } from "@/components/ui/skeleton";
+import { PageHeaderSkeleton, Skeleton } from "@/components/ui/skeleton";
 
 // Route-specific skeleton mirroring the finance layout (stat tiles, chart,
 // panels) so a cold navigation shows the real shape, not generic cards.
 export default function FinanceLoading() {
   return (
     <div>
-      <div className="mb-6 space-y-2">
-        <Skeleton className="h-7 w-52" />
-        <Skeleton className="h-4 w-64" />
-      </div>
+      <PageHeaderSkeleton width="w-52" />
 
       {/* tabs */}
       <Skeleton className="mb-5 h-8 w-48" />

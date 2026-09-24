@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import { AlertTriangle, RotateCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { AccentRule, RiseText } from "@/components/ui/rise-text";
 
 /**
  * Section-level error boundary.
@@ -34,18 +35,17 @@ export default function SectionError({
   return (
     <div className="flex min-h-[60vh] items-center justify-center px-4">
       <div className="w-full max-w-md rounded-lg border border-line bg-surface p-6">
-        <div className="flex items-start gap-3">
-          <AlertTriangle className="mt-0.5 size-5 shrink-0 text-danger" aria-hidden />
-          <div className="min-w-0 space-y-2">
-            <h1 className="text-base font-semibold text-ink">
-              This section didn&apos;t load
-            </h1>
-            {/* Says what to do, without apologising or guessing at a cause. */}
-            <p className="text-sm text-muted">
-              Something went wrong fetching the data — not an empty section. Try
-              again; if it keeps happening, send the reference below to Parsa.
-            </p>
-          </div>
+        <div className="min-w-0">
+          <AlertTriangle className="mb-3 size-5 text-danger" aria-hidden />
+          <h1 className="text-[calc(28px*var(--text-scale,1))] leading-[1.02] font-semibold uppercase tracking-[-0.04em] text-ink md:text-[calc(34px*var(--text-scale,1))]">
+            <RiseText>This section didn&apos;t load</RiseText>
+          </h1>
+          <AccentRule color="var(--danger)" />
+          {/* Says what to do, without apologising or guessing at a cause. */}
+          <p className="mt-3 text-sm text-muted">
+            Something went wrong fetching the data — not an empty section. Try
+            again; if it keeps happening, send the reference below to Parsa.
+          </p>
         </div>
 
         {/* The reference. Mono + break-all because a digest is an opaque hash
