@@ -33,6 +33,7 @@ import {
 } from "@/lib/section-accent";
 import { SIDEBAR_COOKIE, SIDEBAR_COOKIE_MAX_AGE } from "@/lib/sidebar-pref";
 import { istanbulGreeting } from "@/lib/greeting";
+import { RiseText } from "@/components/ui/rise-text";
 import type { Section } from "@/lib/types";
 import { signOut } from "@/lib/actions/account";
 import { Logo } from "@/components/shell/logo";
@@ -110,39 +111,6 @@ function isActive(pathname: string, href: string) {
   return pathname === href || pathname.startsWith(root + "/") || pathname === root;
 }
 
-/**
- * Rail text that rises out of its own mask when it mounts — on first paint,
- * and again every time the rail expands (collapsed, these unmount). While the
- * rail is folding it sinks back instead, so collapse reads as the reverse.
- */
-function Rise({
-  delay = 0,
-  folding,
-  className,
-  children,
-}: {
-  delay?: number;
-  folding?: boolean;
-  className?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <span className={cn("relative block overflow-hidden pb-px", className)}>
-      <span
-        className={cn(
-          "block origin-bottom",
-          folding
-            ? "motion-safe:animate-[line-sink_150ms_var(--ease-mac-in)_both]"
-            : "motion-safe:animate-[line-rise_600ms_var(--ease-mac)_both]"
-        )}
-        style={folding ? undefined : { animationDelay: `${delay}ms` }}
-      >
-        {children}
-      </span>
-    </span>
-  );
-}
-
 function NavLink({
   item,
   pathname,
@@ -208,9 +176,9 @@ function NavLink({
       {/* Labels rise out of their row in turn on first paint and on every
           expand — the rail persists across navigations, so never per click. */}
       {!collapsed && (
-        <Rise delay={index * 40 + 120} folding={folding}>
+        <RiseText duration={600} className="relative" delay={index * 40 + 120} folding={folding}>
           {item.label}
-        </Rise>
+        </RiseText>
       )}
       {!collapsed && unread !== null && (
         <span className="relative ml-auto rounded-full bg-primary px-1.5 font-mono text-[calc(11px*var(--text-scale,1))] font-medium text-primary-ink">
@@ -224,7 +192,7 @@ function NavLink({
   );
 }
 
-/** Keep in sync with line-sink's duration on <Rise folding>. */
+/** Keep in sync with line-sink's duration on <RiseText folding>. */
 const FOLD_MS = 150;
 
 /** Keep in sync with the sheet-out / overlay-out durations in globals.css. */
@@ -698,9 +666,9 @@ export function Sidebar({
           >
             <Logo size={24} />
             {!collapsed && (
-              <Rise delay={60} folding={folding}>
+              <RiseText duration={600} className="relative" delay={60} folding={folding}>
                 <span className="text-[calc(15px*var(--text-scale,1))] font-semibold tracking-tight">KaguOs</span>
-              </Rise>
+              </RiseText>
             )}
           </Link>
           <div className={cn("flex items-center", collapsed ? "flex-col gap-1" : "gap-0.5")}>
@@ -741,7 +709,7 @@ export function Sidebar({
             <Search className="size-3.5" aria-hidden />
             {!collapsed && (
               <>
-                <Rise delay={90} folding={folding}>Search…</Rise>
+                <RiseText duration={600} className="relative" delay={90} folding={folding}>Search…</RiseText>
                 <kbd className="ml-auto rounded border border-line px-1 font-mono text-[calc(10px*var(--text-scale,1))]">
                   ⌘K
                 </kbd>
@@ -804,14 +772,14 @@ export function Sidebar({
               (name || email).slice(0, 2).toUpperCase()
             ) : (
               <>
-                <Rise delay={visible.length * 40 + 200} folding={folding}>
+                <RiseText duration={600} className="relative" delay={visible.length * 40 + 200} folding={folding}>
                   <span className="block truncate text-[calc(13px*var(--text-scale,1))] font-medium text-ink">
                     {name || email}
                   </span>
-                </Rise>
-                <Rise delay={visible.length * 40 + 240} folding={folding}>
+                </RiseText>
+                <RiseText duration={600} className="relative" delay={visible.length * 40 + 240} folding={folding}>
                   <span className="block truncate text-xs text-faint">{email}</span>
-                </Rise>
+                </RiseText>
               </>
             )}
           </Link>

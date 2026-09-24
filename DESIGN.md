@@ -63,11 +63,22 @@ own key up instead.
 ## Typography
 
 Geist Sans everywhere (one family, weights 400/500/600); Geist Mono for amounts, dates-in-tables,
-counts, IDs. Fixed rem scale (no clamp): 12 (`text-xs` meta) · 13 · 15 (body/base) · 16 · 18
-(section titles, 600) · 22 (card/sheet titles, 600). **Display tier (2026-09-24):** page titles
-34 → 48px md+, 600, tracking -0.04em, leading 1.02 (`PageHeader`); the phone menu's section list
-clamp(30px,10vw,44px) uppercase; the daily intro's greeting clamp(56px,11vw,168px) uppercase.
-Display type is for thresholds (page start, navigation, the day's first open) — never inside content. Prose capped at ~70ch; tables may run dense.
+counts, IDs. Two tiers (2026-09-24):
+- **Body scale:** 12 (`text-xs` meta) · 13 · 15 (body/base) · 16 · **18 (section headings inside a
+  page — Reminders, Pinboard, Recent activity; 600, tracking-tight: the step between the display
+  title and the body)** · 22 (card/sheet titles, 600).
+- **Display tier:** page titles 34 → 48px md+, 600, tracking -0.04em, leading 1.02 (`PageHeader`);
+  create surfaces 30 → 40px (`create.tsx`); thread/error titles 28 → 36px; the phone menu's list
+  clamp(30px,10vw,44px); the login wordmark clamp(44px,14vw,72px); the intro's greeting
+  clamp(56px,11vw,168px); dashboard figures 28 → 34px **mono**. Display type sits at thresholds
+  (page start, navigation, a form's top, the day's first open) — never inside content. Every
+  display line rises out of a mask (`RiseText`) and most carry an `AccentRule` beneath.
+- **Casing rule:** fixed words are UPPERCASE at display size and in nav/tab labels (section names,
+  "Brainstorm", commands in ⌘K, tab labels); user-written text keeps its case (project, contract,
+  client and people names, greetings, content hits). `PageHeader`/`TabbedPanels` take `text` to
+  opt a user-written title out of uppercase. Small labels (≤13px) follow normal case.
+
+Prose capped at ~70ch; tables may run dense.
 
 ## Layout
 
@@ -99,7 +110,12 @@ Curve: `--ease-mac: cubic-bezier(0.32, 0.72, 0, 1)` (Apple's sheet curve) on eve
   titles (+ their accent rule), the sidebar's labels on load and its active-row fill, and the
   sidebar's collapse (labels `line-sink` 150ms, THEN the width goes over 300ms, while a
   section-accent `rail-sweep` crosses the rail; expand re-mounts the labels so they rise).
-  Shared primitive: `components/ui/rise-text.tsx` (`RiseText`, `AccentRule`). Type never animates
+  Shared primitives: `components/ui/rise-text.tsx` (`RiseText` — with `folding` for the reverse
+  — and `AccentRule`), `components/ui/tab-strip.tsx` (`TabStrip`: uppercase tabs, ONE underline
+  in the section accent that slides to the selected tab; panels fade in on switch). Selected-row
+  fills everywhere (sidebars, inbox, ⌘K) mount on the active row and `wipe-x` in. Toasts slide in
+  from the page edge (sm+) and draw a 3px tone bar across their top. Loading skeletons use
+  `PageHeaderSkeleton` so the header's real height is reserved. Type never animates
   inside content — the one exception is a chat message arriving live (`msg-in`, below).
 - **Messages (restyled 2026-09-24).** Full-bleed (SectionAccentScope `bleedClassName`; the only
   route that leaves the max-w-6xl column). Inbox: display "MESSAGES" + accent rule, names in 22px

@@ -18,6 +18,7 @@ import {
 import { signOut } from "@/lib/actions/account";
 import { Logo } from "@/components/shell/logo";
 import { cn } from "@/lib/utils";
+import { RiseText } from "@/components/ui/rise-text";
 
 /**
  * The client's rail — the same shape the team's sidebar has, and deliberately
@@ -150,12 +151,15 @@ function NavRow({
   pathname,
   onNavigate,
   large,
+  index = 0,
 }: {
   item: PortalNavItem;
   pathname: string;
   onNavigate?: () => void;
   /** The mobile sheet gives each destination a full row with its hint. */
   large?: boolean;
+  /** Position in the list — staggers the label's rise. */
+  index?: number;
 }) {
   const active = isActive(pathname, item.href);
   const Icon = item.icon;
@@ -167,31 +171,48 @@ function NavRow({
       onClick={onNavigate}
       aria-current={active ? "page" : undefined}
       className={cn(
-        "flex items-center rounded-md transition-colors duration-150",
+        "relative flex items-center overflow-hidden rounded-md transition-colors duration-150",
         large ? "gap-3 px-3 py-3" : "gap-2.5 px-2.5 py-1.5 text-sm",
-        active ? "bg-raised text-ink" : "text-muted hover:bg-raised/60 hover:text-ink"
+        active ? "text-ink" : "text-muted hover:bg-raised/60 hover:text-ink"
       )}
     >
+      {/* Same gestures as the teammate rail: the selected row's fill draws in
+          from the start edge, and labels rise out of their masks in turn. */}
+      {active && (
+        <span
+          aria-hidden
+          className="pointer-events-none absolute inset-0 origin-left bg-primary/15 motion-safe:animate-[wipe-x_360ms_var(--ease-mac)_both] rtl:origin-right"
+        />
+      )}
       <Icon
-        className={cn(large ? "size-5" : "size-4", active && "text-primary-dim")}
+        className={cn("relative", large ? "size-5" : "size-4", active && "text-primary-dim")}
         aria-hidden
       />
-      <span className="min-w-0 flex-1">
-        <span
-          className={cn(
-            "block truncate",
-            large && "text-[calc(15px*var(--text-scale,1))] font-medium"
+      <span className="relative min-w-0 flex-1">
+        <RiseText
+          delay={index * 45 + (large ? 160 : 120)}
+          duration={large ? 650 : 600}
+          innerClassName={cn(
+            "truncate",
+            // The sheet's labels are display type, like the teammate phone
+            // menu. Uppercase is a no-op in Arabic, which is fine.
+            large &&
+              "text-[calc(28px*var(--text-scale,1))] leading-none font-semibold uppercase tracking-[-0.04em]"
           )}
         >
           {item.label}
-        </span>
+        </RiseText>
         {large && (
-          <span className="block truncate text-[calc(12px*var(--text-scale,1))] text-faint">
+          <span className="mt-1 block truncate text-[calc(12px*var(--text-scale,1))] text-faint">
             {item.hint}
           </span>
         )}
       </span>
-      {count !== null && <Badge count={count} tone={item.tone} />}
+      {count !== null && (
+        <span className="relative ms-auto">
+          <Badge count={count} tone={item.tone} />
+        </span>
+      )}
     </Link>
   );
 }
@@ -258,12 +279,26 @@ function MobileSheet({
         )}
       />
 
+      {/* The teammate phone menu's entrance: a brand layer wipes in from the
+          page's far edge, then the opaque surface lands over it. Mirrored for
+          Arabic. Hidden for reduced motion — it would only flash. */}
       <div
+        aria-hidden
+        style={{ animationDelay: closing ? "0ms" : undefined }}
         className={cn(
-          "absolute inset-0 flex flex-col overflow-y-auto bg-bg/95 backdrop-blur-xl",
+          "pointer-events-none absolute inset-0 bg-primary/40 motion-reduce:hidden",
           closing
-            ? "motion-safe:animate-[overlay-out_180ms_var(--ease-mac)_both]"
-            : "motion-safe:animate-[overlay-in_260ms_var(--ease-mac)_both]"
+            ? "ltr:animate-[panel-out_180ms_var(--ease-mac-in)_both] rtl:animate-[panel-out-rtl_180ms_var(--ease-mac-in)_both]"
+            : "ltr:animate-[panel-in_300ms_var(--ease-mac)_both] rtl:animate-[panel-in-rtl_300ms_var(--ease-mac)_both]"
+        )}
+      />
+      <div
+        style={{ animationDelay: closing ? "0ms" : "80ms" }}
+        className={cn(
+          "absolute inset-0 flex flex-col overflow-y-auto bg-bg",
+          closing
+            ? "motion-safe:ltr:animate-[panel-out_180ms_var(--ease-mac-in)_both] motion-safe:rtl:animate-[panel-out-rtl_180ms_var(--ease-mac-in)_both]"
+            : "motion-safe:ltr:animate-[panel-in_360ms_var(--ease-mac)_both] motion-safe:rtl:animate-[panel-in-rtl_360ms_var(--ease-mac)_both]"
         )}
       >
         <div className="flex items-center justify-between px-5 pb-4 pt-5">
@@ -284,12 +319,13 @@ function MobileSheet({
         </div>
 
         <nav className="grid gap-1 px-3" aria-label={labels.portalNav}>
-          {items.map((item) => (
+          {items.map((item, i) => (
             <NavRow
               key={item.href}
               item={item}
               pathname={pathname}
               onNavigate={close}
+              index={i}
               large
             />
           ))}
@@ -374,8 +410,8 @@ export function PortalSidebar({
         </div>
 
         <nav className="flex-1 space-y-0.5 px-2" aria-label={labels.portalNav}>
-          {items.map((item) => (
-            <NavRow key={item.href} item={item} pathname={pathname} />
+          {items.map((item, i) => (
+            <NavRow key={item.href} item={item} pathname={pathname} index={i} />
           ))}
         </nav>
 

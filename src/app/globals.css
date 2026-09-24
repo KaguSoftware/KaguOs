@@ -384,6 +384,26 @@
   }
 }
 
+/* panel-in/out mirrored for right-to-left pages (the Arabic client portal):
+   the surface arrives from the left, the edge the page starts from. */
+@keyframes panel-in-rtl {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+@keyframes panel-out-rtl {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-100%);
+  }
+}
+
 /* Pair with an overflow-hidden parent and origin-bottom on the element. */
 @keyframes line-rise {
   from {
@@ -415,6 +435,29 @@
   to {
     opacity: 1;
     transform: translateY(0);
+  }
+}
+
+/* A toast docked to the corner (sm+) arrives from the page's edge. */
+@keyframes toast-slide {
+  from {
+    opacity: 0;
+    transform: translateX(calc(100% + 1rem));
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes toast-slide-rtl {
+  from {
+    opacity: 0;
+    transform: translateX(calc(-100% - 1rem));
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
   }
 }
 

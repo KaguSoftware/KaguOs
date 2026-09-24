@@ -22,6 +22,7 @@ import {
 import { searchContent, type SearchHit } from "@/lib/actions/search";
 import type { Section } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { RiseText } from "@/components/ui/rise-text";
 import {
   accentForPath,
   accentMix,
@@ -268,7 +269,7 @@ export function CommandPalette({
     >
       <div
         onMouseDown={(e) => e.stopPropagation()}
-        className="w-full max-w-lg animate-overlay-in overflow-hidden rounded-xl border border-line-strong bg-raised shadow-2xl shadow-black/50"
+        className="w-full max-w-lg animate-overlay-in overflow-hidden rounded-2xl border border-line-strong bg-raised shadow-2xl shadow-black/50"
       >
         <div className="flex items-center gap-2.5 border-b border-line px-3.5">
           <Search className="size-4 shrink-0 text-faint" aria-hidden />
@@ -308,6 +309,9 @@ export function CommandPalette({
           <ul className="max-h-80 overflow-y-auto py-1.5">
             {results.map((item, i) => {
               const Icon = item.icon;
+              // Commands are fixed words (DESIGN.md's casing rule); content
+              // hits — a task, a contact — are user-written and keep case.
+              const command = item.key.startsWith("cmd:");
               return (
                 <li key={item.key}>
                   {/* Only the HIGHLIGHTED row takes a colour, and it takes the
@@ -318,21 +322,31 @@ export function CommandPalette({
                     type="button"
                     onMouseEnter={() => setActive(i)}
                     onClick={() => choose(item)}
-                    style={
-                      i === active && item.accent
-                        ? { backgroundColor: accentMix(item.accent, 14) }
-                        : undefined
-                    }
                     className={cn(
-                      "flex w-full items-center gap-3 px-3.5 py-2 text-left transition-colors duration-75",
-                      i === active
-                        ? !item.accent && "bg-primary/10"
-                        : "hover:bg-surface"
+                      "relative flex w-full items-center gap-3 overflow-hidden px-3.5 py-2 text-left transition-colors duration-75",
+                      i !== active && "hover:bg-surface"
                     )}
                   >
+                    {/* The highlight draws in from the left as the selection
+                        moves — the rails' selected-row gesture. Mounting it
+                        on the active row is the trigger. */}
+                    {i === active && (
+                      <span
+                        aria-hidden
+                        className={cn(
+                          "pointer-events-none absolute inset-0 origin-left motion-safe:animate-[wipe-x_220ms_var(--ease-mac)_both]",
+                          !item.accent && "bg-primary/10"
+                        )}
+                        style={
+                          item.accent
+                            ? { backgroundColor: accentMix(item.accent, 14) }
+                            : undefined
+                        }
+                      />
+                    )}
                     <Icon
                       className={cn(
-                        "size-4 shrink-0",
+                        "relative size-4 shrink-0",
                         i === active && !item.accent && "text-primary-dim",
                         i !== active && "text-faint"
                       )}
@@ -343,12 +357,26 @@ export function CommandPalette({
                       }
                       aria-hidden
                     />
-                    <span className="truncate text-sm text-ink">{item.label}</span>
+                    {/* Rows rise in turn as the palette opens (and as new
+                        matches arrive while typing — rows that stay, keep). */}
+                    <RiseText
+                      delay={Math.min(i, 8) * 25}
+                      duration={450}
+                      className="relative min-w-0"
+                      innerClassName={cn(
+                        "truncate text-ink",
+                        command
+                          ? "text-[calc(12px*var(--text-scale,1))] font-medium uppercase tracking-wide"
+                          : "text-sm"
+                      )}
+                    >
+                      {item.label}
+                    </RiseText>
                     {item.sub && (
-                      <span className="truncate text-xs text-faint">· {item.sub}</span>
+                      <span className="relative truncate text-xs text-faint">· {item.sub}</span>
                     )}
                     {item.typeLabel && (
-                      <span className="ml-auto shrink-0 rounded border border-line px-1.5 py-px text-[calc(10px*var(--text-scale,1))] uppercase tracking-wide text-faint">
+                      <span className="relative ml-auto shrink-0 rounded border border-line px-1.5 py-px text-[calc(10px*var(--text-scale,1))] uppercase tracking-wide text-faint">
                         {item.typeLabel}
                       </span>
                     )}

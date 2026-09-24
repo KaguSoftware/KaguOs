@@ -63,30 +63,41 @@ const DEFAULT_DURATION = 4000;
 
 const TONE_META: Record<
   ToastTone,
-  { icon: typeof CheckCircle2; className: string; iconClass: string; live: "polite" | "assertive" }
+  {
+    icon: typeof CheckCircle2;
+    className: string;
+    iconClass: string;
+    /** The tone's rule, drawn across the top edge as the toast lands. */
+    bar: string;
+    live: "polite" | "assertive";
+  }
 > = {
   success: {
     icon: CheckCircle2,
     className: "border-primary/30",
     iconClass: "text-primary-dim",
+    bar: "bg-primary",
     live: "polite",
   },
   error: {
     icon: TriangleAlert,
     className: "border-danger/40",
     iconClass: "text-danger",
+    bar: "bg-danger",
     live: "assertive",
   },
   info: {
     icon: Info,
     className: "border-line-strong",
     iconClass: "text-info",
+    bar: "bg-info",
     live: "polite",
   },
   loading: {
     icon: Loader2,
     className: "border-line-strong",
     iconClass: "text-muted animate-spin",
+    bar: "bg-line-strong",
     live: "polite",
   },
 };
@@ -266,13 +277,22 @@ function ToastViewport({
             role="status"
             aria-live={meta.live}
             className={cn(
-              "pointer-events-auto flex w-full max-w-sm items-start gap-2.5 rounded-lg border bg-raised px-3.5 py-3 shadow-lg shadow-black/40",
+              "pointer-events-auto relative flex w-full max-w-sm items-start gap-2.5 overflow-hidden rounded-xl border bg-raised px-3.5 pb-3 pt-3.5 shadow-lg shadow-black/40",
+              // Centred on a phone it rises; docked to the corner on sm+ it
+              // slides in from the page's edge (mirrored under RTL).
               t.exiting
                 ? "motion-safe:animate-[toast-out_180ms_var(--ease-mac)_both]"
-                : "motion-safe:animate-[toast-in_220ms_var(--ease-mac)_both]",
+                : "motion-safe:animate-[toast-in_220ms_var(--ease-mac)_both] sm:ltr:motion-safe:animate-[toast-slide_380ms_var(--ease-mac)_both] sm:rtl:motion-safe:animate-[toast-slide-rtl_380ms_var(--ease-mac)_both]",
               meta.className
             )}
           >
+            <span
+              aria-hidden
+              className={cn(
+                "pointer-events-none absolute inset-x-0 top-0 h-[3px] origin-left motion-safe:animate-[wipe-x_500ms_var(--ease-mac)_140ms_both] rtl:origin-right",
+                meta.bar
+              )}
+            />
             <Icon className={cn("mt-px size-4 shrink-0", meta.iconClass)} aria-hidden />
             {t.href ? (
               <Link

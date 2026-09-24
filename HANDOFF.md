@@ -1251,6 +1251,16 @@ answers "where do you want to go?". This answers **"what's going on?"**:
   server-side, and `login-form.tsx` clears it with `document.cookie` before `router.push` (covers
   expired sessions).
 
+**Round 4 — the rest of the system (2026-09-24).** Create surfaces, brainstorm, marketing post,
+error pages → display titles + `AccentRule`; loaders → `PageHeaderSkeleton`; PageHeader titles
+UPPERCASE unless `text` (set on the 8 user-written ones: project/idea/sprint/contract/client
+names, comms contact, dashboard + portal greetings); dashboard figures are rising mono display
+numbers with wiped hairlines, section headings 18px, Needs-you chips dealt out; `TabStrip` in
+TabbedPanels + Comms (Debug's multi-select board tabs only take the accent — no slide); login
+wordmark; portal sidebar + mobile sheet (RTL-mirrored `panel-in-rtl`); ⌘K rows rise, commands
+uppercase, active fill wipes; toasts slide + tone bar. Sidebar's private `Rise` became
+`RiseText folding` (it keeps `className="relative"` so labels paint above the active fill).
+
 **Messages restyle (2026-09-24)** — spec in DESIGN.md → Motion/Messages. Load-bearing details:
 - Full-bleed via `SectionAccentScope`'s `bleedClassName` (`FULL_BLEED = ["/messages"]`); the
   messages layout height is `h-[calc(100dvh-57px)] md:h-dvh` (57px = phone top bar); the showcase
