@@ -5,7 +5,7 @@ import { Plus } from "lucide-react";
 import { PageHeader } from "@/components/shell/page-header";
 import { LinkButton } from "@/components/ui/link-button";
 import { MeetingList, NoteList } from "@/components/comms/internal";
-import { cn } from "@/lib/utils";
+import { TabStrip } from "@/components/ui/tab-strip";
 import type { CommsMeeting, CommsNote, MembersMap } from "@/lib/types";
 
 type Tab = "external" | "meetings" | "notes";
@@ -65,40 +65,22 @@ export function CommsWorkspace({
         }
       />
 
-      <div
-        role="tablist"
-        aria-label="Comms subsections"
-        className="mb-5 flex gap-1 border-b border-line"
-      >
-        {TABS.map((tab) => {
-          const selected = tab.key === active;
-          return (
-            <button
-              key={tab.key}
-              type="button"
-              role="tab"
-              aria-selected={selected}
-              onClick={() => setActive(tab.key)}
-              className={cn(
-                "-mb-px cursor-pointer border-b-2 px-3 py-2 text-sm transition-colors duration-150",
-                selected
-                  ? "border-primary-dim font-medium text-ink"
-                  : "border-transparent text-muted hover:border-line-strong hover:text-ink"
-              )}
-            >
-              {tab.label}
-            </button>
-          );
-        })}
-      </div>
+      <TabStrip
+        tabs={TABS}
+        active={active}
+        onSelect={setActive}
+        ariaLabel="Comms subsections"
+      />
 
-      {active === "external" && external}
-      {active === "meetings" && (
-        <MeetingList meetings={meetings} members={members} />
-      )}
-      {active === "notes" && (
-        <NoteList notes={notes} members={members} meId={meId} />
-      )}
+      <div key={active} className="motion-safe:animate-page-in">
+        {active === "external" && external}
+        {active === "meetings" && (
+          <MeetingList meetings={meetings} members={members} />
+        )}
+        {active === "notes" && (
+          <NoteList notes={notes} members={members} meId={meId} />
+        )}
+      </div>
     </>
   );
 }

@@ -3,7 +3,7 @@
 import { useCallback, useState } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
 import { PageHeader } from "@/components/shell/page-header";
-import { cn } from "@/lib/utils";
+import { TabStrip } from "@/components/ui/tab-strip";
 
 export type TabPanel = {
   key: string;
@@ -65,35 +65,23 @@ export function TabbedPanels({
         action={activePanel?.action}
       />
 
-      <div
-        role="tablist"
-        aria-label={ariaLabel}
-        className="mb-5 flex gap-1 border-b border-line"
-      >
-        {panels.map((tab) => {
-          const selected = tab.key === active;
-          return (
-            <button
-              key={tab.key}
-              type="button"
-              role="tab"
-              aria-selected={selected}
-              onClick={() => select(tab.key)}
-              className={cn(
-                "-mb-px cursor-pointer border-b-2 px-3 py-2 text-sm transition-colors duration-150",
-                selected
-                  ? "border-primary-dim font-medium text-ink"
-                  : "border-transparent text-muted hover:border-line-strong hover:text-ink"
-              )}
-            >
-              {tab.label}
-            </button>
-          );
-        })}
-      </div>
+      <TabStrip
+        tabs={panels}
+        active={active}
+        onSelect={select}
+        ariaLabel={ariaLabel}
+      />
 
+      {/* Every panel stays mounted (their client state survives a switch).
+          Going from hidden to shown restarts a CSS animation, so the page-in
+          fade plays on each switch without re-keying anything. */}
       {panels.map((tab) => (
-        <div key={tab.key} role="tabpanel" hidden={tab.key !== active}>
+        <div
+          key={tab.key}
+          role="tabpanel"
+          hidden={tab.key !== active}
+          className="motion-safe:animate-page-in"
+        >
           {tab.content}
         </div>
       ))}

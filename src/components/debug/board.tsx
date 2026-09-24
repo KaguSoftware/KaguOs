@@ -1206,8 +1206,11 @@ export function DebugBoard({
                 onClick={(e) => pickBoard(tab.key, e.ctrlKey || e.metaKey)}
                 className={cn(
                   "flex shrink-0 items-center gap-1.5 border-b-2 px-3 py-2 text-sm transition-colors duration-150",
+                  // Boards are project names (user-written, so not uppercase)
+                  // and several can be active at once, so no sliding bar —
+                  // each active tab carries the section's accent instead.
                   active
-                    ? "border-primary-dim font-medium text-ink"
+                    ? "border-(--section-accent) font-medium text-ink"
                     : "border-transparent text-muted hover:border-line-strong hover:text-ink"
                 )}
               >

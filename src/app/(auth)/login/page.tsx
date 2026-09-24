@@ -4,6 +4,7 @@ import { LoginForm } from "@/components/auth/login-form";
 import { LanguageToggle } from "@/components/portal/language-toggle";
 import { LOCALE_COOKIE, parseLocale } from "@/lib/locale";
 import { dict } from "@/lib/i18n";
+import { AccentRule, RiseText } from "@/components/ui/rise-text";
 
 export async function generateMetadata(): Promise<Metadata> {
   const locale = parseLocale((await cookies()).get(LOCALE_COOKIE)?.value);
@@ -44,28 +45,41 @@ export default async function LoginPage() {
   const t = dict(locale);
 
   return (
-    <main className="flex min-h-dvh items-center justify-center px-6">
-      <div className="w-full max-w-sm">
-        <div className="mb-6 flex justify-end">
+    // The front door gets the same display language as the intro it opens
+    // onto: the wordmark rises out of its mask, the brand rule draws in, then
+    // the form arrives. A brand surface, so the one soft glow is allowed.
+    <main className="relative flex min-h-dvh items-center justify-center overflow-hidden px-6">
+      <div
+        aria-hidden
+        className="pointer-events-none absolute -right-40 -top-40 size-[36rem] rounded-full bg-primary/10 blur-3xl"
+      />
+      <div className="relative w-full max-w-sm">
+        <div className="mb-8 flex justify-end">
           <LanguageToggle current={locale} label={t.language} />
         </div>
-        <div className="mb-8 flex items-center gap-2.5">
-          <span className="size-2 rounded-full bg-primary" aria-hidden />
-          <h1 className="text-lg font-semibold tracking-tight">KaguOs</h1>
+        {/* dir="ltr": the wordmark is a Latin brand mark in both locales. */}
+        <h1
+          dir="ltr"
+          className="text-[clamp(44px,14vw,72px)] leading-[0.9] font-semibold uppercase tracking-[-0.055em] text-ink rtl:text-right"
+        >
+          <RiseText delay={80} duration={750}>KaguOs</RiseText>
+        </h1>
+        <AccentRule color="var(--primary)" delay={300} />
+        <div className="motion-safe:animate-[page-in_450ms_var(--ease-mac)_380ms_both]">
+          <p className="mb-6 mt-6 text-sm text-muted">{t.loginBlurb}</p>
+          <LoginForm
+            labels={{
+              email: t.loginEmail,
+              emailPlaceholder: t.loginEmailPlaceholder,
+              password: t.loginPassword,
+              submit: t.signIn,
+              wrongCredentials: t.loginWrongCredentials,
+            }}
+          />
+          <p className="mt-6 text-[calc(13px*var(--text-scale,1))] text-faint">
+            {t.loginNoAccount}
+          </p>
         </div>
-        <p className="mb-6 text-sm text-muted">{t.loginBlurb}</p>
-        <LoginForm
-          labels={{
-            email: t.loginEmail,
-            emailPlaceholder: t.loginEmailPlaceholder,
-            password: t.loginPassword,
-            submit: t.signIn,
-            wrongCredentials: t.loginWrongCredentials,
-          }}
-        />
-        <p className="mt-6 text-[calc(13px*var(--text-scale,1))] text-faint">
-          {t.loginNoAccount}
-        </p>
       </div>
     </main>
   );
