@@ -27,10 +27,10 @@ export function MessagesPanes({
   const inThread = pathname !== "/messages";
 
   return (
-    <div className="flex min-h-0 flex-1 gap-6">
+    <div className="flex min-h-0 flex-1">
       <aside
         className={cn(
-          "min-h-0 w-full shrink-0 md:block md:w-72 md:border-r md:border-line md:pr-2",
+          "min-h-0 w-full shrink-0 bg-surface md:block md:w-80 md:border-r md:border-line lg:w-96",
           inThread ? "hidden" : "block"
         )}
       >
@@ -38,7 +38,7 @@ export function MessagesPanes({
       </aside>
       <div
         className={cn(
-          "flex min-h-0 min-w-0 flex-1 flex-col",
+          "flex min-h-0 min-w-0 flex-1 flex-col px-4 md:px-8 lg:px-12",
           inThread ? "flex" : "hidden md:flex"
         )}
       >

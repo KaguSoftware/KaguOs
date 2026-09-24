@@ -36,6 +36,11 @@ import {
 } from "@/components/messages/message-refs";
 import { useTyping } from "@/lib/use-typing";
 import { RichText } from "@/components/messages/rich-text";
+import { RiseText } from "@/components/ui/rise-text";
+import { accentVar } from "@/lib/section-accent";
+
+/** Your own bubbles, the unread divider — Messages' hue (DESIGN.md exception). */
+const MSG_ACCENT = accentVar("messages");
 import { CHAT_THUMB_TRANSFORM, chatImagePath } from "@/lib/messages-shared";
 import { buttonClasses, cn } from "@/lib/utils";
 import type { MembersMap, Message, MessageImage } from "@/lib/types";
@@ -166,6 +171,12 @@ export function MessageThread({
   // the reader's place; holding the distance from the BOTTOM keeps it still.
   const restoreFromBottom = useRef<number | null>(null);
   const { error: toastError } = useToast();
+  // Every message that was already here — the first page, plus any page
+  // "Show older" prepends. A row outside this set that isn't mine arrived
+  // live, and gets the entrance; history never does.
+  const [knownIds, setKnownIds] = useState(
+    () => new Set(initialMessages.map((m) => m.id))
+  );
 
   // Server refreshes re-send props — adopt during render (no stale flash).
   const [seen, setSeen] = useState(initialMessages);
@@ -771,6 +782,7 @@ export function MessageThread({
         restoreFromBottom.current = null;
         return;
       }
+      setKnownIds((prev) => new Set([...prev, ...older.map((m) => m.id)]));
       setMessages((prev) => {
         const ids = new Set(prev.map((m) => m.id));
         return [...older.filter((m) => !ids.has(m.id)), ...prev];
@@ -949,206 +961,261 @@ export function MessageThread({
           </div>
         )}
         {messages.length === 0 && (
-          <p className="py-10 text-center text-sm text-faint">
-            {otherId === null
-              ? "Nothing yet. Say something to the team."
-              : "Nothing yet. Say hi."}
-          </p>
+          <div className="py-16 text-center">
+            <p className="text-[calc(28px*var(--text-scale,1))] leading-none font-semibold uppercase tracking-[-0.04em] text-ink">
+              <RiseText delay={120}>Say hi.</RiseText>
+            </p>
+            <p className="mt-2 text-sm text-faint">
+              {otherId === null
+                ? "Nothing yet — say something to the team."
+                : "Nothing here yet."}
+            </p>
+          </div>
         )}
-        {rows.map((r) => (
-          // data-mid is the jump anchor a reply's quote card scrolls to.
-          <div key={r.m.id} data-mid={r.m.id}>
-            {r.m.id === unreadAnchorId && (
-              <div
-                ref={unreadRef}
-                className="flex items-center gap-3 py-3"
-                // Announced, because for a screen-reader user this is the only
-                // thing that says where the new material starts.
-                role="separator"
-              >
-                <div className="h-px flex-1 bg-primary-dim/40" aria-hidden />
-                <span className="whitespace-nowrap text-xs font-medium text-primary-dim">
-                  {unreadAtOpen === 1
-                    ? "1 new message"
-                    : `${unreadAtOpen} new messages`}
-                </span>
-                <div className="h-px flex-1 bg-primary-dim/40" aria-hidden />
-              </div>
-            )}
-            {r.newDay && (
-              <div className="flex items-center gap-3 py-3">
-                <div className="h-px flex-1 bg-line" aria-hidden />
-                {/* Not aria-hidden: hiding it removed every date boundary from
-                    the transcript, so a whole history read as one flat run. */}
-                <span className="font-mono text-xs text-faint">
-                  {r.dayLabel}
-                </span>
-                <div className="h-px flex-1 bg-line" aria-hidden />
-              </div>
-            )}
-            <div
-              className={cn(
-                "flex flex-col",
-                r.mine ? "items-end" : "items-start",
-                r.newRun && !r.newDay && "mt-2.5"
-              )}
-            >
-              {r.newRun && otherId === null && !r.mine && (
-                <span
-                  className="px-1 pb-0.5 text-xs font-medium"
-                  style={{ color: r.senderColor }}
+        {rows.map((r) => {
+          // Only what arrives while you're looking animates: your own send (as
+          // its optimistic temp row — the real-id swap doesn't replay it) and
+          // anyone else's new line. History and "Show older" pages never do.
+          const arriving =
+            r.m.id.startsWith("temp-") || (!r.mine && !knownIds.has(r.m.id));
+          // Group chat, theirs: an avatar on the LAST line of a run (where the
+          // bubble's tail points at it), a same-width spacer on the rest so the
+          // run's bubbles stay flush.
+          const avatarSlot = otherId === null && !r.mine;
+          return (
+            // data-mid is the jump anchor a reply's quote card scrolls to.
+            <div key={r.m.id} data-mid={r.m.id}>
+              {r.m.id === unreadAnchorId && (
+                <div
+                  ref={unreadRef}
+                  className="flex items-center gap-3 py-3"
+                  // Announced, because for a screen-reader user this is the only
+                  // thing that says where the new material starts.
+                  role="separator"
                 >
-                  {r.senderName}
-                </span>
+                  <div className="h-px flex-1 opacity-50" style={{ backgroundColor: MSG_ACCENT }} aria-hidden />
+                  <span className="whitespace-nowrap text-xs font-medium" style={{ color: MSG_ACCENT }}>
+                    {unreadAtOpen === 1
+                      ? "1 new message"
+                      : `${unreadAtOpen} new messages`}
+                  </span>
+                  <div className="h-px flex-1 opacity-50" style={{ backgroundColor: MSG_ACCENT }} aria-hidden />
+                </div>
               )}
-              {/* The bubble plus its reply control share a hover group, so the
-                  control lives beside the bubble (on its open side) and only
-                  surfaces when the pointer is already there — the same
-                  reveal-on-hover the reminders panel uses for its remove
-                  button. `w-full` keeps the bubble's 88% measured against the
-                  pane, exactly as it was before the wrapper existed. */}
+              {r.newDay && (
+                // Not aria-hidden: hiding it removed every date boundary from
+                // the transcript, so a whole history read as one flat run.
+                <div className="flex justify-center py-4">
+                  <span className="rounded-full bg-raised px-3 py-1 font-mono text-xs text-muted">
+                    {r.dayLabel}
+                  </span>
+                </div>
+              )}
               <div
                 className={cn(
-                  "group flex w-full items-center gap-1",
-                  r.mine && "flex-row-reverse"
+                  "flex flex-col",
+                  r.mine ? "items-end" : "items-start",
+                  r.newRun && !r.newDay && "mt-3",
+                  arriving &&
+                    (r.mine ? "origin-bottom-right" : "origin-bottom-left"),
+                  arriving && "motion-safe:animate-[msg-in_420ms_var(--ease-mac)_both]"
                 )}
               >
+                {r.newRun && otherId === null && !r.mine && (
+                  <span
+                    className="pb-1 pl-10 text-xs font-medium"
+                    style={{ color: r.senderColor }}
+                  >
+                    {r.senderName}
+                  </span>
+                )}
+                {/* The bubble plus its reply control share a hover group, so the
+                    control lives beside the bubble (on its open side) and only
+                    surfaces when the pointer is already there. `w-full` keeps
+                    the bubble's 88% measured against the pane. */}
                 <div
                   className={cn(
-                    // 34rem caps the measure at roughly the 70ch prose limit
-                    // on a wide screen. The percentage is what matters on a
-                    // phone: at 75% a 375px viewport gave a ~36ch line and
-                    // stranded an 85px gutter, so it reads wider there while
-                    // the rem cap still governs the desktop.
-                    "flex max-w-[min(88%,34rem)] flex-col gap-1.5 rounded-lg px-3 py-1.5",
-                    // Shape, not just fill, carries mine-vs-theirs: the two
-                    // fills are 1.14:1 and 1.05:1 against the page, which is
-                    // no contrast at all. An asymmetric corner reads at any
-                    // luminance, and side-stripe borders are banned.
-                    r.mine
-                      ? "rounded-br-sm bg-raised text-ink"
-                      : "rounded-bl-sm border border-line-strong bg-surface text-ink",
-                    // The jump target's flash: a ring that appears instantly
-                    // and fades out via the transition when flashId clears.
-                    "transition-shadow duration-500",
-                    flashId === r.m.id && "ring-2 ring-primary-dim/60"
+                    "group flex w-full items-end gap-1.5",
+                    r.mine && "flex-row-reverse"
                   )}
                 >
-                  {/* In a DM the sender is conveyed by ALIGNMENT only, which
-                      does not exist for a screen reader. Named here,
-                      invisibly. */}
-                  {otherId !== null && r.newRun && (
-                    <span className="sr-only">
-                      {r.mine ? "You" : r.senderName}:
-                    </span>
-                  )}
-                  {/* The quoted original, as a live card — click jumps back to
-                      the quoted line and flashes it. Rendered only once
-                      hydrated; originals can't be deleted (no delete policy),
-                      so "missing" is only ever a beat of realtime lag. */}
-                  {r.m.reply_to && (
+                  {avatarSlot &&
+                    (r.lastInRun ? (
+                      <span
+                        aria-hidden
+                        className="mb-0.5 flex size-7 shrink-0 items-center justify-center rounded-full text-[calc(12px*var(--text-scale,1))] font-semibold text-bg"
+                        style={{ backgroundColor: r.senderColor ?? "var(--line-strong)" }}
+                      >
+                        {r.senderName.slice(0, 1).toUpperCase()}
+                      </span>
+                    ) : (
+                      <span aria-hidden className="w-7 shrink-0" />
+                    ))}
+                  <div
+                    title={r.timeLabel}
+                    style={r.mine ? { backgroundColor: MSG_ACCENT } : undefined}
+                    className={cn(
+                      // 34rem caps the measure at roughly the 70ch prose limit
+                      // on a wide screen; the percentage governs a phone.
+                      "flex max-w-[min(88%,34rem)] flex-col gap-1.5 rounded-2xl px-3.5 py-2",
+                      // Yours are filled with the Messages hue, theirs raised —
+                      // fill carries mine-vs-theirs now, and the tail corner
+                      // only on the last line of a run says where a burst ends.
+                      r.mine
+                        ? cn("text-primary-ink", r.lastInRun && "rounded-br-md")
+                        : cn("bg-raised text-ink", r.lastInRun && "rounded-bl-md"),
+                      // The jump target's flash: a ring that appears instantly
+                      // and fades out via the transition when flashId clears.
+                      "transition-shadow duration-500",
+                      flashId === r.m.id && "ring-2 ring-primary-dim/60 ring-offset-2 ring-offset-bg"
+                    )}
+                  >
+                    {/* In a DM the sender is conveyed by ALIGNMENT only, which
+                        does not exist for a screen reader. Named here,
+                        invisibly. */}
+                    {otherId !== null && r.newRun && (
+                      <span className="sr-only">
+                        {r.mine ? "You" : r.senderName}:
+                      </span>
+                    )}
+                    {/* The quoted original, as a live card — click jumps back to
+                        the quoted line and flashes it. */}
+                    {r.m.reply_to && (
+                      <button
+                        type="button"
+                        onClick={() => void jumpToMessage(r.m.reply_to!.id)}
+                        aria-label={`Go to the quoted message from ${firstName(members, r.m.reply_to.sender_id)}`}
+                        className={cn(
+                          "block w-full rounded-lg px-2 py-1.5 transition-colors duration-150",
+                          r.mine
+                            ? "bg-black/10 hover:bg-black/15"
+                            : "bg-line-strong/20 hover:bg-line-strong/35"
+                        )}
+                      >
+                        <ReplyRefBody
+                          name={firstName(members, r.m.reply_to.sender_id)}
+                          nameColor={
+                            otherId === null
+                              ? members[r.m.reply_to.sender_id]?.color
+                              : undefined
+                          }
+                          snippet={replySnippet(r.m.reply_to)}
+                          hasImage={r.m.reply_to.has_image}
+                          onAccent={r.mine}
+                        />
+                      </button>
+                    )}
+                    {/* The shared task, as a card that opens the board searched
+                        down to it. A ref that didn't hydrate (no debug access)
+                        degrades to a plain marker rather than a dead link. */}
+                    {r.m.task ? (
+                      <Link
+                        href={taskSearchHref(r.m.task)}
+                        className={cn(
+                          "block rounded-lg border px-2.5 py-1.5 transition-colors duration-150",
+                          r.mine
+                            ? "border-black/15 bg-black/5 hover:border-black/30"
+                            : "border-line bg-line-strong/15 hover:border-line-strong"
+                        )}
+                      >
+                        <TaskRefBody task={r.m.task} />
+                      </Link>
+                    ) : r.m.task_id ? (
+                      <span
+                        className={cn(
+                          "block rounded-lg border px-2.5 py-1.5 text-xs",
+                          r.mine ? "border-black/15 opacity-75" : "border-line text-faint"
+                        )}
+                      >
+                        A task from the debug board
+                      </span>
+                    ) : null}
+                    {r.m.body && (
+                      <p className="whitespace-pre-wrap wrap-break-word text-[calc(15px*var(--text-scale,1))] leading-relaxed">
+                        <RichText
+                          body={r.m.body}
+                          mentionNames={mentionNames}
+                          myName={myFirstName}
+                          tone={r.mine ? "onAccent" : "default"}
+                        />
+                      </p>
+                    )}
+                    {r.m.images && r.m.images.length > 0 && (
+                      <div className="flex flex-wrap gap-1.5">
+                        {r.m.images.map((img, idx) => {
+                          const src = thumbUrl(img);
+                          if (!src)
+                            return (
+                              <Skeleton
+                                key={img.id}
+                                className="h-28 w-36 rounded-lg border border-line"
+                              />
+                            );
+                          return (
+                            <button
+                              key={img.id}
+                              type="button"
+                              onClick={() => void openLightbox(img)}
+                              className={cn(
+                                "block overflow-hidden rounded-lg border transition-colors duration-150",
+                                r.mine
+                                  ? "border-black/15 hover:border-black/30"
+                                  : "border-line hover:border-line-strong"
+                              )}
+                              // Every thumbnail in a bubble used to share one
+                              // label, so a rotor listed N identical entries.
+                              aria-label={
+                                (r.m.images?.length ?? 1) > 1
+                                  ? `View image ${idx + 1} of ${r.m.images?.length} full size`
+                                  : "View image full size"
+                              }
+                            >
+                              <Image
+                                src={src}
+                                alt=""
+                                width={img.width ?? 240}
+                                height={img.height ?? 160}
+                                unoptimized
+                                className="h-28 w-auto max-w-56 object-cover"
+                              />
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                    {/* The time shows once per run, under it — the rest keep it
+                        for screen readers (and as the bubble's hover title). */}
+                    {!r.lastInRun && <span className="sr-only">{r.timeLabel}</span>}
+                  </div>
+                  {/* Hidden in a read-only thread — a reply cue above a closed
+                      composer would be an invitation to nowhere. */}
+                  {!readOnly && (
                     <button
                       type="button"
-                      onClick={() => void jumpToMessage(r.m.reply_to!.id)}
-                      aria-label={`Go to the quoted message from ${firstName(members, r.m.reply_to.sender_id)}`}
-                      className="block w-full rounded-md bg-line-strong/20 px-2 py-1.5 transition-colors duration-150 hover:bg-line-strong/35"
+                      onClick={() => startReply(r)}
+                      aria-label={`Reply to ${r.mine ? "your message" : r.senderName}`}
+                      title="Reply"
+                      className="mb-1 shrink-0 rounded-full p-1.5 text-faint opacity-0 transition-[opacity,background-color] duration-150 hover:bg-raised hover:text-ink focus-visible:opacity-100 group-hover:opacity-100"
                     >
-                      <ReplyRefBody
-                        name={firstName(members, r.m.reply_to.sender_id)}
-                        nameColor={
-                          otherId === null
-                            ? members[r.m.reply_to.sender_id]?.color
-                            : undefined
-                        }
-                        snippet={replySnippet(r.m.reply_to)}
-                        hasImage={r.m.reply_to.has_image}
-                      />
+                      <Reply className="size-3.5" aria-hidden />
                     </button>
                   )}
-                  {/* The shared task, as a card that opens the board searched
-                      down to it. A ref that didn't hydrate (no debug access)
-                      degrades to a plain marker rather than a dead link. */}
-                  {r.m.task ? (
-                    <Link
-                      href={taskSearchHref(r.m.task)}
-                      className="block rounded-md border border-line bg-line-strong/15 px-2.5 py-1.5 transition-colors duration-150 hover:border-line-strong"
-                    >
-                      <TaskRefBody task={r.m.task} />
-                    </Link>
-                  ) : r.m.task_id ? (
-                    <span className="block rounded-md border border-line px-2.5 py-1.5 text-xs text-faint">
-                      A task from the debug board
-                    </span>
-                  ) : null}
-                  {r.m.body && (
-                    <p className="whitespace-pre-wrap wrap-break-word text-sm leading-relaxed">
-                      <RichText
-                        body={r.m.body}
-                        mentionNames={mentionNames}
-                        myName={myFirstName}
-                      />
-                    </p>
-                  )}
-                  {r.m.images && r.m.images.length > 0 && (
-                    <div className="flex flex-wrap gap-1.5">
-                      {r.m.images.map((img, idx) => {
-                        const src = thumbUrl(img);
-                        if (!src)
-                          return (
-                            <Skeleton
-                              key={img.id}
-                              className="h-28 w-36 border border-line"
-                            />
-                          );
-                        return (
-                          <button
-                            key={img.id}
-                            type="button"
-                            onClick={() => void openLightbox(img)}
-                            className="block overflow-hidden rounded-md border border-line transition-colors duration-150 hover:border-line-strong"
-                            // Every thumbnail in a bubble used to share one
-                            // label, so a rotor listed N identical entries.
-                            aria-label={
-                              (r.m.images?.length ?? 1) > 1
-                                ? `View image ${idx + 1} of ${r.m.images?.length} full size`
-                                : "View image full size"
-                            }
-                          >
-                            <Image
-                              src={src}
-                              alt=""
-                              width={img.width ?? 240}
-                              height={img.height ?? 160}
-                              unoptimized
-                              className="h-28 w-auto max-w-56 object-cover"
-                            />
-                          </button>
-                        );
-                      })}
-                    </div>
-                  )}
                 </div>
-                {/* Hidden in a read-only thread — a reply cue above a closed
-                    composer would be an invitation to nowhere. */}
-                {!readOnly && (
-                  <button
-                    type="button"
-                    onClick={() => startReply(r)}
-                    aria-label={`Reply to ${r.mine ? "your message" : r.senderName}`}
-                    title="Reply"
-                    className="shrink-0 rounded-md p-1 text-faint opacity-0 transition-opacity duration-150 hover:text-ink focus-visible:opacity-100 group-hover:opacity-100"
+                {r.lastInRun && (
+                  <span
+                    className={cn(
+                      "pt-1 font-mono text-xs text-faint",
+                      avatarSlot ? "pl-10" : "px-1"
+                    )}
                   >
-                    <Reply className="size-3.5" aria-hidden />
-                  </button>
+                    {r.timeLabel}
+                    {r.seenLabel ? ` · ${r.seenLabel}` : ""}
+                  </span>
                 )}
               </div>
-              <span className="px-1 pt-0.5 font-mono text-xs text-faint">
-                {r.timeLabel}
-                {r.seenLabel ? ` · ${r.seenLabel}` : ""}
-              </span>
             </div>
-          </div>
-        ))}
+          );
+        })}
         <div ref={endRef} />
       </div>
 
@@ -1159,14 +1226,23 @@ export function MessageThread({
       {typists.length > 0 && (
         <p
           aria-live="polite"
-          className="px-1 pb-1 text-[calc(12px*var(--text-scale,1))] text-faint"
+          className="flex items-center gap-2 px-1 pb-2 text-[calc(12px*var(--text-scale,1))] text-faint"
         >
+          <span className="flex items-center gap-1 rounded-full bg-raised px-2.5 py-2" aria-hidden>
+            {[0, 150, 300].map((d) => (
+              <span
+                key={d}
+                className="size-1.5 rounded-full bg-muted motion-safe:animate-[typing-dot_1.1s_ease-in-out_infinite]"
+                style={{ animationDelay: `${d}ms` }}
+              />
+            ))}
+          </span>
           {typingLabel(members, typists)}
         </p>
       )}
 
       {readOnly ? (
-        <div className="border-t border-line pt-3">
+        <div className="pb-4 pt-2">
           <p className="py-2 text-center text-[calc(13px*var(--text-scale,1))] text-faint">
             This conversation is closed —{" "}
             {members[otherId ?? ""]?.name ?? "they"} is no longer on the work

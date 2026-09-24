@@ -230,7 +230,10 @@ export default async function AppLayout({
 					{ctx.showcase && <ShowcaseBanner />}
 					{/* Carries the section's colour to everything on the page —
 					    see components/shell/section-accent.tsx. */}
-					<SectionAccentScope className="mx-auto w-full max-w-6xl px-4 py-6 md:px-8 md:py-10">
+					<SectionAccentScope
+						className="mx-auto w-full max-w-6xl px-4 py-6 md:px-8 md:py-10"
+						bleedClassName="w-full"
+					>
 						{children}
 					</SectionAccentScope>
 				</main>

@@ -376,7 +376,7 @@ export const Composer = forwardRef<
   const overrun = draft.length >= COUNTER_AT;
 
   return (
-    <div className="relative border-t border-line pt-3">
+    <div className="relative pb-4 pt-2">
       {/* The @ menu. Sits above the composer because there is nothing below it —
           the composer is already at the bottom of the pane. Frosted like every
           other transient surface in the app. */}
@@ -384,7 +384,7 @@ export const Composer = forwardRef<
         <ul
           role="listbox"
           aria-label="Mention someone"
-          className="absolute bottom-full left-0 z-10 mb-2 w-64 animate-pop-in overflow-hidden rounded-md border border-line-strong bg-raised/90 py-1 backdrop-blur-md"
+          className="absolute bottom-full left-0 z-10 mb-2 w-64 animate-pop-in overflow-hidden rounded-xl border border-line-strong bg-raised/90 py-1 backdrop-blur-md"
         >
           {matches.map((p, i) => (
             <li key={p.id}>
@@ -418,7 +418,7 @@ export const Composer = forwardRef<
           draft — so what you see above the box is exactly the card the
           message will carry. */}
       {replyTo && (
-        <div className="mb-2 flex items-center gap-2 rounded-md border border-line bg-raised px-2.5 py-1.5">
+        <div className="mb-2 flex items-center gap-2 rounded-xl bg-raised px-3 py-2 motion-safe:animate-pop-in">
           <div className="min-w-0 flex-1">
             <ReplyRefBody
               name={`Replying to ${replyTo.senderName}`}
@@ -430,14 +430,14 @@ export const Composer = forwardRef<
             type="button"
             onClick={() => setReplyTo(null)}
             aria-label={`Cancel reply to ${replyTo.senderName}`}
-            className="grid size-6 shrink-0 place-items-center rounded-md text-faint transition-colors duration-150 hover:text-ink"
+            className="grid size-6 shrink-0 place-items-center rounded-full text-faint transition-colors duration-150 hover:bg-line-strong/40 hover:text-ink"
           >
             <X className="size-3.5" aria-hidden />
           </button>
         </div>
       )}
       {task && (
-        <div className="mb-2 flex items-center gap-2 rounded-md border border-line bg-raised px-2.5 py-1.5">
+        <div className="mb-2 flex items-center gap-2 rounded-xl bg-raised px-3 py-2 motion-safe:animate-pop-in">
           <div className="min-w-0 flex-1">
             <TaskRefBody task={task} />
           </div>
@@ -445,7 +445,7 @@ export const Composer = forwardRef<
             type="button"
             onClick={() => setTask(null)}
             aria-label={`Remove task ${task.title}`}
-            className="grid size-6 shrink-0 place-items-center rounded-md text-faint transition-colors duration-150 hover:text-ink"
+            className="grid size-6 shrink-0 place-items-center rounded-full text-faint transition-colors duration-150 hover:bg-line-strong/40 hover:text-ink"
           >
             <X className="size-3.5" aria-hidden />
           </button>
@@ -461,7 +461,7 @@ export const Composer = forwardRef<
                 width={a.width ?? 160}
                 height={a.height ?? 100}
                 unoptimized
-                className="h-16 w-auto max-w-32 rounded-md border border-line object-cover"
+                className="h-16 w-auto max-w-32 rounded-lg border border-line object-cover"
               />
               <button
                 type="button"
@@ -477,8 +477,15 @@ export const Composer = forwardRef<
           ))}
         </ul>
       )}
+      {/* One capsule holding attach, the text and send. It carries the focus
+          ring for the borderless textarea inside it, and turns amber as the
+          draft nears the length limit. */}
       <div
-        className="flex items-end gap-2"
+        className={cn(
+          "flex items-end gap-1 rounded-2xl border bg-raised p-1.5 transition-colors duration-150",
+          "focus-within:border-line-strong has-[textarea:focus-visible]:outline-2 has-[textarea:focus-visible]:outline-offset-2 has-[textarea:focus-visible]:outline-primary-dim",
+          overrun ? "border-amber" : "border-line hover:border-line-strong"
+        )}
         // Ctrl+V a screenshot straight into the composer — scoped to this
         // container so it never hijacks a paste meant for the textarea's
         // text (a paste carrying no files falls through untouched).
@@ -502,7 +509,7 @@ export const Composer = forwardRef<
           onClick={() => fileRef.current?.click()}
           disabled={attachments.length >= MAX_IMAGES_PER_MESSAGE}
           aria-label="Attach image"
-          className="flex size-9 shrink-0 items-center justify-center rounded-md border border-line text-faint transition-colors duration-150 hover:border-line-strong hover:text-ink disabled:opacity-40"
+          className="flex size-10 shrink-0 items-center justify-center rounded-full text-faint transition-colors duration-150 hover:bg-line-strong/40 hover:text-ink disabled:opacity-40"
         >
           <ImagePlus className="size-4" aria-hidden />
         </button>
@@ -561,27 +568,22 @@ export const Composer = forwardRef<
           placeholder="Write a message…"
           aria-label="Write a message"
           aria-describedby="composer-hint"
-          // Matches ui/input.tsx's controlClasses rather than hand-rolling them.
-          // In particular NO `outline-none`: buttonClasses ships no focus ring of
-          // its own, so the UA outline is this design system's focus indicator,
-          // and killing it here made the composer the one input in the app with
-          // no visible focus at all.
-          className={cn(
-            "min-h-9 flex-1 resize-none overflow-y-hidden rounded-md border bg-raised px-3 py-2 text-sm text-ink placeholder:text-muted transition-colors duration-150 hover:border-line-strong focus-visible:border-line-strong",
-            overrun ? "border-amber" : "border-line"
-          )}
+          // Borderless inside the capsule. Its outline is suppressed ONLY
+          // because the capsule draws the same ring (has-[textarea:focus-visible])
+          // — the composer must never be the one input with no visible focus.
+          className="min-h-10 flex-1 resize-none overflow-y-hidden bg-transparent px-2 py-2.5 text-[calc(15px*var(--text-scale,1))] text-ink placeholder:text-muted focus-visible:outline-none"
         />
         <button
           type="button"
           onClick={submit}
           disabled={!draft.trim() && attachments.length === 0 && !task}
           aria-label="Send"
-          className="flex size-9 shrink-0 items-center justify-center rounded-md bg-primary text-primary-ink transition-transform duration-150 active:scale-[0.98] disabled:opacity-40"
+          className="flex size-10 shrink-0 items-center justify-center rounded-full bg-primary text-primary-ink transition-[transform,opacity] duration-150 ease-mac active:scale-95 disabled:opacity-40"
         >
           <SendHorizontal className="size-4" aria-hidden />
         </button>
       </div>
-      <div className="flex items-baseline justify-between gap-3 px-1 pt-1.5">
+      <div className="flex items-baseline justify-between gap-3 px-3 pt-1.5">
         <p id="composer-hint" className="hidden text-xs text-faint md:block">
           Enter to send · Shift+Enter for a new line
         </p>

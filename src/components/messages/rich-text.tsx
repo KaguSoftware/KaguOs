@@ -1,5 +1,6 @@
 import { Fragment } from "react";
 import Link from "next/link";
+import { cn } from "@/lib/utils";
 
 /**
  * The app's own top-level segments, so a pasted deep link into the product
@@ -39,11 +40,16 @@ export function RichText({
   mentionNames,
   /** My own first name, lowercased: being named should stand out more. */
   myName,
+  /** "onAccent" inside your own accent-filled bubble, where the accent-green
+   *  link and mention colours would vanish into the fill. */
+  tone = "default",
 }: {
   body: string;
   mentionNames?: Set<string>;
   myName?: string;
+  tone?: Tone;
 }) {
+  const cls = CLASSES[tone];
   // Line-aware so a `> ` line (what the reply button writes) renders as a
   // quote. Tokens never span a newline — `[^\s]+` stops at whitespace — so
   // per-line tokenising changes nothing for links and mentions. The parent's
@@ -56,7 +62,8 @@ export function RichText({
         const content = renderInline(
           quoted ? line.slice(2) : line,
           mentionNames,
-          myName
+          myName,
+          cls
         );
         return (
           <Fragment key={li}>
@@ -65,7 +72,7 @@ export function RichText({
               // The `> ` marker becomes the border — showing both would say
               // "quote" twice. inline-block so a wrapping quote keeps its
               // border down the whole left edge, not just the first line.
-              <span className="inline-block max-w-full border-l-2 border-line-strong pl-2 text-faint">
+              <span className={cn("inline-block max-w-full border-l-2 pl-2", cls.quote)}>
                 {content}
               </span>
             ) : (
@@ -78,11 +85,29 @@ export function RichText({
   );
 }
 
+type Tone = "default" | "onAccent";
+
+const CLASSES: Record<Tone, { quote: string; mention: string; mentionMe: string; link: string }> = {
+  default: {
+    quote: "border-line-strong text-faint",
+    mention: "font-medium text-primary-dim",
+    mentionMe: "rounded bg-primary/15 px-1 font-medium text-primary-dim",
+    link: "text-primary-dim underline underline-offset-2 hover:text-primary",
+  },
+  onAccent: {
+    quote: "border-current/40 opacity-75",
+    mention: "font-semibold underline decoration-current/40 underline-offset-2",
+    mentionMe: "rounded bg-black/15 px-1 font-semibold",
+    link: "underline underline-offset-2 hover:decoration-2",
+  },
+};
+
 /** One line's inline content: links and `@mentions` made real, text as-is. */
 function renderInline(
   text: string,
-  mentionNames?: Set<string>,
-  myName?: string
+  mentionNames: Set<string> | undefined,
+  myName: string | undefined,
+  cls: (typeof CLASSES)[Tone]
 ) {
   const parts = text.split(PATTERN);
 
@@ -100,11 +125,7 @@ function renderInline(
           return (
             <span
               key={i}
-              className={
-                isMe
-                  ? "rounded bg-primary/15 px-1 font-medium text-primary-dim"
-                  : "font-medium text-primary-dim"
-              }
+              className={isMe ? cls.mentionMe : cls.mention}
             >
               {part}
             </span>
@@ -123,7 +144,7 @@ function renderInline(
         return (
           <span key={i}>
             {internal ? (
-              <Link href={href} className="text-primary-dim underline underline-offset-2 hover:text-primary">
+              <Link href={href} className={cls.link}>
                 {target}
               </Link>
             ) : (
@@ -133,7 +154,7 @@ function renderInline(
                 // noreferrer as well as noopener: without it the destination
                 // learns which internal page linked to it.
                 rel="noopener noreferrer"
-                className="text-primary-dim underline underline-offset-2 hover:text-primary"
+                className={cls.link}
               >
                 {target}
               </a>

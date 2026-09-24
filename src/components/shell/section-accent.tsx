@@ -16,18 +16,30 @@ import { accentForPath, accentVar } from "@/lib/section-accent";
  *
  * On a route with no section (/account) the property is simply not set, and
  * the :root fallback in globals.css takes over.
+ *
+ * It's also the content column, and the one client component that knows the
+ * path — so it's where Messages escapes the centred column to go full-bleed
+ * (`bleedClassName`): a chat is a workspace, not a page.
  */
+const FULL_BLEED = ["/messages"];
+
 export function SectionAccentScope({
   className,
+  bleedClassName,
   children,
 }: {
   className?: string;
+  bleedClassName?: string;
   children: ReactNode;
 }) {
-  const key = accentForPath(usePathname());
+  const pathname = usePathname();
+  const key = accentForPath(pathname);
+  const bleed =
+    bleedClassName !== undefined &&
+    FULL_BLEED.some((p) => pathname === p || pathname.startsWith(p + "/"));
   return (
     <div
-      className={className}
+      className={bleed ? bleedClassName : className}
       style={key ? ({ "--section-accent": accentVar(key) } as CSSProperties) : undefined}
     >
       {children}

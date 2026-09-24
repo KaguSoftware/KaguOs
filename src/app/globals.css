@@ -329,6 +329,61 @@
   }
 }
 
+/* The sidebar's collapse/expand: the section's hue draws across the rail and
+   fades as the width settles. */
+@keyframes rail-sweep {
+  0% {
+    transform: scaleX(0);
+    opacity: 1;
+  }
+  55% {
+    transform: scaleX(1);
+    opacity: 1;
+  }
+  100% {
+    transform: scaleX(1);
+    opacity: 0;
+  }
+}
+
+/* A message that arrived while you were looking — grows from its sender's
+   corner (set transform-origin per side). History never plays this. */
+@keyframes msg-in {
+  from {
+    opacity: 0;
+    transform: translateY(14px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* Typing: three dots lifting in turn, staggered by inline animation-delay. */
+@keyframes typing-dot {
+  0%,
+  60%,
+  100% {
+    transform: translateY(0);
+    opacity: 0.45;
+  }
+  30% {
+    transform: translateY(-3px);
+    opacity: 1;
+  }
+}
+
+/* line-rise in reverse — labels dropping back into their masks before the
+   rail narrows. */
+@keyframes line-sink {
+  from {
+    transform: none;
+  }
+  to {
+    transform: translateY(140%) rotate(10deg);
+  }
+}
+
 /* Pair with an overflow-hidden parent and origin-bottom on the element. */
 @keyframes line-rise {
   from {

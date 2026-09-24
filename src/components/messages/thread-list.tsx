@@ -8,6 +8,8 @@ import { GROUP_HINT, GROUP_LABEL, GROUP_THREAD } from "@/lib/messages-shared";
 import { useLivePresence, type LiveState } from "@/lib/use-live-presence";
 import { cn, formatRelative } from "@/lib/utils";
 import type { PresencePerson } from "@/lib/types";
+import { accentMix, accentVar } from "@/lib/section-accent";
+import { AccentRule, RiseText } from "@/components/ui/rise-text";
 
 /** Same vocabulary as the sidebar presence panel. */
 const DOT: Record<LiveState, string> = {
@@ -78,25 +80,37 @@ export function ThreadList({
   }, [people, threads]);
 
   const groupActive = pathname === `/messages/${GROUP_THREAD}`;
+  // One running index across all three groups, so the names rise as one
+  // cascade down the pane rather than restarting at each heading. Capped so a
+  // long directory doesn't keep arriving for seconds.
+  let n = 0;
+  const next = () => Math.min(n++, 12);
 
   return (
     <nav
       aria-label="Conversations"
-      className="flex h-full min-h-0 flex-col overflow-y-auto"
+      className="flex h-full min-h-0 flex-col overflow-y-auto px-3 pb-6 md:px-4"
     >
+      {/* The pane's own display title — Messages is full-bleed and has no
+          PageHeader, so this is where the section announces itself. An h2:
+          the open thread's name (or "Pick a conversation") is the page's h1. */}
+      <header className="px-2 pb-4 pt-6 md:pt-8">
+        <h2 className="text-[calc(40px*var(--text-scale,1))] leading-none font-semibold uppercase tracking-[-0.045em] text-ink">
+          <RiseText delay={40}>Messages</RiseText>
+        </h2>
+        <AccentRule color={accentVar("messages")} delay={160} />
+      </header>
+
       <Row
         href={`/messages/${GROUP_THREAD}`}
         active={groupActive}
-        avatar={
-          <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-raised">
-            <Users className="size-4 text-muted" aria-hidden />
-          </span>
-        }
+        marker={<Users className="size-4 text-muted" aria-hidden />}
         name={GROUP_LABEL}
         preview={group?.preview ?? GROUP_HINT}
         at={group?.at}
         unread={group?.unread ?? 0}
         now={now}
+        index={next()}
       />
 
       {talking.length > 0 && <Heading>Conversations</Heading>}
@@ -107,13 +121,13 @@ export function ThreadList({
             key={p.id}
             href={`/messages/${p.id}`}
             active={pathname === `/messages/${p.id}`}
-            avatar={<Avatar person={p} live={live[p.id] ?? "offline"} />}
+            marker={<Dot person={p} live={live[p.id] ?? "offline"} />}
             name={p.name}
-            nameColor={p.color}
             preview={t.preview}
             at={t.at}
             unread={t.unread}
             now={now}
+            index={next()}
           />
         );
       })}
@@ -124,12 +138,12 @@ export function ThreadList({
           key={p.id}
           href={`/messages/${p.id}`}
           active={pathname === `/messages/${p.id}`}
-          avatar={<Avatar person={p} live={live[p.id] ?? "offline"} />}
+          marker={<Dot person={p} live={live[p.id] ?? "offline"} />}
           name={p.name}
-          nameColor={p.color}
-          preview="No messages yet."
           unread={0}
           now={now}
+          index={next()}
+          quiet
         />
       ))}
     </nav>
@@ -138,64 +152,57 @@ export function ThreadList({
 
 function Heading({ children }: { children: React.ReactNode }) {
   return (
-    <h2 className="px-3 pb-1 pt-4 text-xs font-medium uppercase tracking-wide text-faint">
+    <h2 className="px-2 pb-1 pt-6 text-xs font-medium text-faint">
       {children}
     </h2>
   );
 }
 
-function Avatar({
-  person,
-  live,
-}: {
-  person: PresencePerson;
-  live: LiveState;
-}) {
+/**
+ * Presence as a dot beside the name — the big type carries identity now, so
+ * the avatar circle went. The ring is the person's colour, so their hue still
+ * travels with them from the sidebar to the thread.
+ */
+function Dot({ person, live }: { person: PresencePerson; live: LiveState }) {
   return (
-    <span className="relative shrink-0">
+    <>
       <span
-        className="flex size-8 items-center justify-center rounded-full text-[calc(13px*var(--text-scale,1))] font-semibold text-bg"
-        style={{ backgroundColor: person.color }}
-        aria-hidden
-      >
-        {person.name.slice(0, 1).toUpperCase()}
-      </span>
-      {/* Neither the inbox nor the thread header said whether the person was
-          even here, while the sidebar two panels away did. */}
-      <span
-        className={cn(
-          "absolute -bottom-0.5 -right-0.5 size-2.5 rounded-full border-2 border-surface",
-          DOT[live]
-        )}
+        className={cn("block size-2.5 rounded-full ring-2 ring-offset-2 ring-offset-surface", DOT[live])}
+        style={{ ["--tw-ring-color" as string]: person.color }}
         aria-hidden
       />
       <span className="sr-only">
         {live === "online" ? "Online" : live === "away" ? "Away" : "Offline"}
       </span>
-    </span>
+    </>
   );
 }
 
 function Row({
   href,
   active,
-  avatar,
+  marker,
   name,
-  nameColor,
   preview,
   at,
   unread,
   now,
+  index,
+  quiet,
 }: {
   href: string;
   active: boolean;
-  avatar: React.ReactNode;
+  marker: React.ReactNode;
   name: string;
-  nameColor?: string;
-  preview: string;
+  preview?: string;
   at?: string;
   unread: number;
   now: number;
+  /** Position in the pane — staggers the name's rise. */
+  index: number;
+  /** Someone you've never messaged: smaller, sentence-case — the directory,
+      not a conversation. */
+  quiet?: boolean;
 }) {
   const hot = unread > 0;
   return (
@@ -203,45 +210,70 @@ function Row({
       href={href}
       aria-current={active ? "page" : undefined}
       className={cn(
-        "flex items-center gap-3 rounded-md px-3 py-2.5 transition-colors duration-150",
-        active ? "bg-raised" : "hover:bg-raised/60"
+        "group relative flex items-start gap-3 overflow-hidden rounded-lg px-2 transition-colors duration-150",
+        quiet ? "py-1.5" : "py-2.5",
+        !active && "hover:bg-raised/60"
       )}
     >
-      {avatar}
-      <span className="min-w-0 flex-1">
+      {/* The active fill draws in from the left each time a row BECOMES
+          active — same gesture as the sidebar's selected row. */}
+      {active && (
         <span
-          className={cn(
-            "block truncate text-sm",
-            hot ? "font-semibold text-ink" : "font-medium"
-          )}
-          style={nameColor && !hot ? { color: nameColor } : undefined}
-        >
-          {name}
-        </span>
-        <span
-          className={cn(
-            "block truncate text-[calc(13px*var(--text-scale,1))]",
-            hot ? "text-ink" : "text-muted"
-          )}
-        >
-          {preview}
-        </span>
+          aria-hidden
+          className="pointer-events-none absolute inset-0 origin-left motion-safe:animate-[wipe-x_360ms_var(--ease-mac)_both]"
+          style={{ backgroundColor: accentMix("messages", 14) }}
+        />
+      )}
+      <span
+        className={cn(
+          "relative grid w-4 shrink-0 place-items-center",
+          quiet ? "h-[1.25em] text-[calc(15px*var(--text-scale,1))]" : "h-[calc(22px*var(--text-scale,1))]"
+        )}
+      >
+        {marker}
       </span>
-      {/* Fixed-width right column so the counts line up and can be scanned.
-          They used to sit after a variable-width timestamp, so no two pills
-          shared an x-position. */}
-      <span className="flex w-12 shrink-0 flex-col items-end gap-1">
-        {at && (
-          <span className="font-mono text-xs text-faint">
-            {formatRelative(at, new Date(now))}
+      <span className="relative min-w-0 flex-1">
+        <span className="flex items-start gap-1.5">
+          <RiseText
+            delay={index * 40 + 140}
+            className="min-w-0"
+            innerClassName={cn(
+              "truncate",
+              quiet
+                ? "text-[calc(15px*var(--text-scale,1))] font-medium text-muted group-hover:text-ink"
+                : "text-[calc(22px*var(--text-scale,1))] leading-none font-semibold uppercase tracking-[-0.03em] text-ink"
+            )}
+          >
+            {name}
+          </RiseText>
+          {/* Unread as a superscript in the Messages hue — the phone menu's
+              device — instead of a pill in a ragged right column. */}
+          {hot && (
+            <span
+              className="shrink-0 font-mono text-[calc(13px*var(--text-scale,1))] font-medium tabular-nums"
+              style={{ color: accentVar("messages") }}
+            >
+              {unread}
+              <span className="sr-only"> unread</span>
+            </span>
+          )}
+        </span>
+        {preview && (
+          <span
+            className={cn(
+              "mt-1 block truncate text-[calc(13px*var(--text-scale,1))]",
+              hot ? "text-ink" : "text-muted"
+            )}
+          >
+            {preview}
           </span>
         )}
-        {hot && (
-          <span className="rounded-full bg-primary px-1.5 font-mono text-xs font-medium text-primary-ink">
-            {unread}
-          </span>
-        )}
       </span>
+      {at && (
+        <span className="relative shrink-0 pt-0.5 font-mono text-xs text-faint">
+          {formatRelative(at, new Date(now))}
+        </span>
+      )}
     </Link>
   );
 }

@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
-import { MessagesSquare } from "lucide-react";
-import { EmptyState } from "@/components/ui/empty-state";
+import { accentVar } from "@/lib/section-accent";
+import { AccentRule, RiseText } from "@/components/ui/rise-text";
 
 export const metadata: Metadata = { title: "Messages" };
 
@@ -11,15 +11,22 @@ export const metadata: Metadata = { title: "Messages" };
  * persist across thread switches, which leaves this as the desktop resting state
  * — and on mobile it is never seen at all, because `MessagesPanes` shows the list
  * in its place at this path.
+ *
+ * Display type rather than an empty-state card: with the pane full-bleed, a
+ * small centred card read as something missing; a headline reads as a place.
  */
 export default function MessagesIndexPage() {
   return (
-    <div className="grid min-h-0 flex-1 place-items-center">
-      <EmptyState
-        icon={MessagesSquare}
-        title="Pick a conversation"
-        hint="Choose someone on the left, or open the Work team room to talk to everyone at once. Anything you send here stays inside the team."
-      />
+    <div className="flex min-h-0 flex-1 flex-col justify-center py-10">
+      <h1 className="text-[calc(clamp(44px,6vw,88px)*var(--text-scale,1))] leading-[0.92] font-semibold uppercase tracking-[-0.05em] text-ink">
+        <RiseText delay={80}>Pick a</RiseText>
+        <RiseText delay={170}>conversation.</RiseText>
+      </h1>
+      <AccentRule color={accentVar("messages")} delay={320} />
+      <p className="mt-5 max-w-md text-[calc(15px*var(--text-scale,1))] text-muted motion-safe:animate-[page-in_400ms_var(--ease-mac)_420ms_both]">
+        Choose someone on the left, or open the team room to talk to everyone at
+        once. Anything you send here stays inside the team.
+      </p>
     </div>
   );
 }

@@ -80,22 +80,38 @@ export function ReplyRefBody({
   nameColor,
   snippet,
   hasImage,
+  onAccent,
 }: {
   name: string;
   /** The sender's identity colour, same as the group-chat name labels. */
   nameColor?: string;
   snippet: string;
   hasImage: boolean;
+  /** Inside your own accent-filled bubble: inherit the bubble's ink instead. */
+  onAccent?: boolean;
 }) {
   return (
-    <span className="block min-w-0 border-l-2 border-primary-dim/70 pl-2 text-left">
+    <span
+      className={
+        "block min-w-0 border-l-2 pl-2 text-left " +
+        (onAccent ? "border-current/40" : "border-primary-dim/70")
+      }
+    >
       <span
-        className="block truncate text-xs font-medium text-primary-dim"
-        style={nameColor ? { color: nameColor } : undefined}
+        className={
+          "block truncate text-xs " +
+          (onAccent ? "font-semibold" : "font-medium text-primary-dim")
+        }
+        style={nameColor && !onAccent ? { color: nameColor } : undefined}
       >
         {name}
       </span>
-      <span className="flex min-w-0 items-center gap-1 text-[calc(13px*var(--text-scale,1))] text-faint">
+      <span
+        className={
+          "flex min-w-0 items-center gap-1 text-[calc(13px*var(--text-scale,1))] " +
+          (onAccent ? "opacity-75" : "text-faint")
+        }
+      >
         {hasImage && <ImageIcon className="size-3 shrink-0" aria-hidden />}
         <span className="truncate">{snippet}</span>
       </span>

@@ -14,6 +14,7 @@ import { getMembersMap } from "@/lib/data/members";
 import { DmHeader } from "@/components/messages/dm-header";
 import { MessageThread } from "@/components/messages/thread";
 import { GROUP_HINT, GROUP_LABEL, GROUP_THREAD } from "@/lib/messages-shared";
+import { RiseText } from "@/components/ui/rise-text";
 
 /**
  * Name the tab after who you're talking to. Every thread's tab said "Messages",
@@ -118,25 +119,27 @@ export default async function MessageThreadPage({
     // just fills its column. min-h-96 is gone too — on a short viewport with the
     // keyboard open it forced the PAGE to scroll instead of the message list.
     <div className="flex min-h-0 flex-1 flex-col">
-      <header className="flex items-center gap-3 border-b border-line pb-3">
+      {/* The thread's name at display size, rising each time you switch —
+          this page re-keys per [userId], so the mount IS the switch. */}
+      <header className="flex items-end gap-3 border-b border-line pb-4 pt-6 md:pt-8">
         <Link
           href="/messages"
           aria-label="Back to conversations"
           // Only a phone needs this: on md+ the list is right there beside us.
-          className="rounded-md p-1.5 text-faint transition-colors duration-150 hover:bg-raised hover:text-ink md:hidden"
+          className="mb-1 rounded-md p-1.5 text-faint transition-colors duration-150 hover:bg-raised hover:text-ink md:hidden"
         >
           <ArrowLeft className="size-4" aria-hidden />
         </Link>
         {isGroup ? (
           <>
-            <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-raised">
-              <Users className="size-4 text-muted" aria-hidden />
-            </span>
             <div className="min-w-0">
-              <h1 className="text-[calc(15px*var(--text-scale,1))] font-semibold text-ink">
-                {GROUP_LABEL}
+              <h1 className="text-[calc(28px*var(--text-scale,1))] leading-none font-semibold uppercase tracking-[-0.04em] text-ink md:text-[calc(36px*var(--text-scale,1))]">
+                <RiseText innerClassName="truncate">{GROUP_LABEL}</RiseText>
               </h1>
-              <p className="text-xs text-faint">{GROUP_HINT}</p>
+              <p className="mt-1.5 flex items-center gap-1.5 text-[calc(12px*var(--text-scale,1))] text-faint">
+                <Users className="size-3.5" aria-hidden />
+                {GROUP_HINT}
+              </p>
             </div>
           </>
         ) : (

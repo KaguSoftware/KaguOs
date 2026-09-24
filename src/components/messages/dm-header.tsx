@@ -2,6 +2,7 @@
 
 import { useLivePresence, type LiveState } from "@/lib/use-live-presence";
 import { cn } from "@/lib/utils";
+import { RiseText } from "@/components/ui/rise-text";
 
 /** Same vocabulary as the thread list and the sidebar presence panel. */
 const DOT: Record<LiveState, string> = {
@@ -17,8 +18,8 @@ const LABEL: Record<LiveState, string> = {
 };
 
 /**
- * The DM header's identity block — avatar, name, status — with a LIVE presence
- * dot and label.
+ * The DM header's identity block — display-size name, status — with a LIVE
+ * presence dot (ringed in their colour) and label.
  *
  * A client island because presence is ephemeral socket state the server page
  * can't know. The gap it closes is a phone's: on md+ the thread list beside the
@@ -48,43 +49,41 @@ export function DmHeader({
   const state: LiveState = live[partnerId] ?? "offline";
 
   return (
-    <>
-      <span className="relative shrink-0" aria-hidden>
-        <span
-          className="flex size-8 items-center justify-center rounded-full text-[calc(13px*var(--text-scale,1))] font-semibold text-bg"
-          style={{ backgroundColor: color }}
-        >
-          {name.slice(0, 1).toUpperCase()}
-        </span>
-        {!former && (
-          <span
-            className={cn(
-              "absolute -bottom-0.5 -right-0.5 size-2.5 rounded-full border-2 border-bg transition-colors duration-300 ease-mac",
-              DOT[state]
-            )}
-          />
-        )}
-      </span>
-      <div className="min-w-0">
-        <h1 className="truncate text-[calc(15px*var(--text-scale,1))] font-semibold" style={{ color }}>
+    // The name is display type in ink; the person's colour moves to the
+    // presence dot's ring, so it still travels with them from the list.
+    <div className="min-w-0">
+      <h1 className="text-[calc(28px*var(--text-scale,1))] leading-none font-semibold uppercase tracking-[-0.04em] text-ink md:text-[calc(36px*var(--text-scale,1))]">
+        <RiseText innerClassName="truncate">
           {name}
           {statusEmoji && (
-            <span className="ml-1.5" aria-hidden>
+            <span className="ml-2 align-middle text-[0.6em]" aria-hidden>
               {statusEmoji}
             </span>
           )}
-        </h1>
-        {former ? (
-          <p className="truncate text-[calc(12px*var(--text-scale,1))] text-faint">
-            No longer on the work team — you can still read this.
-          </p>
-        ) : (
-          <p className="truncate text-[calc(12px*var(--text-scale,1))] text-faint">
-            {LABEL[state]}
-            {statusText && <span> · {statusText}</span>}
-          </p>
+        </RiseText>
+      </h1>
+      <p className="mt-1.5 flex min-w-0 items-center gap-2 text-[calc(12px*var(--text-scale,1))] text-faint">
+        {!former && (
+          <span
+            aria-hidden
+            className={cn(
+              "size-2 shrink-0 rounded-full ring-2 ring-offset-2 ring-offset-bg transition-colors duration-300 ease-mac",
+              DOT[state]
+            )}
+            style={{ ["--tw-ring-color" as string]: color }}
+          />
         )}
-      </div>
-    </>
+        <span className="truncate">
+          {former ? (
+            "No longer on the work team — you can still read this."
+          ) : (
+            <>
+              {LABEL[state]}
+              {statusText && <span> · {statusText}</span>}
+            </>
+          )}
+        </span>
+      </p>
+    </div>
   );
 }

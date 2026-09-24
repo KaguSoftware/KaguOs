@@ -45,15 +45,16 @@ export default async function MessagesLayout({
 
   // Chat has no demo shape — real names, real words. Showcase sees the door.
   if (ctx.showcase) {
+    // Messages is full-bleed, so this branch brings back the usual column.
     return (
-      <>
+      <div className="mx-auto w-full max-w-6xl px-4 py-6 md:px-8 md:py-10">
         <PageHeader title="Messages" />
         <EmptyState
           icon={MessagesSquare}
           title="Not available in showcase"
           hint="Chat carries the team's real conversations, so the demo keeps it closed."
         />
-      </>
+      </div>
     );
   }
 
@@ -86,9 +87,10 @@ export default async function MessagesLayout({
   return (
     // No LiveRefresh here — the shell's ChatLiveRefresh already watches these
     // tables app-wide, and a second channel would double the socket traffic.
-    // The height constant is the one the thread page used to carry; it lives here
-    // now so both panes share it and the thread simply fills its column.
-    <div className="flex h-[calc(100dvh-8rem)] min-h-0 flex-col md:h-[calc(100dvh-11rem)]">
+    // Full-bleed (see SectionAccentScope): the whole area beside the sidebar,
+    // full height. 57px is the phone's sticky top bar. Both panes share this
+    // height and the thread simply fills its column.
+    <div className="flex h-[calc(100dvh-57px)] min-h-0 flex-col md:h-dvh">
       {/* Renders nothing once this device has answered — see alerts-prompt.tsx. */}
       <ChatAlertsPrompt />
       <MessagesPanes

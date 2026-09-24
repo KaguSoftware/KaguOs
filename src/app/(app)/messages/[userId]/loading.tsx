@@ -24,12 +24,10 @@ const BUBBLES: { mine: boolean; w: string }[] = [
 export default function Loading() {
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <header className="flex items-center gap-3 border-b border-line pb-3">
-        <Skeleton className="size-8 rounded-full" />
-        <div className="space-y-1.5">
-          <Skeleton className="h-4 w-32" />
-          <Skeleton className="h-3 w-20" />
-        </div>
+      {/* Same shape as the real header: a display-size name, one status line. */}
+      <header className="border-b border-line pb-4 pt-6 md:pt-8">
+        <Skeleton className="h-7 w-48 md:h-9 md:w-64" />
+        <Skeleton className="mt-2 h-3 w-24" />
       </header>
       <div className="flex min-h-0 flex-1 flex-col justify-end gap-3 py-4">
         {BUBBLES.map((b, i) => (
@@ -37,14 +35,12 @@ export default function Loading() {
             key={i}
             className={b.mine ? "flex justify-end" : "flex justify-start"}
           >
-            <Skeleton className={`h-9 ${b.w} rounded-lg`} />
+            <Skeleton className={`h-10 ${b.w} rounded-2xl`} />
           </div>
         ))}
       </div>
-      <div className="flex items-end gap-2 border-t border-line pt-3">
-        <Skeleton className="size-9 rounded-md" />
-        <Skeleton className="h-9 flex-1 rounded-md" />
-        <Skeleton className="size-9 rounded-md" />
+      <div className="pb-4 pt-2">
+        <Skeleton className="h-[3.25rem] w-full rounded-2xl" />
       </div>
     </div>
   );

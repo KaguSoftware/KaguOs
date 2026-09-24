@@ -96,8 +96,20 @@ Curve: `--ease-mac: cubic-bezier(0.32, 0.72, 0, 1)` (Apple's sheet curve) on eve
   layers `wipe-in` ahead of a `panel-in` surface; type `line-rise`s out of an overflow-hidden mask
   (translateY 140% + rotate 10°, origin-bottom, pb for descenders); accent fills `wipe-x` from the
   left; exits use `--ease-mac-in`. Used at thresholds only: the phone menu, the daily intro, page
-  titles (+ their accent rule), the sidebar's labels on load and its active-row fill. Type never
-  animates inside content.
+  titles (+ their accent rule), the sidebar's labels on load and its active-row fill, and the
+  sidebar's collapse (labels `line-sink` 150ms, THEN the width goes over 300ms, while a
+  section-accent `rail-sweep` crosses the rail; expand re-mounts the labels so they rise).
+  Shared primitive: `components/ui/rise-text.tsx` (`RiseText`, `AccentRule`). Type never animates
+  inside content — the one exception is a chat message arriving live (`msg-in`, below).
+- **Messages (restyled 2026-09-24).** Full-bleed (SectionAccentScope `bleedClassName`; the only
+  route that leaves the max-w-6xl column). Inbox: display "MESSAGES" + accent rule, names in 22px
+  uppercase rising in turn, presence dot ringed in the person's colour, unread as an accent
+  superscript, active row fill `wipe-x`. Thread: display-size name rising per switch; bold
+  bubbles — **yours filled with `--sec-messages`** (`text-primary-ink`, RichText
+  `tone="onAccent"`), theirs `bg-raised`, `rounded-2xl` with a tail corner only on the last line
+  of a run; group avatars on the last line of a run; time once per run; day labels as pills;
+  typing dots. **Accent exception:** in Messages the section hue may fill your own bubbles and
+  the unread superscripts/divider — deliberate, Messages only; elsewhere the rule below holds.
 - Motion conveys state only; `prefers-reduced-motion` collapses everything (global rule).
 
 ## Bans (project-specific)

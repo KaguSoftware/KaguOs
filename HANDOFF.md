@@ -1242,7 +1242,25 @@ answers "where do you want to go?". This answers **"what's going on?"**:
 - **Page titles** (`PageHeader`): 34/48px display, rise on every route change; the old left rule
   became a 3px×48px accent bar that `wipe-x`es in beneath the title.
 - **Sidebar**: labels rise in turn on load (rail persists, so not per click); the active row's
-  accent fill `wipe-x`es in from the left each time a row becomes active.
+  accent fill `wipe-x`es in from the left each time a row becomes active. **Collapse** is two-step:
+  `folding` makes every `<Rise>` `line-sink` for `FOLD_MS` (150), then `collapsed` flips and the
+  width animates (300ms); a re-keyed `rail-sweep` layer in the section accent crosses the rail on
+  every toggle (own overflow-hidden wrapper — the aside must not clip the bell popover). Expand is
+  instant; labels/wordmark/search/account re-mount and rise. Reduced motion collapses at once.
+- **Intro on every login** (not just the day's first open): `signOut()` deletes `kagu-intro-day`
+  server-side, and `login-form.tsx` clears it with `document.cookie` before `router.push` (covers
+  expired sessions).
+
+**Messages restyle (2026-09-24)** — spec in DESIGN.md → Motion/Messages. Load-bearing details:
+- Full-bleed via `SectionAccentScope`'s `bleedClassName` (`FULL_BLEED = ["/messages"]`); the
+  messages layout height is `h-[calc(100dvh-57px)] md:h-dvh` (57px = phone top bar); the showcase
+  branch re-adds the usual column itself.
+- **Entrance rule** (`thread.tsx`): a row plays `msg-in` iff its id starts `temp-` (your send, as
+  the optimistic row — the real-id swap is `mine`, so it doesn't replay) OR it isn't in
+  `knownIds` and isn't yours. `knownIds` = the initial page + every `loadOlder` page, so history
+  never animates. All scroll/read/realtime logic untouched.
+- Composer is one capsule; the textarea's outline is suppressed ONLY because the capsule draws the
+  same ring via `has-[textarea:focus-visible]` — keep that pairing.
 
 **`src/lib/data/pulse.ts` (NEW)** feeds those numbers: one parallel wave of head-only counts,
 `cache()`-wrapped, and it rides in the **same `Promise.all` as `getPresence`** in
