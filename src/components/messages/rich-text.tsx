@@ -6,7 +6,7 @@ import Link from "next/link";
  * becomes a real client-side navigation rather than a page load.
  */
 const SECTIONS =
-  "debug|work|learn|management|marketing|messages|comms|admin|account";
+  "debug|testing|work|learn|management|marketing|messages|comms|admin|account";
 
 /**
  * One capture group with two alternatives: an absolute web URL (or a bare

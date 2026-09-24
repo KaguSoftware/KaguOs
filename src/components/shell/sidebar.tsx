@@ -8,6 +8,7 @@ import {
   Bug,
   ChevronRight,
   Contact as ContactIcon,
+  FlaskConical,
   FolderKanban,
   GraduationCap,
   Landmark,
@@ -63,6 +64,13 @@ const NAV: NavItem[] = [
     accent: "management",
   },
   { href: "/debug", label: "Debug", icon: Bug, section: "debug", accent: "debug" },
+  {
+    href: "/testing",
+    label: "Testing",
+    icon: FlaskConical,
+    section: "testing",
+    accent: "testing",
+  },
   // Chat has its own gate (0052) — the same audience the presence panel shows.
   {
     href: "/messages",

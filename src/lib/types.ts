@@ -7,6 +7,7 @@ export const SECTIONS = [
   "comms",
   "chat",
   "status",
+  "testing",
 ] as const;
 
 export type Section = (typeof SECTIONS)[number];
@@ -22,6 +23,7 @@ export const SECTION_LABELS: Record<Section, string> = {
   // Not a destination — a feature gate. Owns the presence dots, the status
   // emoji/note, available-to-call, and the editor for your own status.
   status: "Team Status",
+  testing: "Kagu Testing",
 };
 
 /**
@@ -657,6 +659,63 @@ export type DebugTaskImageView = DebugTaskImage & {
   thumbUrl: string;
 };
 
+/* ── Testing (0085) ─────────────────────────────────────────────────────────
+ *
+ * A living checklist per project. The case row carries its LATEST result; the
+ * history is test_results. A failure files (or reopens) a debug task through
+ * the record_test_result() function, and that task being marked done flips the
+ * case to 'retest'.
+ */
+export type TestStatus = "untested" | "pass" | "fail" | "blocked" | "retest";
+/** What a person can record. 'untested' and 'retest' are states, not results. */
+export type TestOutcome = "pass" | "fail" | "blocked";
+export type TestEnvironment = "prod" | "staging" | "local";
+
+export type TestCase = {
+  id: string;
+  project_id: string;
+  /** Free-text group ("Auth", "Checkout"). null = ungrouped. */
+  area: string | null;
+  title: string;
+  steps: string | null;
+  expected: string | null;
+  status: TestStatus;
+  position: number;
+  /** The debug task the last failure filed (or reopened). */
+  debug_task_id: string | null;
+  last_tested_by: string | null;
+  last_tested_at: string | null;
+  last_environment: TestEnvironment | null;
+  is_demo: boolean;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type TestResult = {
+  id: string;
+  case_id: string;
+  status: TestOutcome;
+  environment: TestEnvironment;
+  note: string | null;
+  tester_id: string | null;
+  is_demo: boolean;
+  created_at: string;
+};
+
+/** A screenshot on a result. Bytes live in the `debug` bucket under `testing/`. */
+export type TestResultImage = {
+  id: string;
+  result_id: string;
+  /** "testing/<case_id>/<uuid>.<ext>" */
+  file_path: string;
+  width: number | null;
+  height: number | null;
+  is_demo: boolean;
+  created_by: string | null;
+  created_at: string;
+};
+
 /* ── Marketing: the agency arm ──────────────────────────────────────────────
  *
  * Kagu's marketing team working for other companies. Client is the root
@@ -799,7 +858,9 @@ export type Notification = {
     | "message"
     | "debug_note"
     /** A client pressed Send on their project's input pack (0072). */
-    | "client_intake";
+    | "client_intake"
+    /** The debug task a failed check filed was marked done (0085). */
+    | "test_retest";
   title: string;
   href: string | null;
   read_at: string | null;

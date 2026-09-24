@@ -18,6 +18,7 @@ export const ACCENT_KEYS = [
   "learn",
   "management",
   "debug",
+  "testing",
   "messages",
   "marketing",
   "comms",
@@ -45,6 +46,7 @@ const ACCENT_HEX: Record<AccentKey, string> = {
   learn: "#9B84FF",
   management: "#6E93FF",
   debug: "#F5A93C",
+  testing: "#5FB8FF",
   messages: "#2FD39E",
   marketing: "#FF5C8A",
   comms: "#A8D74A",
@@ -90,6 +92,7 @@ const BY_SECTION: Record<Section, AccentKey | null> = {
   comms: "comms",
   chat: "messages",
   status: null,
+  testing: "testing",
 };
 
 export function accentForSection(section: Section): AccentKey | null {
@@ -108,6 +111,7 @@ export function accentForSection(section: Section): AccentKey | null {
 const BY_PREFIX: [string, AccentKey][] = [
   ["/management", "management"],
   ["/marketing", "marketing"],
+  ["/testing", "testing"],
   ["/messages", "messages"],
   ["/learn", "learn"],
   ["/debug", "debug"],

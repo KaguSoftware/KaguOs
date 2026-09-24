@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import {
   Bug,
   Contact,
+  FlaskConical,
   FolderKanban,
   GraduationCap,
   Landmark,
@@ -84,6 +85,7 @@ const ALL: Command[] = [
   { id: "mgmt-new-contract", label: "New contract", href: "/management/contracts/new", icon: Plus, write: true, section: "management", keywords: "create add" },
   { id: "debug", label: "Debug", hint: "Claim-a-task board", href: "/debug", icon: Bug, section: "debug" },
   { id: "debug-new", label: "New task", href: "/debug/new", icon: Plus, write: true, section: "debug", keywords: "create add bug" },
+  { id: "testing", label: "Testing", hint: "What works, what doesn't", href: "/testing", icon: FlaskConical, section: "testing", keywords: "qa check test checklist" },
   { id: "marketing", label: "Marketing", hint: "Your video queue", href: "/marketing", icon: Megaphone, section: "marketing", keywords: "video creative client" },
   { id: "mkt-clients", label: "Clients", hint: "Every client account", href: "/marketing/clients", icon: Megaphone, section: "marketing", keywords: "agency account" },
   { id: "mkt-shoot-week", label: "Shoot week", hint: "What we're filming", href: "/marketing/shoot-week", icon: Megaphone, section: "marketing", keywords: "calendar shoot film" },

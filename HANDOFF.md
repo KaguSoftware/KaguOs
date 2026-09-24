@@ -70,7 +70,42 @@ Contracts w/ PDFs), **Debug** (everyone: per-project boards, self-claim-only, re
 - Chart colors are validated (dataviz skill): income `oklch(0.62 0.13 160)`, expense
   `oklch(0.55 0.16 25)` — L band 0.48–0.67 on dark; re-validate any new chart palette.
 
-## Current status (2026-09-19)
+## Current status (2026-09-24)
+
+### 🟡 TESTING SECTION (2026-09-24) — build green · lint clean in touched files · **migration 0085 WRITTEN, NOT APPLIED** · not live-driven
+
+New top-level `/testing` (own section `testing`, sky-blue accent `--sec-testing`). One living
+checklist per project. Case statuses: untested · pass ("Works") · fail ("Broken") · blocked · retest.
+Stale = a pass older than 14 days (`STALE_DAYS`, computed, not stored). Every result carries an
+environment (prod/staging/local); the board's "Testing on" toggle is per-person, kept in localStorage.
+
+- **`0085_testing.sql`** does these things:
+  - adds the `test_cases`, `test_results` and `test_result_images` tables
+  - adds `testing` to the section check and to `projects_select` (same widening Debug got in 0007)
+  - adds the `test_retest` notification kind
+  - adds storage policies on the `debug/testing/%` prefix
+  - adds both case/result tables to realtime
+- **Fail → Debug** goes through the SECURITY DEFINER function `public.record_test_result()`,
+  because a tester may not hold Debug.
+  - The case has no task yet: it files a `fix` task titled "Test failed: …".
+  - The linked task is open: it adds a note to it.
+  - The linked task is done: it reopens the task and adds a note.
+  - Screenshots belong to fails only. The same objects are indexed on the task, so **the task owns
+    their lifetime**, and deleting a case leaves them in place.
+- **Done → retest** is handled by the trigger `debug_tasks_flag_retest`. It notifies the last tester
+  with a link to `/testing?project=…`.
+- **Code:** `lib/actions/testing.ts`, `lib/testing.ts`, `components/testing/*`,
+  `app/(app)/testing/*`. Wired into the sidebar, the command palette, `section-accent` and
+  rich-text links.
+- **Next:**
+  1. Apply 0085 (`node scripts/apply-migration.mjs …`, then `migration repair --status applied 0085`).
+  2. Grant `testing` in Admin.
+  3. Drive the full loop: add → fail with a screenshot → task on the board → mark done → retest
+     → pass.
+- **Blocked:** `SUPABASE_ACCESS_TOKEN` in `.env.local` 401s again. It needs a fresh token (see
+  the 2026-08-24 entry).
+- **Not built:** a "from test" chip on the Debug task row. The "Test failed:" title prefix does
+  that job for now.
 
 ### 🟡 PERF AUDIT QUICK WINS (2026-09-19) — build green · lint unchanged · charts driven in a real browser (prod build, admin) · **migration 0084 APPLIED to prod + history repaired (2026-09-19)**
 

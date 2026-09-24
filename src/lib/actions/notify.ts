@@ -22,7 +22,10 @@ type NotifyKind =
   // a decision has landed on a cut.
   | "creative_assigned"
   | "creative_status"
-  | "creative_review";
+  | "creative_review"
+  // Testing (0085). Only the retest trigger inserts it; listed so the type
+  // matches the constraint.
+  | "test_retest";
 
 type NotifyInput = {
   kind: NotifyKind;
