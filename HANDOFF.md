@@ -97,13 +97,9 @@ environment (prod/staging/local); the board's "Testing on" toggle is per-person,
 - **Code:** `lib/actions/testing.ts`, `lib/testing.ts`, `components/testing/*`,
   `app/(app)/testing/*`. Wired into the sidebar, the command palette, `section-accent` and
   rich-text links.
-- **Next:**
-  1. Apply 0085 (`node scripts/apply-migration.mjs …`, then `migration repair --status applied 0085`).
-  2. Grant `testing` in Admin.
-  3. Drive the full loop: add → fail with a screenshot → task on the board → mark done → retest
-     → pass.
-- **Blocked:** `SUPABASE_ACCESS_TOKEN` in `.env.local` 401s again. It needs a fresh token (see
-  the 2026-08-24 entry).
+- **Next:** grant `testing` to people in Admin (until then only admins see it), then drive the UI
+  once: add → Broken with a pasted screenshot → task on the Debug board → mark done → Retest → Works.
+- `SUPABASE_ACCESS_TOKEN` in `.env.local` was replaced 2026-09-24 (expires 2026-12-23).
 - **Not built:** a "from test" chip on the Debug task row. The "Test failed:" title prefix does
   that job for now.
 
