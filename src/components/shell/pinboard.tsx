@@ -175,7 +175,7 @@ export function Pinboard({
   return (
     <section className="min-w-0 rounded-lg border border-line bg-surface">
       <header className="flex items-center justify-between gap-3 border-b border-line px-4 py-2.5">
-        <h2 className="flex items-center gap-1.5 text-sm font-semibold text-ink">
+        <h2 className="flex items-center gap-1.5 text-[calc(18px*var(--text-scale,1))] font-semibold tracking-tight text-ink">
           <Pin className="size-3.5 text-faint" aria-hidden />
           Pinboard
         </h2>

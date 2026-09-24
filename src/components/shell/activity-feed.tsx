@@ -78,7 +78,7 @@ export function ActivityFeed({
   return (
     <section className="rounded-lg border border-line bg-surface">
       <header className="flex flex-wrap items-center justify-between gap-2 border-b border-line px-4 py-2.5">
-        <h2 className="text-sm font-semibold">Recent activity</h2>
+        <h2 className="text-[calc(18px*var(--text-scale,1))] font-semibold tracking-tight">Recent activity</h2>
         {kinds.length > 1 && (
           <div className="flex flex-wrap gap-1" role="group" aria-label="Filter activity">
             <FilterChip on={kind === null} onClick={() => pick(null)}>

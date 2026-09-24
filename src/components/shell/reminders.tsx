@@ -125,7 +125,7 @@ export function Reminders({
   return (
     <section className="rounded-lg border border-line bg-surface">
       <header className="flex items-center justify-between border-b border-line px-4 py-2.5">
-        <h2 className="text-sm font-semibold">Reminders</h2>
+        <h2 className="text-[calc(18px*var(--text-scale,1))] font-semibold tracking-tight">Reminders</h2>
         <span className="font-mono text-xs text-faint">{openCount} open</span>
       </header>
 

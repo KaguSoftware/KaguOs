@@ -6,6 +6,7 @@ import { getAudienceRoster, getMembersMap } from "@/lib/data/members";
 import { rowsOrThrow, selectOrThrow } from "@/lib/data/query";
 import { getActivity } from "@/lib/data/activity";
 import { PageHeader } from "@/components/shell/page-header";
+import { RiseText } from "@/components/ui/rise-text";
 import { Reminders } from "@/components/shell/reminders";
 import { LiveRefresh } from "@/components/shell/live-refresh";
 import { ActivityFeed } from "@/components/shell/activity-feed";
@@ -560,8 +561,10 @@ export default async function DashboardPage() {
           straight to the matching view rather than to the section's front door,
           so the number is actionable and not just informative. */}
       {needsYou && (
-        <div className="mb-6 flex flex-wrap items-center gap-2 rounded-lg border border-line bg-surface px-4 py-2.5">
-          <span className="text-[calc(11px*var(--text-scale,1))] font-medium uppercase tracking-wide text-faint">
+        // Each chip arrives in turn (the stagger is the nth-child delays on
+        // the strip), so what needs you reads as a list being dealt out.
+        <div className="mb-6 flex flex-wrap items-center gap-2 rounded-lg border border-line bg-surface px-4 py-2.5 motion-safe:[&>a]:animate-[msg-in_380ms_var(--ease-mac)_both] [&>a:nth-of-type(2)]:[animation-delay:40ms] [&>a:nth-of-type(3)]:[animation-delay:80ms] [&>a:nth-of-type(4)]:[animation-delay:120ms] [&>a:nth-of-type(5)]:[animation-delay:160ms] [&>a:nth-of-type(6)]:[animation-delay:200ms]">
+          <span className="mr-1 text-[calc(13px*var(--text-scale,1))] font-semibold uppercase tracking-wide text-ink">
             Needs you
           </span>
           {overdueCount > 0 && (
@@ -651,9 +654,10 @@ export default async function DashboardPage() {
       <div className="mb-6">
         <Reminders reminders={reminders} members={members} meId={ctx.userId} />
       </div>
-      {/* One dense row of numbers, not six cards. Each section is a column of
-          figures; the section name is the link. Values are mono and sized up so
-          the row scans as data, which is what it always was. */}
+      {/* One row of numbers, not six cards. Each section is a column of
+          figures; the section name is the link. The figures are DISPLAY type —
+          the step between the 48px greeting and the body — and rise in turn,
+          so the row reads as the state of the company arriving. */}
       {stats.length > 0 && (
         <div
           className="mb-6 grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-line bg-line sm:grid-cols-3 lg:grid-cols-[repeat(var(--stat-cols),minmax(0,1fr))]"
@@ -676,17 +680,9 @@ export default async function DashboardPage() {
               <Link
                 key={s.section}
                 href={s.href}
-                style={
-                  accent
-                    ? {
-                        borderTopColor: accentMix(accent, 55),
-                        color: accentVar(accent),
-                      }
-                    : undefined
-                }
+                style={accent ? { color: accentVar(accent) } : undefined}
                 className={cn(
-                  accent && "border-t-2",
-                  "group bg-surface p-3 transition-colors duration-150 hover:bg-raised",
+                  "group relative bg-surface p-4 transition-colors duration-150 hover:bg-raised md:p-5",
                   // The narrow breakpoints have fixed column counts, so a stat
                   // count that doesn't divide evenly leaves a hole at the end of
                   // the last row — the same tell as above, just narrower. The
@@ -696,11 +692,23 @@ export default async function DashboardPage() {
                   stats.length % 3 === 2 && i === 0 && "sm:col-span-2 lg:col-span-1"
                 )}
               >
+                {/* The section's hairline, drawn in across the top edge in
+                    the same stagger as the figures. */}
+                {accent && (
+                  <span
+                    aria-hidden
+                    className="absolute inset-x-0 top-0 h-0.5 origin-left motion-safe:animate-[wipe-x_500ms_var(--ease-mac)_both]"
+                    style={{
+                      backgroundColor: accentMix(accent, 55),
+                      animationDelay: `${i * 60 + 150}ms`,
+                    }}
+                  />
+                )}
                 {/* Inherits the accent set on the Link — currentColor rather
-                    than a second style object. */}
+                    than a second style object. A fixed word, so UPPERCASE. */}
                 <span
                   className={cn(
-                    "flex items-center gap-1 text-[calc(11px*var(--text-scale,1))]",
+                    "flex items-center gap-1 text-[calc(11px*var(--text-scale,1))] font-medium uppercase tracking-wide",
                     !accent && "text-faint"
                   )}
                 >
@@ -710,13 +718,16 @@ export default async function DashboardPage() {
                     aria-hidden
                   />
                 </span>
-                <span className="mt-1.5 flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
-                  {s.figures.map((f) => (
-                    <span key={f.label} className="flex items-baseline gap-1">
-                      <span className="font-mono text-[calc(15px*var(--text-scale,1))] font-medium text-ink tabular-nums">
+                <span className="mt-3 flex flex-wrap items-end gap-x-5 gap-y-3">
+                  {s.figures.map((f, j) => (
+                    <span key={f.label} className="flex flex-col">
+                      <RiseText
+                        delay={i * 60 + j * 40 + 200}
+                        innerClassName="font-mono text-[calc(28px*var(--text-scale,1))] leading-none font-medium tracking-[-0.03em] text-ink tabular-nums lg:text-[calc(34px*var(--text-scale,1))]"
+                      >
                         {f.value}
-                      </span>
-                      <span className="text-[calc(11px*var(--text-scale,1))] text-muted">{f.label}</span>
+                      </RiseText>
+                      <span className="mt-1 text-[calc(11px*var(--text-scale,1))] text-muted">{f.label}</span>
                     </span>
                   ))}
                 </span>
