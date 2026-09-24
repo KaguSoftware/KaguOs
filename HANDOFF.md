@@ -72,7 +72,7 @@ Contracts w/ PDFs), **Debug** (everyone: per-project boards, self-claim-only, re
 
 ## Current status (2026-09-24)
 
-### 🟡 TESTING SECTION (2026-09-24) — build green · lint clean in touched files · **migration 0085 WRITTEN, NOT APPLIED** · not live-driven
+### 🟢 TESTING SECTION (2026-09-24) — build green · lint clean in touched files · **migration 0085 APPLIED to prod + history repaired (2026-09-24)** · DB loop smoke-tested in a rolled-back txn (create → note → done⇒retest → reopen → pass) · UI not yet live-driven
 
 New top-level `/testing` (own section `testing`, sky-blue accent `--sec-testing`). One living
 checklist per project. Case statuses: untested · pass ("Works") · fail ("Broken") · blocked · retest.

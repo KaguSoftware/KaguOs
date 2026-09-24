@@ -32,6 +32,7 @@ import {
   type AccentKey,
 } from "@/lib/section-accent";
 import { SIDEBAR_COOKIE, SIDEBAR_COOKIE_MAX_AGE } from "@/lib/sidebar-pref";
+import { istanbulGreeting } from "@/lib/greeting";
 import type { Section } from "@/lib/types";
 import { signOut } from "@/lib/actions/account";
 import { Logo } from "@/components/shell/logo";
@@ -181,13 +182,12 @@ const EXIT_MS = 180;
  * obvious replacement is a drawer of rows, but every app has that and it
  * answers only "where do you want to go?".
  *
- * This answers "what's going on?" instead. Each section is a tile carrying its
- * LIVE number (9 open, 2 projects, 1 sprint), and **a section with work in it
- * spans the full width** — so the grid physically reshapes to the state of the
- * company. It looks different on a Monday than a Friday, which is the bit a
- * nav list can never do. Navigation is still one tap, and the numbers cost no
- * extra round-trip (see lib/data/pulse.ts — it rides in the layout's existing
- * presence wave).
+ * This answers "what's going on?" too. It's styled after React Bits'
+ * StaggeredMenu: the section's hue wipes in, then each destination rises as a
+ * big line of type, and a section with work in it carries its LIVE number
+ * (9 open, 3 unread) as a superscript in its own colour. Navigation is still
+ * one tap, and the numbers cost no extra round-trip (see lib/data/pulse.ts —
+ * it rides in the layout's existing presence wave).
  *
  * Portaled, with the app's standard dismissal contract (backdrop, Escape,
  * scroll lock) and a real exit animation on every path out.
@@ -268,18 +268,7 @@ function MobileMenu({
   // is impure (the sheet is short-lived, so a ticking clock would buy nothing
   // and cost re-renders). Same lazy-initializer pattern as sidebar-presence.
   const [now] = useState(() => Date.now());
-
-  // Istanbul, not the device: the whole team shares one working day, and a
-  // teammate travelling shouldn't be greeted "evening" at 10am in Kadıköy.
-  const hour = Number(
-    new Intl.DateTimeFormat("en-GB", {
-      timeZone: "Europe/Istanbul",
-      hour: "numeric",
-      hour12: false,
-    }).format(new Date(now))
-  );
-  const greeting =
-    hour < 5 ? "Still up" : hour < 12 ? "Morning" : hour < 18 ? "Afternoon" : "Evening";
+  const greeting = istanbulGreeting(now);
 
   // Who's actually around — the LIVE presence channel, same signal as the
   // desktop panel and the team sheet. This used to be guessed from
@@ -387,115 +376,66 @@ function MobileMenu({
           </button>
         </div>
 
-        {/* The tiles. Each carries its section's LIVE number, and a section
-            with work in it spans two columns — so the grid physically reshapes
-            to the state of the company instead of being a fixed list. That's
-            the thing you can't get from a nav strip. */}
-        <nav
-          className="relative grid flex-1 auto-rows-min grid-cols-2 content-start gap-2.5 overflow-y-auto px-4 pb-2"
-          aria-label="Sections"
-        >
-          {items.map((item, i) => {
-            const active = isActive(pathname, item.href);
-            const Icon = item.icon;
-            // Messages shares Work's SECTION gate but not its numbers — its
-            // tile carries the unread count, not the project count.
-            const stat =
-              item.href === "/messages"
-                ? unreadMessages
-                  ? { value: unreadMessages, label: "unread", weight: unreadMessages }
-                  : undefined
-                : item.section
-                  ? pulse.stats[item.section]
-                  : undefined;
-            const loud = (stat?.weight ?? 0) > 0;
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                aria-current={active ? "page" : undefined}
-                onClick={close}
-                style={{
-                  animationDelay: `${Math.min(i, 7) * 30 + 100}ms`,
-                  ...(active
-                    ? {
-                        borderColor: accentMix(item.accent, 45),
-                        backgroundColor: accentMix(item.accent, 12),
-                      }
-                    : null),
-                }}
-                className={cn(
-                  "group relative flex min-h-28 flex-col justify-between overflow-hidden rounded-2xl border p-3.5",
-                  "transition-[border-color,background-color,transform] duration-200 ease-mac active:scale-[0.97]",
-                  "motion-safe:animate-[tile-in_320ms_var(--ease-mac)_both]",
-                  // A busy section earns the full width.
-                  loud && "col-span-2",
-                  !active && "border-line bg-surface/70 hover:border-line-strong"
-                )}
-              >
-                {active && (
-                  <span
-                    className="pointer-events-none absolute -right-8 -top-8 size-24 rounded-full blur-2xl"
-                    style={{ backgroundColor: accentMix(item.accent, 22) }}
-                    aria-hidden
-                  />
-                )}
-                <span className="relative flex items-center justify-between">
-                  <span
+        {/* StaggeredMenu's list: each section a big line of type that rises
+            out of its own mask, one after another. The live number rides as a
+            superscript in the section's hue — only when there's work in it, so
+            the list still says what's going on, not just where to go. */}
+        <nav className="relative flex-1 overflow-y-auto px-5 pb-4 pt-2" aria-label="Sections">
+          <ul className="flex flex-col gap-1.5">
+            {items.map((item, i) => {
+              const active = isActive(pathname, item.href);
+              // Messages shares Work's SECTION gate but not its numbers — it
+              // carries the unread count, not the project count.
+              const stat =
+                item.href === "/messages"
+                  ? unreadMessages
+                    ? { value: unreadMessages, label: "unread", weight: unreadMessages }
+                    : undefined
+                  : item.section
+                    ? pulse.stats[item.section]
+                    : undefined;
+              const loud = stat && stat.weight > 0 ? stat : null;
+              return (
+                // pb gives descenders room so the mask doesn't clip them.
+                <li key={item.href} className="overflow-hidden pb-0.5">
+                  <Link
+                    href={item.href}
+                    aria-current={active ? "page" : undefined}
+                    onClick={close}
+                    style={{
+                      animationDelay: `${Math.min(i, 9) * 45 + 160}ms`,
+                      ...(active ? { color: accentVar(item.accent) } : null),
+                    }}
                     className={cn(
-                      "grid size-9 place-items-center rounded-xl transition-colors duration-200",
-                      !active && "bg-raised/80 text-faint group-hover:text-muted"
+                      "group inline-flex origin-bottom items-start gap-1.5 pr-8 leading-none",
+                      "text-[calc(clamp(30px,10vw,44px)*var(--text-scale,1))] font-semibold uppercase tracking-[-0.045em]",
+                      "transition-[color,transform] duration-150 ease-mac active:scale-[0.98]",
+                      "motion-safe:animate-[line-rise_650ms_var(--ease-mac)_both]",
+                      !active && "text-ink"
                     )}
-                    style={
-                      active
-                        ? {
-                            backgroundColor: accentMix(item.accent, 22),
-                            color: accentVar(item.accent),
-                          }
-                        : undefined
-                    }
-                    aria-hidden
                   >
-                    <Icon className="size-4.5" />
-                  </span>
-                  <ChevronRight
-                    className="size-4 -translate-x-1 text-faint opacity-0 transition-[opacity,transform] duration-200 ease-mac group-hover:translate-x-0 group-hover:opacity-100"
-                    aria-hidden
-                  />
-                </span>
-                <span className="relative mt-3 block">
-                  {/* The label rises a beat after its tile lands. */}
-                  <span className="block overflow-hidden pb-0.5">
+                    {/* Hover borrows the destination's hue — it previews
+                        where you're about to go. */}
                     <span
-                      style={{ animationDelay: `${Math.min(i, 7) * 40 + 140}ms` }}
-                      className={cn(
-                        "block origin-bottom text-[calc(15px*var(--text-scale,1))] font-medium",
-                        "motion-safe:animate-[line-rise_600ms_var(--ease-mac)_both]",
-                        active ? "text-ink" : "text-muted group-hover:text-ink"
-                      )}
+                      className="transition-colors duration-150 group-hover:text-(--hover)"
+                      style={{ ["--hover" as string]: accentVar(item.accent) }}
                     >
                       {item.label}
                     </span>
-                  </span>
-                  {stat && (
-                    <span className="mt-0.5 flex items-baseline gap-1.5">
+                    {loud && (
                       <span
-                        className={cn(
-                          "font-mono text-[calc(19px*var(--text-scale,1))] font-medium tabular-nums",
-                          loud ? "text-ink" : "text-faint"
-                        )}
+                        className="mt-[0.1em] font-mono text-[calc(13px*var(--text-scale,1))] font-medium tracking-normal tabular-nums"
+                        style={{ color: accentVar(item.accent) }}
                       >
-                        {stat.value}
+                        {loud.value}
+                        <span className="sr-only"> {loud.label}</span>
                       </span>
-                      <span className="text-[calc(12px*var(--text-scale,1))] text-faint">
-                        {stat.label}
-                      </span>
-                    </span>
-                  )}
-                </span>
-              </Link>
-            );
-          })}
+                    )}
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
         </nav>
 
         {/* Search + who's around + you. The utility rail. */}
