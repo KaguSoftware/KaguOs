@@ -4,6 +4,9 @@
  * A cookie for the same reason as lib/sidebar-pref.ts: the layout has to know
  * on the SERVER whether to render the intro, so it covers the app from the very
  * first paint. Deciding after hydration would flash the app, then cover it.
+ *
+ * Cleared on sign-out (actions/account.ts) and on login (login-form.tsx), so
+ * every fresh login plays it too, not just the day's first open.
  */
 export const INTRO_COOKIE = "kagu-intro-day";
 

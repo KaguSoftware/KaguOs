@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { INTRO_COOKIE } from "@/lib/intro-pref";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Field } from "@/components/ui/field";
@@ -56,6 +57,9 @@ export function LoginForm({ labels = LOGIN_LABELS_EN }: { labels?: LoginFormLabe
       return;
     }
 
+    // Every login plays the daily intro, not just the day's first open —
+    // signOut clears this too, but a session can also just expire.
+    document.cookie = `${INTRO_COOKIE}=; path=/; max-age=0`;
     router.push("/");
     router.refresh();
   }

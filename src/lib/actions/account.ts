@@ -9,6 +9,7 @@ import { notifyChatTeam } from "@/lib/actions/notify";
 import { isValidColorKey } from "@/lib/colors";
 import { dict } from "@/lib/i18n";
 import { LOCALE_COOKIE, parseLocale } from "@/lib/locale";
+import { INTRO_COOKIE } from "@/lib/intro-pref";
 import { STATUS_KINDS, STATUS_PRESETS, type StatusKind } from "@/lib/types";
 
 /**
@@ -48,6 +49,8 @@ export type ActionResult = {
 export async function signOut() {
   const supabase = await createClient();
   await supabase.auth.signOut();
+  // Coming back in is a threshold too — the next login plays the intro again.
+  (await cookies()).delete(INTRO_COOKIE);
   redirect("/login");
 }
 
