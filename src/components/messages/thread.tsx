@@ -939,7 +939,11 @@ export function MessageThread({
         // Overflow containers aren't focusable in Safari, so the history was
         // unreachable by keyboard entirely.
         tabIndex={0}
-        className="min-h-0 flex-1 space-y-1 overflow-y-auto py-4 pr-1 focus-visible:outline-none"
+        // relative is load-bearing: it makes this scroller the containing block
+        // for every sr-only span inside it (those are position:absolute).
+        // Without it they are placed against the PAGE, and each one below the
+        // fold stretched the document — the page itself scrolled with history.
+        className="relative min-h-0 flex-1 space-y-1 overflow-y-auto py-4 pr-1 focus-visible:outline-none"
       >
         {hasOlder && (
           <div className="flex justify-center pb-2">

@@ -89,7 +89,8 @@ export function ThreadList({
   return (
     <nav
       aria-label="Conversations"
-      className="flex h-full min-h-0 flex-col overflow-y-auto px-3 pb-6 md:px-4"
+      // relative: contains the rows' absolute sr-only spans (see thread.tsx).
+      className="relative flex h-full min-h-0 flex-col overflow-y-auto px-3 pb-6 md:px-4"
     >
       {/* The pane's own display title — Messages is full-bleed and has no
           PageHeader, so this is where the section announces itself. An h2:
