@@ -146,6 +146,8 @@
 
   /* macOS-feel motion: Apple's sheet curve + soft entrances for transient surfaces */
   --ease-mac: cubic-bezier(0.32, 0.72, 0, 1);
+  /* Exits only — accelerates away instead of settling. */
+  --ease-mac-in: cubic-bezier(0.32, 0, 0.67, 0);
   --animate-pop-in: pop-in 180ms var(--ease-mac) both;
   --animate-overlay-in: overlay-in 220ms var(--ease-mac) both;
   --animate-page-in: page-in 250ms var(--ease-mac) both;
@@ -285,6 +287,47 @@
   to {
     opacity: 1;
     transform: scale(1) translateY(0);
+  }
+}
+
+/* Mobile menu entrance: the section's hue wipes in from the right, the
+   surface lands on top of it, then each label rises out of a mask. Borrowed
+   from React Bits' StaggeredMenu, in CSS so there's still one motion system.
+   The one place type animates — reserved for full-screen navigation. */
+@keyframes wipe-in {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+@keyframes panel-in {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+@keyframes panel-out {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(100%);
+  }
+}
+
+/* Pair with an overflow-hidden parent and origin-bottom on the element. */
+@keyframes line-rise {
+  from {
+    transform: translateY(140%) rotate(10deg);
+  }
+  to {
+    transform: none;
   }
 }
 

@@ -25,7 +25,12 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { accentMix, accentVar, type AccentKey } from "@/lib/section-accent";
+import {
+  accentForPath,
+  accentMix,
+  accentVar,
+  type AccentKey,
+} from "@/lib/section-accent";
 import { SIDEBAR_COOKIE, SIDEBAR_COOKIE_MAX_AGE } from "@/lib/sidebar-pref";
 import type { Section } from "@/lib/types";
 import { signOut } from "@/lib/actions/account";
@@ -251,6 +256,14 @@ function MobileMenu({
   const firstName = name?.split(" ")[0] ?? "";
   const overdue = pulse.overdue;
 
+  // The entrance wipe is the hue of the section you opened the menu FROM, so
+  // it says where you are as it plays. Portaled outside SectionAccentScope, so
+  // it's resolved from the path rather than read from --section-accent.
+  const here = accentForPath(pathname);
+  const wipe = here
+    ? accentMix(here, 55)
+    : "color-mix(in oklch, var(--primary-dim) 55%, transparent)";
+
   // Clock read ONCE on mount, not during render — `Date.now()` in a render body
   // is impure (the sheet is short-lived, so a ticking clock would buy nothing
   // and cost re-renders). Same lazy-initializer pattern as sidebar-presence.
@@ -302,14 +315,33 @@ function MobileMenu({
         )}
       />
 
+      {/* Two layers wipe in from the right a beat ahead of the surface — the
+          section's hue, then a neutral — so the menu arrives in layers rather
+          than all at once. Hidden outright for reduced motion: they'd only
+          flash. */}
+      {[wipe, "var(--raised)"].map((bg, i) => (
+        <div
+          key={i}
+          aria-hidden
+          style={{ backgroundColor: bg, animationDelay: closing ? "0ms" : `${i * 50}ms` }}
+          className={cn(
+            "pointer-events-none absolute inset-0 motion-reduce:hidden",
+            closing
+              ? "animate-[panel-out_180ms_var(--ease-mac-in)_both]"
+              : "animate-[wipe-in_300ms_var(--ease-mac)_both]"
+          )}
+        />
+      ))}
+
       <div
+        style={{ animationDelay: closing ? "0ms" : "80ms" }}
         className={cn(
-          "absolute inset-0 flex flex-col overflow-hidden bg-bg/95 backdrop-blur-xl",
-          // Full-screen, so it grows from the page rather than sliding in from
-          // an edge it no longer has.
+          "absolute inset-0 flex flex-col overflow-hidden bg-bg",
+          // Slides in over the wipe from the same edge, and every exit sends
+          // the whole stack back out that way together.
           closing
-            ? "motion-safe:animate-[overlay-out_180ms_var(--ease-mac)_both]"
-            : "motion-safe:animate-[overlay-in_260ms_var(--ease-mac)_both]"
+            ? "motion-safe:animate-[panel-out_180ms_var(--ease-mac-in)_both]"
+            : "motion-safe:animate-[panel-in_360ms_var(--ease-mac)_both]"
         )}
       >
         {/* Two soft brand glows give the screen a light source, so the grid
@@ -326,9 +358,13 @@ function MobileMenu({
 
         <div className="relative flex items-start justify-between px-5 pb-4 pt-5">
           <div className="min-w-0">
-            <p className="text-[calc(22px*var(--text-scale,1))] font-semibold tracking-tight text-ink">
-              {greeting}
-              {firstName ? `, ${firstName}` : ""}
+            {/* Rises out of its own line box — the mask is the overflow-hidden
+                parent; pb gives descenders room so the mask doesn't clip them. */}
+            <p className="overflow-hidden pb-0.5 text-[calc(22px*var(--text-scale,1))] font-semibold tracking-tight text-ink">
+              <span className="block origin-bottom motion-safe:animate-[line-rise_600ms_var(--ease-mac)_120ms_both]">
+                {greeting}
+                {firstName ? `, ${firstName}` : ""}
+              </span>
             </p>
             {/* The one line that's about YOU, not about navigation. */}
             <p className="mt-0.5 text-[calc(13px*var(--text-scale,1))] text-muted">
@@ -380,7 +416,7 @@ function MobileMenu({
                 aria-current={active ? "page" : undefined}
                 onClick={close}
                 style={{
-                  animationDelay: `${Math.min(i, 7) * 30 + 60}ms`,
+                  animationDelay: `${Math.min(i, 7) * 30 + 100}ms`,
                   ...(active
                     ? {
                         borderColor: accentMix(item.accent, 45),
@@ -428,13 +464,18 @@ function MobileMenu({
                   />
                 </span>
                 <span className="relative mt-3 block">
-                  <span
-                    className={cn(
-                      "block text-[calc(15px*var(--text-scale,1))] font-medium",
-                      active ? "text-ink" : "text-muted group-hover:text-ink"
-                    )}
-                  >
-                    {item.label}
+                  {/* The label rises a beat after its tile lands. */}
+                  <span className="block overflow-hidden pb-0.5">
+                    <span
+                      style={{ animationDelay: `${Math.min(i, 7) * 40 + 140}ms` }}
+                      className={cn(
+                        "block origin-bottom text-[calc(15px*var(--text-scale,1))] font-medium",
+                        "motion-safe:animate-[line-rise_600ms_var(--ease-mac)_both]",
+                        active ? "text-ink" : "text-muted group-hover:text-ink"
+                      )}
+                    >
+                      {item.label}
+                    </span>
                   </span>
                   {stat && (
                     <span className="mt-0.5 flex items-baseline gap-1.5">

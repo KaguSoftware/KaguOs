@@ -89,6 +89,9 @@ Curve: `--ease-mac: cubic-bezier(0.32, 0.72, 0, 1)` (Apple's sheet curve) on eve
 - Buttons: `active:scale-[0.98]` micro-press; hovers 150ms.
 - Transient surfaces (menus, popovers, overlays) get frosted translucency (`bg-raised/90
   backdrop-blur-md`) — macOS material identity. NEVER on cards/panels (glassmorphism ban holds).
+- Mobile menu only: section-accent layers `wipe-in` ahead of the `panel-in` surface, and labels
+  `line-rise` out of an overflow-hidden mask; exits use `--ease-mac-in`. The one place type
+  animates — reserved for full-screen navigation, never content.
 - Motion conveys state only; `prefers-reduced-motion` collapses everything (global rule).
 
 ## Bans (project-specific)

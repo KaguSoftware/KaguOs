@@ -1226,10 +1226,15 @@ answers "where do you want to go?". This answers **"what's going on?"**:
   (`text-danger` when non-zero, "Nothing overdue. Nice." otherwise).
 - Utility rail at the bottom: ⌘K search, **who's online right now as coloured avatar chips**
   (5-minute `last_seen_at` window), account/status, sign out.
-- Motion: `tile-in` (scale-from-centre, staggered), two blurred brand glows so the screen has a
-  light source, `active:scale` press feedback. **Closing animation on EVERY path out** — backdrop,
-  X, Escape, and following a link all route through one `close()` that flips a `closing` flag,
-  plays `overlay-out`, then unmounts after `EXIT_MS` (kept in sync with the CSS by a comment).
+- Motion (StaggeredMenu-style entrance, pure CSS, no GSAP): two layers `wipe-in` from the right —
+  the current section's accent (`accentForPath`, 55%) then `--raised` — and the opaque surface
+  `panel-in`s over them 80ms later. Tiles `tile-in` (scale-from-centre, staggered from 100ms);
+  the greeting and each tile label `line-rise` out of an `overflow-hidden` mask
+  (translateY 140% + rotate 10° → none, staggered 40ms from 140ms). Layers are
+  `motion-reduce:hidden`. Two blurred brand glows, `active:scale` press feedback. **Closing
+  animation on EVERY path out** — backdrop, X, Escape, and following a link all route through one
+  `close()` that flips a `closing` flag, sends surface + layers out right with `panel-out` on
+  `--ease-mac-in`, then unmounts after `EXIT_MS` (kept in sync with the CSS by a comment).
 
 **`src/lib/data/pulse.ts` (NEW)** feeds those numbers: one parallel wave of head-only counts,
 `cache()`-wrapped, and it rides in the **same `Promise.all` as `getPresence`** in
