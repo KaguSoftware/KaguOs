@@ -2,6 +2,9 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { SIDEBAR_COOKIE } from "@/lib/sidebar-pref";
+import { INTRO_COOKIE } from "@/lib/intro-pref";
+import { istanbulGreeting } from "@/lib/greeting";
+import { todayInIstanbul } from "@/lib/utils";
 import { TEXT_SIZE_COOKIE, parseTextSize, textScaleCss } from "@/lib/text-size";
 import {
 	canAccess,
@@ -22,10 +25,11 @@ import { SectionAccentScope } from "@/components/shell/section-accent";
 import { Sidebar } from "@/components/shell/sidebar";
 import { CommandPalette } from "@/components/shell/command-palette";
 import { ShowcaseBanner } from "@/components/shell/showcase";
+import { DailyIntro } from "@/components/shell/daily-intro";
 import { ToastProvider } from "@/components/ui/toast";
 import { TitleUnread } from "@/components/shell/title-unread";
 import { UnreadDmPopups } from "@/components/shell/unread-dm-popups";
-import type { Notification } from "@/lib/types";
+import { SECTION_LABELS, type Notification } from "@/lib/types";
 
 export default async function AppLayout({
 	children,
@@ -96,6 +100,27 @@ export default async function AppLayout({
 	// where the panel is absent.
 	const unreadMessages = totalUnread(inbox);
 
+	// The first open of the day plays the intro — decided HERE, from the
+	// cookie, so it covers the app from the first paint (see lib/intro-pref.ts).
+	// Never in showcase: a client demo shouldn't open on the team's numbers.
+	const today = todayInIstanbul();
+	const showIntro = !ctx.showcase && jar.get(INTRO_COOKIE)?.value !== today;
+	// The day's loudest few sections, from the pulse the layout already has.
+	const introHighlights = showIntro
+		? Object.values(pulse.stats)
+				.filter((s) => s !== undefined && s.weight > 0)
+				.sort((a, b) => b.weight - a.weight)
+				.slice(0, 3)
+				.map((s) => ({
+					value: s.value,
+					label: s.label,
+					where: SECTION_LABELS[s.section].replace(/^Kagu /, ""),
+				}))
+		: [];
+	if (showIntro && unreadMessages) {
+		introHighlights.push({ value: unreadMessages, label: "unread", where: "Messages" });
+	}
+
 	// Minimal, privacy-conscious slice for the popups — sender + preview only,
 	// never the group chat (that's the sidebar badge's job, not a popup's).
 	const unreadDMs =
@@ -122,6 +147,15 @@ export default async function AppLayout({
         like any other child.
       */}
 			<style>{textScaleCss(textSize)}</style>
+			{showIntro && (
+				<DailyIntro
+					day={today}
+					greeting={istanbulGreeting()}
+					firstName={ctx.profile.full_name?.split(" ")[0] ?? ""}
+					overdue={pulse.overdue}
+					highlights={introHighlights}
+				/>
+			)}
 			{/*
         Skip link — the first tab stop on every page. Without it a keyboard user
         tabs through all six section links, search, the bell, and the account row

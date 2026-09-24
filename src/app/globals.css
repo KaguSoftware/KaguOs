@@ -277,19 +277,6 @@
   }
 }
 
-/* Mobile menu tiles: scale up from their own centre, staggered by inline
-   animation-delay, so the grid assembles itself instead of just appearing. */
-@keyframes tile-in {
-  from {
-    opacity: 0;
-    transform: scale(0.94) translateY(8px);
-  }
-  to {
-    opacity: 1;
-    transform: scale(1) translateY(0);
-  }
-}
-
 /* Mobile menu entrance: the section's hue wipes in from the right, the
    surface lands on top of it, then each label rises out of a mask. Borrowed
    from React Bits' StaggeredMenu, in CSS so there's still one motion system.
@@ -318,6 +305,27 @@
   }
   to {
     transform: translateX(100%);
+  }
+}
+
+/* The daily intro leaving: off to the left, the way it came in reversed. */
+@keyframes wipe-out {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-100%);
+  }
+}
+
+/* A fill drawn across its row — pair with origin-left. The sidebar's active
+   row and the page header's accent rule. */
+@keyframes wipe-x {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
   }
 }
 

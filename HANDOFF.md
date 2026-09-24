@@ -1215,22 +1215,34 @@ with more polish — with "I want something innovative that people open and say 
 and he's right that styling a row list can't get there: the *form* was the problem. A drawer only
 answers "where do you want to go?". This answers **"what's going on?"**:
 
-- Every section is a **tile carrying its live number** (9 open · 2 projects · 1 sprint), and **a
-  section with work in it spans the full width** — so the grid physically reshapes to the state of
-  the company and looks different on a Monday than a Friday. That's the part a nav list can't do.
+- **Superseded 2026-09-24:** the tile grid became a StaggeredMenu-style list — each section a big
+  uppercase line (clamp 30–44px) rising out of a mask, with its **live number as an accent-coloured
+  superscript only when weight > 0** (sr-only label). Active = accent text, hover previews the
+  destination's accent.
 - Header is the one line that's about YOU: an Istanbul-clock greeting + your overdue count
   (`text-danger` when non-zero, "Nothing overdue. Nice." otherwise).
 - Utility rail at the bottom: ⌘K search, **who's online right now as coloured avatar chips**
   (5-minute `last_seen_at` window), account/status, sign out.
 - Motion (StaggeredMenu-style entrance, pure CSS, no GSAP): two layers `wipe-in` from the right —
   the current section's accent (`accentForPath`, 55%) then `--raised` — and the opaque surface
-  `panel-in`s over them 80ms later. Tiles `tile-in` (scale-from-centre, staggered from 100ms);
-  the greeting and each tile label `line-rise` out of an `overflow-hidden` mask
-  (translateY 140% + rotate 10° → none, staggered 40ms from 140ms). Layers are
+  `panel-in`s over them 80ms later. The greeting and each section line `line-rise` out of an
+  `overflow-hidden` mask (translateY 140% + rotate 10° → none, staggered 45ms from 160ms). Layers are
   `motion-reduce:hidden`. Two blurred brand glows, `active:scale` press feedback. **Closing
   animation on EVERY path out** — backdrop, X, Escape, and following a link all route through one
   `close()` that flips a `closing` flag, sends surface + layers out right with `panel-out` on
   `--ease-mac-in`, then unmounts after `EXIT_MS` (kept in sync with the CSS by a comment).
+
+**Desktop, same language (2026-09-24):**
+- **Daily intro** (`components/shell/daily-intro.tsx`): first open of the Istanbul day, primary +
+  raised layers wipe in, huge uppercase "MORNING, PARSA." rises line by line with overdue + the
+  top-3 loud pulse stats + unread, then the whole thing `wipe-out`s left after 1.7s (click/any key
+  skips). Server-decided from the `kagu-intro-day` cookie (`lib/intro-pref.ts`) so it covers the
+  first paint; cookie set on mount. Skipped in showcase; `motion-reduce:hidden`. Greeting helper
+  shared with the phone menu: `lib/greeting.ts`.
+- **Page titles** (`PageHeader`): 34/48px display, rise on every route change; the old left rule
+  became a 3px×48px accent bar that `wipe-x`es in beneath the title.
+- **Sidebar**: labels rise in turn on load (rail persists, so not per click); the active row's
+  accent fill `wipe-x`es in from the left each time a row becomes active.
 
 **`src/lib/data/pulse.ts` (NEW)** feeds those numbers: one parallel wave of head-only counts,
 `cache()`-wrapped, and it rides in the **same `Promise.all` as `getPresence`** in

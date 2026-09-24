@@ -64,7 +64,10 @@ own key up instead.
 
 Geist Sans everywhere (one family, weights 400/500/600); Geist Mono for amounts, dates-in-tables,
 counts, IDs. Fixed rem scale (no clamp): 12 (`text-xs` meta) · 13 · 15 (body/base) · 16 · 18
-(section titles, 600) · 22 (page titles, 600). Prose capped at ~70ch; tables may run dense.
+(section titles, 600) · 22 (card/sheet titles, 600). **Display tier (2026-09-24):** page titles
+34 → 48px md+, 600, tracking -0.04em, leading 1.02 (`PageHeader`); the phone menu's section list
+clamp(30px,10vw,44px) uppercase; the daily intro's greeting clamp(56px,11vw,168px) uppercase.
+Display type is for thresholds (page start, navigation, the day's first open) — never inside content. Prose capped at ~70ch; tables may run dense.
 
 ## Layout
 
@@ -89,9 +92,12 @@ Curve: `--ease-mac: cubic-bezier(0.32, 0.72, 0, 1)` (Apple's sheet curve) on eve
 - Buttons: `active:scale-[0.98]` micro-press; hovers 150ms.
 - Transient surfaces (menus, popovers, overlays) get frosted translucency (`bg-raised/90
   backdrop-blur-md`) — macOS material identity. NEVER on cards/panels (glassmorphism ban holds).
-- Mobile menu only: section-accent layers `wipe-in` ahead of the `panel-in` surface, and labels
-  `line-rise` out of an overflow-hidden mask; exits use `--ease-mac-in`. The one place type
-  animates — reserved for full-screen navigation, never content.
+- **Staggered reveal language** (after React Bits' StaggeredMenu, pure CSS, no GSAP): coloured
+  layers `wipe-in` ahead of a `panel-in` surface; type `line-rise`s out of an overflow-hidden mask
+  (translateY 140% + rotate 10°, origin-bottom, pb for descenders); accent fills `wipe-x` from the
+  left; exits use `--ease-mac-in`. Used at thresholds only: the phone menu, the daily intro, page
+  titles (+ their accent rule), the sidebar's labels on load and its active-row fill. Type never
+  animates inside content.
 - Motion conveys state only; `prefers-reduced-motion` collapses everything (global rule).
 
 ## Bans (project-specific)
