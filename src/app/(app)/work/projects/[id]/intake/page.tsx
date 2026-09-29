@@ -6,6 +6,7 @@ import { ArrowLeft, UserRound } from "lucide-react";
 import { canWrite, requireSection } from "@/lib/data/session";
 import { rowsOrThrow, selectOrThrow } from "@/lib/data/query";
 import { getIntakePack } from "@/lib/data/intake";
+import { hasPack } from "@/lib/intake";
 import { PageHeader } from "@/components/shell/page-header";
 import { LiveRefresh } from "@/components/shell/live-refresh";
 import { Badge } from "@/components/ui/badge";
@@ -60,7 +61,8 @@ export default async function ProjectIntakePage({
       "client_projects"
     ),
   ]);
-  if (!project) notFound();
+  // No pack, no page: a project on `intake_pack = 'none'` has nothing to read.
+  if (!project || !hasPack(project.intake_pack)) notFound();
 
   // Second wave, and unavoidable: which questions this project asks is a column
   // on the row above, and reading the answers without it would mean scoring

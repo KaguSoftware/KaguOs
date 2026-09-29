@@ -8,6 +8,7 @@ import { BusinessTabs } from "@/components/portal/bits";
 import { IntakeForm } from "@/components/portal/intake-form";
 import { LOCALE_COOKIE, parseLocale } from "@/lib/locale";
 import { dict } from "@/lib/i18n";
+import { hasPack } from "@/lib/intake";
 
 export async function generateMetadata(): Promise<Metadata> {
   const locale = parseLocale((await cookies()).get(LOCALE_COOKIE)?.value);
@@ -53,14 +54,16 @@ export default async function PortalInputsPage({
   // Guarded above, so this only fires if the project was deleted between the
   // session context being built and this query running.
   const project = portal.projects.find((p) => p.id === projectId);
-  if (!project) notFound();
+  // A project with no input pack (`intake_pack = 'none'`) has no page here,
+  // even for someone who types the address: there is nothing to fill in.
+  if (!project || !hasPack(project.intake_pack)) notFound();
 
   const pack = await getIntakePack(ctx, projectId, project.intake_pack);
 
   return (
     <>
       <BusinessTabs
-        businesses={portal.projects}
+        businesses={portal.projects.filter((p) => hasPack(p.intake_pack))}
         activeId={projectId}
         hrefFor={(id) => `/portal/inputs/${id}`}
         label={t.yourBusinesses}

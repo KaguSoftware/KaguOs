@@ -5,6 +5,7 @@ import { ArrowLeft, ClipboardList, Lightbulb, MonitorSmartphone } from "lucide-r
 import { requireSection, canAccess } from "@/lib/data/session";
 import { rowsOrThrow, selectOrThrow } from "@/lib/data/query";
 import { getIntakeSummaries } from "@/lib/data/intake";
+import { hasPack } from "@/lib/intake";
 import { PageHeader } from "@/components/shell/page-header";
 import { Panel, PanelHeader } from "@/components/ui/panel";
 import { LinkButton } from "@/components/ui/link-button";
@@ -168,7 +169,10 @@ export default async function ProjectPage({
             Details rather than behind a tab: "what did they tell us" is a
             question asked constantly during a build, and a panel that shows how
             much of it is still missing answers it without a click. */}
-        {!ctx.showcase && (
+        {/* Hidden when the project has no pack at all (`intake_pack = 'none'`):
+            there is nothing to fill in, so no meter and no "Open". The pack is
+            chosen in Details above, which is where to bring it back. */}
+        {!ctx.showcase && hasPack((project as Project).intake_pack) && (
           <Panel>
             <PanelHeader
               title="Client input pack"

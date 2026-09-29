@@ -5,6 +5,7 @@ import type { SessionContext } from "@/lib/data/session";
 import { guard, text } from "@/lib/actions/portal-write";
 import type { ActionResult } from "@/lib/actions/account";
 import { parseLocale } from "@/lib/locale";
+import { hasPack } from "@/lib/intake";
 import { buildClientEmail, type MailableProject } from "@/lib/email/client-mail";
 import { CLIENT_EMAIL_TAGS, parseClientEmailKind } from "@/lib/email/kinds";
 import { clientRecipients } from "@/lib/email/recipients";
@@ -153,6 +154,17 @@ export async function sendClientEmail(
   const kind = parseClientEmailKind(rawKind);
   const locale = parseLocale(rawLocale);
   const note = text(rawNote, MAX_NOTE);
+
+  // A project with no input pack has nothing to remind anyone about. Refused in
+  // words, rather than by building a reminder out of the general pack that its
+  // key would otherwise fall back to and mailing a client a chase for a
+  // questionnaire they cannot open.
+  if (kind === "inputs" && !hasPack(project.intake_pack)) {
+    return {
+      ok: false,
+      message: "That project has no input pack, so there is nothing to remind them about.",
+    };
+  }
 
   const email = await buildClientEmail(ctx, project, kind, locale, note);
 

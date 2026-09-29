@@ -19,6 +19,7 @@ import { Money, MilestoneBadge } from "@/components/portal/bits";
 import { PortalLinks, portalLinkRows } from "@/components/portal/links";
 import { LOCALE_COOKIE, parseLocale } from "@/lib/locale";
 import { dict, milestoneStatusLabel } from "@/lib/i18n";
+import { hasPack } from "@/lib/intake";
 import {
   cn,
   formatDateIn,
@@ -99,6 +100,9 @@ export default async function PortalDashboardPage() {
       project,
       build: milestoneProgress(milestones),
       totals: invoiceTotals(invoices, today),
+      // A project can have no pack at all (`intake_pack = 'none'`): its card
+      // shows no pack meter and it is never counted as a pack to finish.
+      hasPack: hasPack(project.intake_pack),
       packPct: intake?.progress.pct ?? 0,
       packDone: intake?.progress.done ?? 0,
       packTotal: intake?.progress.total ?? 0,
@@ -111,7 +115,7 @@ export default async function PortalDashboardPage() {
     };
   });
 
-  const packsOpen = businesses.filter((entry) => !entry.packSent);
+  const packsOpen = businesses.filter((entry) => entry.hasPack && !entry.packSent);
   const overdueCount = businesses.reduce(
     (sum, entry) => sum + entry.totals.overdueCount,
     0
@@ -273,20 +277,22 @@ export default async function PortalDashboardPage() {
                     </dd>
                   </div>
 
-                  <div>
-                    <dt className="flex items-baseline justify-between gap-3 font-mono text-[calc(10px*var(--text-scale,1))] uppercase tracking-wider text-faint rtl:font-sans rtl:normal-case rtl:tracking-normal">
-                      <span>{t.yourInputPack}</span>
-                      <span className="tabular-nums">{t.percent(entry.packPct)}</span>
-                    </dt>
-                    <dd className="mt-1.5">
-                      <ProgressMeter
-                        pct={entry.packPct}
-                        done={entry.packDone}
-                        total={entry.packTotal}
-                        label={t.packProgressAria(entry.project.name)}
-                      />
-                    </dd>
-                  </div>
+                  {entry.hasPack && (
+                    <div>
+                      <dt className="flex items-baseline justify-between gap-3 font-mono text-[calc(10px*var(--text-scale,1))] uppercase tracking-wider text-faint rtl:font-sans rtl:normal-case rtl:tracking-normal">
+                        <span>{t.yourInputPack}</span>
+                        <span className="tabular-nums">{t.percent(entry.packPct)}</span>
+                      </dt>
+                      <dd className="mt-1.5">
+                        <ProgressMeter
+                          pct={entry.packPct}
+                          done={entry.packDone}
+                          total={entry.packTotal}
+                          label={t.packProgressAria(entry.project.name)}
+                        />
+                      </dd>
+                    </div>
+                  )}
 
                   <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
                     <dt className="font-mono text-[calc(10px*var(--text-scale,1))] uppercase tracking-wider text-faint rtl:font-sans rtl:normal-case rtl:tracking-normal">

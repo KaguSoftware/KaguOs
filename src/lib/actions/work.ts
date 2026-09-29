@@ -5,7 +5,7 @@ import { after } from "next/server";
 import { redirect } from "next/navigation";
 import { blockIfReadOnly, requireSection, type SessionContext } from "@/lib/data/session";
 import { notifySection, notifyUser } from "@/lib/actions/notify";
-import { DEFAULT_PACK, INTAKE_PACKS } from "@/lib/intake";
+import { DEFAULT_PACK, INTAKE_PACKS, NO_PACK } from "@/lib/intake";
 import type { ActionResult } from "@/lib/actions/account";
 import type { ProjectStatus } from "@/lib/types";
 
@@ -61,9 +61,14 @@ function projectFields(formData: FormData) {
   };
 }
 
-/** "" / unknown → null, which reads as the general pack. */
+/**
+ * "" / unknown → null, which reads as the general pack. 'none' is kept as it
+ * is: it means no pack at all, and collapsing it to null here would silently
+ * hand the client the general questionnaire the next time anyone saved the form.
+ */
 function intakePackKey(raw: FormDataEntryValue | null): string | null {
   const key = String(raw ?? "").trim();
+  if (key === NO_PACK) return NO_PACK;
   if (!key || key === DEFAULT_PACK) return null;
   return key in INTAKE_PACKS ? key : null;
 }

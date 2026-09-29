@@ -10,6 +10,10 @@
 > (§00 p3), and it is not in this file either. Where this file has to *decide* something the
 > scope leaves open (which system hosts a screen, where a shared item is counted), the decision
 > is marked as one — italic *split notes* inside the lists, and §14 for the open questions.
+>
+> **The extension** (signed 2026-09-25) has its own file, `Project Scope - Extension.md`, and its own
+> portal project. Nothing below changes for Phase 1; only the "later phases" and "out of scope"
+> statements in §12 and §13 have been annotated to say where those items went.
 
 ---
 
@@ -740,6 +744,12 @@ Acceptance is not withheld for out-of-scope items nor for matters outside Kagu's
 
 From §01 p4 and every module's "not included" box, deduplicated:
 
+> **Since 2026-09-25** the signed extension (`Project Scope - Extension.md`) takes the following out of
+> this list and into scope, as a project of its own: online and in-app payment, coaching and courses,
+> open matches, tournaments, the Touch Shop, loyalty (without tiers), and more than one branch with
+> stock per branch and transfers. **Customer 360 was removed from the roadmap entirely** and is not
+> planned as a later phase. Everything else below is unchanged, and all of it remains true *of Phase 1*.
+
 - Online and in-app payment — desk payment only (§01, §02, §04, §06, §19); RevenueCat or any payment SDK (§02)
 - Coaching, courses, coach schedules, commission settlement, lesson booking of any kind (§01, §04, §18)
 - Open matches, seat claiming/splitting, cost splitting between players; player levels and matchmaking (§01, §04)
@@ -780,7 +790,7 @@ Not part of the progress arithmetic; recorded so the drawer copy and the finance
 - **Support channel**: a shared WhatsApp group including Touch's named contacts and Kagu's engineers, used for everything from a question to an outage. Critical issues are covered seven days a week; high and normal issues on working days; response times run from the moment an issue is reported in that group (§17 p26).
 - **Severity** (§17 p26): *Critical* — the POS, booking system, database or another essential part is down, or payment cannot be taken; the venue cannot trade normally and there is no workaround — acknowledge within 2 hours, 7 days a week, then active continuous work until trading again, progress reported in the group at least every two hours. *High* — a major function is broken (stock, reporting, the kitchen screen, a role workspace) but the venue can still trade, or a workaround exists — acknowledge within 8 working hours; fix or a stated workaround within 2 working days. *Normal* — a minor defect, cosmetic fault, question, or small change within scope — acknowledge within 2 working days; scheduled into the next release, with the date stated. Severity is set by the effect on trading, not by who reports it; where Touch and Kagu disagree the higher applies until jointly agreed otherwise. Outages caused by a third party — Touch's internet, a power cut, an app store, or a provider outage — are worked on with the same urgency, though resolution timing is not within Kagu's control.
 - **Touch owns, on acceptance and settlement** (§17 p26): full source code for all three clients in Touch's repositories; the database, schema and migration history; all customer, booking, transaction and stock data, exportable at any time; direct access to backups and the ability to restore without Kagu; the Apple and Google listings; the domain, the Supabase project and every account in Touch's name; runbook, staff guide and technical documentation in English and Arabic; recorded training per role. No technical dependency on Kagu: continued support is optional and quoted separately, and is never a condition of Touch keeping its own system running.
-- **After the warranty** (§18 p27): ongoing support and maintenance — monitoring, backup verification, operating-system and store-compliance updates, a monthly change allowance — available and quoted separately; optional. **Later phases** (quoted separately, nothing committed): coaching and settlement, open matches, tournaments, Touch Shop, loyalty, Customer 360, online payment, full offline operation.
+- **After the warranty** (§18 p27): ongoing support and maintenance — monitoring, backup verification, operating-system and store-compliance updates, a monthly change allowance — available and quoted separately; optional. **Later phases** (quoted separately, nothing committed): full offline operation. Coaching and settlement, open matches, tournaments, Touch Shop, loyalty and online payment became the signed extension of 2026-09-25 (`Project Scope - Extension.md`); Customer 360 was removed from the roadmap entirely and is not planned.
 - **Operating in Iraq** (§13 p18): no general VAT and no fiscal device or e-invoicing; a 10 % sales tax applies to deluxe and first-class restaurants and hotels — whether Touch Cafe falls within it is for Touch's accountant; Kagu builds a configurable tax rate per item group. One trading currency, dinar or dollar, confirmed before build. A UPS on the till, printer, router and switch is Touch's — "most interruptions in practice are power rather than network, and a UPS costs little against the trading it protects".
 - **The agreement (§19 p28)** — what signing confirms: the ten modules in §03–§12 delivered in full for the §18 fee; everything listed as not included excluded from the phase and its fee; Touch supplies the §14 items by the weeks shown; four weeks of build and two of review, beginning on receipt of the down payment; payment at the desk only; nothing agreed for Phase 1 becomes a paid Phase 2 item, removals need written agreement; final payment follows the five operating days; the 90-day warranty with §17 response times; all cafe guest functionality on the website, the app padel only; Touch pays for Supabase, the domain and the two store accounts, every other service carried by Kagu with no further paid service without written approval; the till keeps trading through an outage, full offline running is a later phase; changes follow §16 change control. Signatories: Mustafa for Touch Padel; Majed Ahdab for Kagu Software.
 - **Document control**: v2.0 for signature, incorporating the sixteen points raised by Touch in review, all accepted; supersedes v1.0 and the proposal — where they disagree, this document governs. Approver: Mustafa (§00 p2–3).

@@ -235,6 +235,8 @@ export type Project = {
    * Which set of questions this project's client is asked (0073) — a key into
    * INTAKE_PACKS in lib/intake.ts. Null means the general pack; so does an
    * unrecognised value, since `packFor()` falls back rather than throwing.
+   * The one exception is 'none' (NO_PACK): no pack at all, nothing shown to
+   * the client — see `hasPack()`.
    */
   intake_pack: string | null;
   created_by: string | null;

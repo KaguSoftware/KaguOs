@@ -30,6 +30,7 @@ import {
   type SystemView,
 } from "@/components/portal/system-columns";
 import { dict, milestoneStatusLabel, type PortalDict } from "@/lib/i18n";
+import { hasPack } from "@/lib/intake";
 import { LOCALE_COOKIE, parseLocale, type Locale } from "@/lib/locale";
 import { milestoneTree, type ProjectMilestone } from "@/lib/types";
 import { cn, formatDateIn, isolate, todayInIstanbul } from "@/lib/utils";
@@ -128,6 +129,10 @@ export default async function PortalProgressPage() {
             const intake = portal.intake.get(project.id);
             const packPct = intake?.progress.pct ?? 0;
             const packSent = Boolean(intake?.submittedAt);
+            // A project can have no input pack at all (`intake_pack = 'none'`,
+            // e.g. an extension of a build whose inputs were already collected):
+            // no panel, no link, and nothing for the client to finish.
+            const packed = hasPack(project.intake_pack);
             // What they can go and open. RLS has already dropped the
             // unpublished ones (0082 §3), so anything here is deliberate.
             const linkRows = portalLinkRows(
@@ -164,7 +169,7 @@ export default async function PortalProgressPage() {
                   }
                 />
 
-                <div className="mb-5 grid gap-3 sm:grid-cols-2">
+                <div className={cn("mb-5 grid gap-3", packed && "sm:grid-cols-2")}>
                   <Panel className="p-4">
                     <p className="font-mono text-[calc(10px*var(--text-scale,1))] uppercase tracking-wider text-faint rtl:font-sans rtl:normal-case rtl:tracking-normal">
                       {t.build}
@@ -193,34 +198,36 @@ export default async function PortalProgressPage() {
                     )}
                   </Panel>
 
-                  <Panel className="p-4">
-                    <p className="font-mono text-[calc(10px*var(--text-scale,1))] uppercase tracking-wider text-faint rtl:font-sans rtl:normal-case rtl:tracking-normal">
-                      {t.yourInputPack}
-                    </p>
-                    <p className="mt-1.5 text-[calc(19px*var(--text-scale,1))] font-medium tabular-nums text-ink">
-                      {t.percent(packPct)}
-                    </p>
-                    <ProgressMeter
-                      className="mt-2"
-                      pct={packPct}
-                      done={intake?.progress.done ?? 0}
-                      total={intake?.progress.total ?? 0}
-                      label={t.packProgressAria(project.name)}
-                    />
-                    <p className="mt-2 text-[calc(12px*var(--text-scale,1))]">
-                      {packSent ? (
-                        <span className="text-primary-dim">{t.sentThankYou}</span>
-                      ) : (
-                        <Link
-                          href={`/portal/inputs/${project.id}`}
-                          className="inline-flex items-center gap-1 text-muted underline-offset-2 hover:text-ink hover:underline"
-                        >
-                          {t.carryOn}
-                          <ArrowRight className="size-3.5 rtl:-scale-x-100" aria-hidden />
-                        </Link>
-                      )}
-                    </p>
-                  </Panel>
+                  {packed && (
+                    <Panel className="p-4">
+                      <p className="font-mono text-[calc(10px*var(--text-scale,1))] uppercase tracking-wider text-faint rtl:font-sans rtl:normal-case rtl:tracking-normal">
+                        {t.yourInputPack}
+                      </p>
+                      <p className="mt-1.5 text-[calc(19px*var(--text-scale,1))] font-medium tabular-nums text-ink">
+                        {t.percent(packPct)}
+                      </p>
+                      <ProgressMeter
+                        className="mt-2"
+                        pct={packPct}
+                        done={intake?.progress.done ?? 0}
+                        total={intake?.progress.total ?? 0}
+                        label={t.packProgressAria(project.name)}
+                      />
+                      <p className="mt-2 text-[calc(12px*var(--text-scale,1))]">
+                        {packSent ? (
+                          <span className="text-primary-dim">{t.sentThankYou}</span>
+                        ) : (
+                          <Link
+                            href={`/portal/inputs/${project.id}`}
+                            className="inline-flex items-center gap-1 text-muted underline-offset-2 hover:text-ink hover:underline"
+                          >
+                            {t.carryOn}
+                            <ArrowRight className="size-3.5 rtl:-scale-x-100" aria-hidden />
+                          </Link>
+                        )}
+                      </p>
+                    </Panel>
+                  )}
                 </div>
 
                 {build.blocked.length > 0 && (

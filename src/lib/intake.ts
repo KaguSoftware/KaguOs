@@ -1411,11 +1411,43 @@ export const INTAKE_PACKS: Record<string, IntakePackDef> = {
   },
 };
 
-export const INTAKE_PACK_OPTIONS = Object.values(INTAKE_PACKS).map((pack) => ({
-  value: pack.key,
-  label: pack.name,
-  hint: pack.summary,
-}));
+/**
+ * "This project asks its client for nothing."
+ *
+ * Stored as `projects.intake_pack = 'none'` — no migration, because the column
+ * is advisory free text (0073). It is deliberately not an entry in
+ * INTAKE_PACKS: a pack is a set of questions, and this is the absence of one.
+ *
+ * The portal used to treat every project as having a pack, falling back to
+ * `general` for null or anything unrecognised. That is right for a first
+ * contract and wrong for a second one on the same client — an extension of a
+ * signed build has no inputs to collect, and showing its client a generic 0 %
+ * questionnaire (and one more "pack to finish" in the sidebar) is noise with a
+ * call to action on it.
+ *
+ * Every place that shows, counts or links a pack asks `hasPack()` first.
+ * `packFor()` still falls back to general for the key, so a place that forgets
+ * degrades to the old behaviour rather than to an error.
+ */
+export const NO_PACK = "none";
+
+/** Does this project have an input pack at all? Null means the general one. */
+export function hasPack(key: string | null | undefined): boolean {
+  return key !== NO_PACK;
+}
+
+export const INTAKE_PACK_OPTIONS = [
+  ...Object.values(INTAKE_PACKS).map((pack) => ({
+    value: pack.key,
+    label: pack.name,
+    hint: pack.summary,
+  })),
+  {
+    value: NO_PACK,
+    label: "No input pack",
+    hint: "The client is asked for nothing on this project, and no pack shows in their portal.",
+  },
+];
 
 /**
  * The pack a project uses. An unknown key falls back to `general` rather than

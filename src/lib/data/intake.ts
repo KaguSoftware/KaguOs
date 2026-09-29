@@ -3,6 +3,7 @@ import { rowsOrThrow, selectOrThrow } from "@/lib/data/query";
 import type { SessionContext } from "@/lib/data/session";
 import {
   buildChecks,
+  hasPack,
   packFor,
   progressOf,
   type AnswerMap,
@@ -125,8 +126,12 @@ export async function getIntakeSummaries(
   targets: IntakeTarget[]
 ): Promise<Map<string, IntakeSummary>> {
   const summaries = new Map<string, IntakeSummary>();
-  if (targets.length === 0) return summaries;
-  const projectIds = targets.map((target) => target.id);
+  // A project with no pack has nothing to summarise, and gets no entry. Every
+  // reader asks `hasPack(project.intake_pack)` rather than treating a missing
+  // entry as "0 % done" — that reading is what this filter exists to end.
+  const packed = targets.filter((target) => hasPack(target.packKey));
+  if (packed.length === 0) return summaries;
+  const projectIds = packed.map((target) => target.id);
 
   const [headers, answerRows, rawRows] = await Promise.all([
     rowsOrThrow(
@@ -180,7 +185,7 @@ export async function getIntakeSummaries(
     rowsByProject.set(row.project_id, list);
   }
 
-  for (const target of targets) {
+  for (const target of packed) {
     const projectId = target.id;
     // Per project, because two projects on the same screen can be running
     // different packs — and the denominator of the meter is a property of the
@@ -211,7 +216,7 @@ export async function getIntakeSummaries(
 export type ClientProjectRef = {
   id: string;
   name: string;
-  /** Which pack the portal should render. Null = the general one. */
+  /** Which pack the portal should render. Null = the general one; 'none' (NO_PACK) = no pack at all. */
   intake_pack: string | null;
 };
 

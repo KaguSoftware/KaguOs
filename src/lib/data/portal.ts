@@ -8,6 +8,7 @@ import {
   type ClientProjectRef,
   type IntakeSummary,
 } from "@/lib/data/intake";
+import { hasPack } from "@/lib/intake";
 import {
   type InvoiceCurrency,
   type ProjectInvoice,
@@ -554,7 +555,11 @@ export function portalCounts(portal: Portal, today: string): PortalCounts {
   let overdue = 0;
 
   for (const project of portal.projects) {
-    if (!portal.intake.get(project.id)?.submittedAt) packsOpen += 1;
+    // A project with no input pack has none to finish. Without the guard it
+    // counted as open forever: no summary, so never "submitted".
+    if (hasPack(project.intake_pack) && !portal.intake.get(project.id)?.submittedAt) {
+      packsOpen += 1;
+    }
     const totals = invoiceTotals(
       portal.invoicesByProject.get(project.id) ?? [],
       today

@@ -10,6 +10,7 @@ import { ProgressMeter } from "@/components/portal/progress-meter";
 import { formatRelativeIn } from "@/lib/utils";
 import { LOCALE_COOKIE, parseLocale } from "@/lib/locale";
 import { dict } from "@/lib/i18n";
+import { hasPack } from "@/lib/intake";
 
 export async function generateMetadata(): Promise<Metadata> {
   const locale = parseLocale((await cookies()).get(LOCALE_COOKIE)?.value);
@@ -19,9 +20,10 @@ export async function generateMetadata(): Promise<Metadata> {
 /**
  * One input pack per business.
  *
- * This page exists only when a client has MORE than one — a chooser listing
- * exactly one card is a click that teaches nothing, so a single-business
- * account goes straight through to its pack. The rail's "Inputs" item still
+ * This page exists only when a client has MORE than one pack — a chooser
+ * listing exactly one card is a click that teaches nothing, so an account with
+ * a single pack (a business with none is not listed) goes straight through to
+ * it. The rail's "Inputs" item still
  * highlights afterwards, because /portal/inputs is a prefix of where they land.
  */
 export default async function PortalInputsIndexPage() {
@@ -29,8 +31,13 @@ export default async function PortalInputsIndexPage() {
   const locale = parseLocale((await cookies()).get(LOCALE_COOKIE)?.value);
   const t = dict(locale);
 
-  if (portal.projects.length === 1) {
-    redirect(`/portal/inputs/${portal.projects[0].id}`);
+  // Only the businesses that HAVE a pack. A project with none (`intake_pack =
+  // 'none'`) has nothing to fill in, and listing it would link to a page that
+  // does not exist.
+  const packed = portal.projects.filter((project) => hasPack(project.intake_pack));
+
+  if (packed.length === 1) {
+    redirect(`/portal/inputs/${packed[0].id}`);
   }
 
   return (
@@ -40,7 +47,7 @@ export default async function PortalInputsIndexPage() {
         description={t.inputsBlurb}
       />
 
-      {portal.projects.length === 0 ? (
+      {packed.length === 0 ? (
         <div className="rounded-lg border border-line bg-surface">
           <EmptyState
             icon={Building2}
@@ -50,7 +57,7 @@ export default async function PortalInputsIndexPage() {
         </div>
       ) : (
         <ul className="grid gap-3">
-          {portal.projects.map((project) => {
+          {packed.map((project) => {
             const summary = portal.intake.get(project.id);
             const pct = summary?.progress.pct ?? 0;
             const sent = summary?.submittedAt ?? null;
