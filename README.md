@@ -27,6 +27,10 @@ Open [http://localhost:3000](http://localhost:3000) to see the app.
 - `npm run check:principals` — validate principals config
 - `npm run seed:learn` — seed Learn levels
 
+## Environment
+
+Copy `.env.example` to `.env.local` and fill in the Supabase project credentials.
+
 ## Stack
 
 - [Next.js](https://nextjs.org) (App Router)
