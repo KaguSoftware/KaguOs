@@ -40,6 +40,13 @@ type Filter = "all" | TestStatus | "stale";
 const ENV_KEY = "kagu-testing-env";
 /** Collapsed groups, as "<projectId>|<path>". Per person, like the env. */
 const COLLAPSED_KEY = "kagu-testing-collapsed";
+/**
+ * Past this many checks a project's groups start FOLDED, so its tab opens on
+ * a few headers instead of rendering thousands of rows. For those projects the
+ * stored set is the groups someone opened, same "<projectId>|<path>" keys.
+ */
+const FOLD_FROM = 200;
+const OPENED_KEY = "kagu-testing-opened";
 
 export function TestingBoard({
   projects,
@@ -96,6 +103,7 @@ export function TestingBoard({
   // group, null closed.
   const [addAt, setAddAt] = useState<string | null>(null);
   const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set());
+  const [opened, setOpened] = useState<Set<string>>(() => new Set());
 
   // Which environment one-click results are recorded against. Per person and
   // sticky, because whoever tests on staging tests on staging all afternoon.
@@ -110,6 +118,10 @@ export function TestingBoard({
         const folded: unknown = JSON.parse(localStorage.getItem(COLLAPSED_KEY) ?? "[]");
         if (Array.isArray(folded)) {
           setCollapsed(new Set(folded.filter((k) => typeof k === "string")));
+        }
+        const unfolded: unknown = JSON.parse(localStorage.getItem(OPENED_KEY) ?? "[]");
+        if (Array.isArray(unfolded)) {
+          setOpened(new Set(unfolded.filter((k) => typeof k === "string")));
         }
       } catch {
         /* storage blocked — the default is fine */
@@ -133,6 +145,15 @@ export function TestingBoard({
     setCollapsed(next);
     try {
       localStorage.setItem(COLLAPSED_KEY, JSON.stringify([...next]));
+    } catch {
+      /* ignore */
+    }
+  }
+
+  function saveOpened(next: Set<string>) {
+    setOpened(next);
+    try {
+      localStorage.setItem(OPENED_KEY, JSON.stringify([...next]));
     } catch {
       /* ignore */
     }
@@ -208,17 +229,32 @@ export function TestingBoard({
   // Every group in the project, for the "move to" suggestions and collapse-all.
   const groupPaths = useMemo(() => [...groupCounts.keys()], [groupCounts]);
 
+  const foldByDefault = projectCases.length > FOLD_FROM;
+  function isFolded(path: string): boolean {
+    const key = `${projectId}|${path}`;
+    return foldByDefault ? !opened.has(key) : collapsed.has(key);
+  }
+  function setFolded(paths: string[], fold: boolean) {
+    const next = new Set(foldByDefault ? opened : collapsed);
+    for (const p of paths) {
+      const key = `${projectId}|${p}`;
+      // Folded-by-default projects store what's open; the rest, what's shut.
+      if (fold === foldByDefault) next.delete(key);
+      else next.add(key);
+    }
+    if (foldByDefault) saveOpened(next);
+    else saveCollapsed(next);
+  }
+
   // A filter or search is looking for something; folded groups would hide it.
+  // Unless it still matches thousands (the "Untested" filter on a fresh list):
+  // then the folds stay, and only groups holding a match are listed.
   const searching = filter !== "all" || query.trim() !== "";
-  const anyCollapsed = groupPaths.some((p) => collapsed.has(`${projectId}|${p}`));
+  const showAll = searching && visible.length <= FOLD_FROM;
+  const anyCollapsed = groupPaths.some(isFolded);
 
   function toggleAll() {
-    const next = new Set(collapsed);
-    for (const p of groupPaths) {
-      if (anyCollapsed) next.delete(`${projectId}|${p}`);
-      else next.add(`${projectId}|${p}`);
-    }
-    saveCollapsed(next);
+    setFolded(groupPaths, !anyCollapsed);
   }
 
   if (projects.length === 0) {
@@ -237,24 +273,15 @@ export function TestingBoard({
   const treeProps: TreeProps = {
     projectId,
     counts: groupCounts,
-    isOpen: (path) => searching || !collapsed.has(`${projectId}|${path}`),
+    isOpen: (path) => showAll || !isFolded(path),
     onToggle: (path) => {
-      if (searching) return;
-      const key = `${projectId}|${path}`;
-      const next = new Set(collapsed);
-      if (next.has(key)) next.delete(key);
-      else next.add(key);
-      saveCollapsed(next);
+      if (showAll) return;
+      setFolded([path], !isFolded(path));
     },
     addingAt: addAt,
     onAddHere: (path) => {
       setAddAt((at) => (at === path ? null : path));
-      const key = `${projectId}|${path}`;
-      if (collapsed.has(key)) {
-        const next = new Set(collapsed);
-        next.delete(key);
-        saveCollapsed(next);
-      }
+      if (isFolded(path)) setFolded([path], false);
     },
     renderAdd: (path) => (
       <QuickAdd
@@ -392,9 +419,9 @@ export function TestingBoard({
             size="sm"
             variant="ghost"
             onClick={toggleAll}
-            disabled={searching}
+            disabled={showAll}
             title={
-              searching
+              showAll
                 ? "Groups stay open while filtering"
                 : anyCollapsed
                   ? "Expand every group"

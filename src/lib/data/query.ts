@@ -84,3 +84,37 @@ export async function rowsOrThrow<T>(
   const { data } = await selectOrThrow(query, label);
   return data ?? [];
 }
+
+/**
+ * `rowsOrThrow` for a list that can outgrow one response.
+ *
+ * ⚠️ PostgREST caps every response at the project's `max_rows` (Supabase's
+ * default is 1000) and says nothing about the rest: a 9,600-check list comes
+ * back as its first 1000, which reads as the whole list. This asks for the
+ * first page with an exact count, then fetches the remaining pages in
+ * parallel, so it is two round-trips whatever the size.
+ *
+ * `page(from, to)` builds the query for one inclusive range. It MUST select
+ * with `{ count: "exact" }` and order by something unique (end on `id`), or
+ * rows shift between pages and some are read twice and others never.
+ */
+export async function allRowsOrThrow<T>(
+  page: (from: number, to: number) => PromiseLike<QueryResult<T[] | null>>,
+  label: string
+): Promise<T[]> {
+  const first = await selectOrThrow(page(0, 999), label);
+  const rows = first.data ?? [];
+  if (first.count == null) {
+    throw new Error(`${label}: allRowsOrThrow needs select(..., { count: "exact" })`);
+  }
+  // The server may cap below what was asked for; step by what it really sent.
+  const step = rows.length;
+  if (step === 0 || step >= first.count) return rows;
+
+  const starts: number[] = [];
+  for (let from = step; from < first.count; from += step) starts.push(from);
+  const rest = await Promise.all(
+    starts.map((from) => rowsOrThrow(page(from, from + step - 1), label))
+  );
+  return rows.concat(...rest);
+}
