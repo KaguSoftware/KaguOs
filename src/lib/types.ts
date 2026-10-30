@@ -676,7 +676,7 @@ export type TestEnvironment = "prod" | "staging" | "local";
 export type TestCase = {
   id: string;
   project_id: string;
-  /** Free-text group ("Auth", "Checkout"). null = ungrouped. */
+  /** Group path, "Mobile app > Home > Header" (or just "Auth"). null = ungrouped. */
   area: string | null;
   title: string;
   steps: string | null;

@@ -3,7 +3,16 @@
 import { revalidatePath } from "next/cache";
 import { blockIfReadOnly, requireSection } from "@/lib/data/session";
 import { notifySection } from "@/lib/actions/notify";
-import { MAX_CASES_PER_BATCH, parseQuickAdd } from "@/lib/testing";
+import {
+  formatGroup,
+  GROUP_SEP,
+  groupSegments,
+  isInGroup,
+  MAX_CASES_PER_BATCH,
+  MAX_GROUP_LENGTH,
+  normalizeGroup,
+  parseQuickAdd,
+} from "@/lib/testing";
 import type { ActionResult } from "@/lib/actions/account";
 import type {
   DebugPriority,
@@ -16,24 +25,35 @@ const OUTCOMES: TestOutcome[] = ["pass", "fail", "blocked"];
 const ENVS: TestEnvironment[] = ["prod", "staging", "local"];
 const PRIORITIES: DebugPriority[] = ["low", "medium", "high", "urgent"];
 
+const GROUP_TOO_LONG = `A group path can be at most ${MAX_GROUP_LENGTH} characters.`;
+
+/** The DB's own length check, said the way the form would have said it. */
+function groupError(message: string): string {
+  return message.includes("test_cases_area_check") ? GROUP_TOO_LONG : message;
+}
+
 /**
- * Paste a list, get a checklist. One line per case, `Area: title` to group.
- * Appended after the project's existing cases so a second paste doesn't
- * reshuffle the first.
+ * Paste a list, get a checklist. One line per case, `Group > Sub: title` to
+ * group (see parseQuickAdd). `base` is the group it was added from. Appended
+ * after the project's existing cases so a second paste doesn't reshuffle the
+ * first.
  */
 export async function quickAddCases(
   projectId: string,
-  text: string
+  text: string,
+  base: string | null = null
 ): Promise<{ ok: boolean; message: string; cases?: TestCase[] }> {
   const stop = await blockIfReadOnly("testing");
   if (stop) return stop;
   const ctx = await requireSection("testing");
   if (!projectId) return { ok: false, message: "Pick a project first." };
 
-  const parsed = parseQuickAdd(text);
+  const parsed = parseQuickAdd(text, base);
   const clean = parsed.slice(0, MAX_CASES_PER_BATCH);
   const dropped = parsed.length - clean.length;
   if (clean.length === 0) return { ok: false, message: "Nothing to add." };
+  const long = clean.find((c) => (c.area?.length ?? 0) > MAX_GROUP_LENGTH);
+  if (long) return { ok: false, message: `${GROUP_TOO_LONG} "${long.title}" is too deep.` };
 
   const { data: last } = await ctx.supabase
     .from("test_cases")
@@ -56,7 +76,7 @@ export async function quickAddCases(
       }))
     )
     .select("*");
-  if (error) return { ok: false, message: error.message };
+  if (error) return { ok: false, message: groupError(error.message) };
 
   revalidatePath("/testing");
   return {
@@ -79,17 +99,19 @@ export async function updateCase(
 
   const title = fields.title.trim().slice(0, 200);
   if (!title) return { ok: false, message: "A check needs a title." };
+  const area = normalizeGroup(fields.area);
+  if ((area?.length ?? 0) > MAX_GROUP_LENGTH) return { ok: false, message: GROUP_TOO_LONG };
 
   const { error } = await ctx.supabase
     .from("test_cases")
     .update({
       title,
-      area: fields.area.trim().slice(0, 60) || null,
+      area,
       steps: fields.steps.trim().slice(0, 4000) || null,
       expected: fields.expected.trim().slice(0, 2000) || null,
     })
     .eq("id", caseId);
-  if (error) return { ok: false, message: error.message };
+  if (error) return { ok: false, message: groupError(error.message) };
 
   revalidatePath("/testing");
   return { ok: true, message: "Saved." };
@@ -112,6 +134,104 @@ export async function resetCase(caseId: string): Promise<ActionResult> {
 
   revalidatePath("/testing");
   return { ok: true, message: "Back to untested." };
+}
+
+/** Every check of a project in `group` or beneath it. */
+async function casesInGroup(
+  ctx: Awaited<ReturnType<typeof requireSection>>,
+  projectId: string,
+  group: string
+) {
+  const { data, error } = await ctx.supabase
+    .from("test_cases")
+    .select("id, area, status")
+    .eq("project_id", projectId)
+    .not("area", "is", null);
+  if (error) return { error: error.message, rows: [] };
+  return {
+    error: null,
+    rows: (data ?? []).filter((c) => isInGroup(c.area, group)) as Pick<
+      TestCase,
+      "id" | "area" | "status"
+    >[],
+  };
+}
+
+/**
+ * Rename a group — or move it, since the new name is a full path: "Mobile app
+ * > Home" → "Mobile app > Home screen" renames, → "Web > Home" moves it and
+ * everything under it. Moving onto a group that already exists merges them.
+ */
+export async function renameGroup(
+  projectId: string,
+  from: string,
+  to: string
+): Promise<ActionResult> {
+  const stop = await blockIfReadOnly("testing");
+  if (stop) return stop;
+  const ctx = await requireSection("testing");
+
+  const fromParts = groupSegments(from);
+  const toParts = groupSegments(to);
+  if (fromParts.length === 0) return { ok: false, message: "Pick a group." };
+  if (toParts.length === 0) return { ok: false, message: "A group needs a name." };
+  if (fromParts.join(GROUP_SEP) === toParts.join(GROUP_SEP)) {
+    return { ok: true, message: "Nothing changed." };
+  }
+
+  const { rows, error } = await casesInGroup(ctx, projectId, from);
+  if (error) return { ok: false, message: error };
+  if (rows.length === 0) return { ok: false, message: "That group is empty now." };
+
+  // One update per distinct path, not per case: a page with forty checks
+  // across five components is five writes.
+  const moves = new Map<string, string>();
+  for (const c of rows) {
+    const next = [...toParts, ...groupSegments(c.area).slice(fromParts.length)].join(GROUP_SEP);
+    if (next.length > MAX_GROUP_LENGTH) return { ok: false, message: GROUP_TOO_LONG };
+    moves.set(c.area as string, next);
+  }
+  const results = await Promise.all(
+    [...moves].map(([oldArea, newArea]) =>
+      ctx.supabase
+        .from("test_cases")
+        .update({ area: newArea })
+        .eq("project_id", projectId)
+        .eq("area", oldArea)
+    )
+  );
+  const failed = results.find((r) => r.error);
+  if (failed?.error) return { ok: false, message: groupError(failed.error.message) };
+
+  revalidatePath("/testing");
+  return { ok: true, message: `Moved to ${formatGroup(to)}.` };
+}
+
+/**
+ * Put a whole group back to untested — the page was rebuilt, so every result
+ * under it stopped meaning anything. History stays, as with resetCase.
+ */
+export async function resetGroup(projectId: string, group: string): Promise<ActionResult> {
+  const stop = await blockIfReadOnly("testing");
+  if (stop) return stop;
+  const ctx = await requireSection("testing");
+
+  const { rows, error } = await casesInGroup(ctx, projectId, group);
+  if (error) return { ok: false, message: error };
+  const ids = rows.filter((c) => c.status !== "untested").map((c) => c.id);
+  if (ids.length === 0) return { ok: true, message: "Already all untested." };
+
+  const { error: updateError } = await ctx.supabase
+    .from("test_cases")
+    .update({ status: "untested" })
+    .in("id", ids);
+  if (updateError) return { ok: false, message: updateError.message };
+
+  revalidatePath("/testing");
+  return {
+    ok: true,
+    message: `${ids.length} check${ids.length === 1 ? "" : "s"} back to untested.`,
+  };
 }
 
 /**

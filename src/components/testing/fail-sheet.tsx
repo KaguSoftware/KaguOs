@@ -10,7 +10,7 @@ import {
   MAX_IMAGES_PER_TASK,
   MAX_IMAGE_BYTES,
 } from "@/lib/debug-images";
-import { ENV_LABEL, ENVIRONMENTS } from "@/lib/testing";
+import { ENV_LABEL, ENVIRONMENTS, formatGroup } from "@/lib/testing";
 import { Button } from "@/components/ui/button";
 import { Field } from "@/components/ui/field";
 import { Textarea } from "@/components/ui/input";
@@ -166,6 +166,9 @@ export function FailSheet({
               Doesn&apos;t work
             </h2>
             <p className="truncate text-[calc(13px*var(--text-scale,1))] text-muted">
+              {testCase.area && (
+                <span className="text-faint">{formatGroup(testCase.area)} › </span>
+              )}
               {testCase.title}
             </p>
           </div>

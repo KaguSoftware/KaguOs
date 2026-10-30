@@ -2,22 +2,29 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { FlaskConical, ListPlus, Search } from "lucide-react";
-import { quickAddCases } from "@/lib/actions/testing";
+import { ChevronsDownUp, ChevronsUpDown, FlaskConical, ListPlus, Search } from "lucide-react";
 import {
   ENV_LABEL,
   ENVIRONMENTS,
   isStale,
-  MAX_CASES_PER_BATCH,
   STALE_DAYS,
   STATUS_LABEL,
 } from "@/lib/testing";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
-import { Input, Textarea } from "@/components/ui/input";
+import { Input } from "@/components/ui/input";
 import { Segmented } from "@/components/ui/segmented";
-import { useToast } from "@/components/ui/toast";
 import { CaseRow } from "@/components/testing/case-row";
+import {
+  buildGroupTree,
+  CaseList,
+  countGroups,
+  GROUPS_DATALIST,
+  GroupSection,
+  StatusBar,
+  type TreeProps,
+} from "@/components/testing/group-tree";
+import { QuickAdd } from "@/components/testing/quick-add";
 import { cn } from "@/lib/utils";
 import type {
   MembersMap,
@@ -30,16 +37,9 @@ import type {
 
 type Filter = "all" | TestStatus | "stale";
 
-/** Bar segments, in reading order: the good news first, the gaps last. */
-const BAR: { key: TestStatus; className: string }[] = [
-  { key: "pass", className: "bg-primary-dim" },
-  { key: "retest", className: "bg-info" },
-  { key: "blocked", className: "bg-amber" },
-  { key: "fail", className: "bg-danger" },
-  { key: "untested", className: "bg-line-strong" },
-];
-
 const ENV_KEY = "kagu-testing-env";
+/** Collapsed groups, as "<projectId>|<path>". Per person, like the env. */
+const COLLAPSED_KEY = "kagu-testing-collapsed";
 
 export function TestingBoard({
   projects,
@@ -63,7 +63,6 @@ export function TestingBoard({
   isAdmin: boolean;
 }) {
   const searchParams = useSearchParams();
-  const toast = useToast();
 
   // Tabs: projects that already have checks first (most open work first),
   // then the rest alphabetically — an empty tab is where you start a list.
@@ -93,9 +92,10 @@ export function TestingBoard({
   });
   const [filter, setFilter] = useState<Filter>("all");
   const [query, setQuery] = useState("");
-  const [adding, setAdding] = useState(false);
-  const [draft, setDraft] = useState("");
-  const [busy, setBusy] = useState(false);
+  // Where the add box is open: "" at the top, a group's path inside that
+  // group, null closed.
+  const [addAt, setAddAt] = useState<string | null>(null);
+  const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set());
 
   // Which environment one-click results are recorded against. Per person and
   // sticky, because whoever tests on staging tests on staging all afternoon.
@@ -107,6 +107,10 @@ export function TestingBoard({
       try {
         const saved = localStorage.getItem(ENV_KEY) as TestEnvironment | null;
         if (saved && ENVIRONMENTS.includes(saved)) setEnv(saved);
+        const folded: unknown = JSON.parse(localStorage.getItem(COLLAPSED_KEY) ?? "[]");
+        if (Array.isArray(folded)) {
+          setCollapsed(new Set(folded.filter((k) => typeof k === "string")));
+        }
       } catch {
         /* storage blocked — the default is fine */
       }
@@ -125,9 +129,19 @@ export function TestingBoard({
     }
   }
 
+  function saveCollapsed(next: Set<string>) {
+    setCollapsed(next);
+    try {
+      localStorage.setItem(COLLAPSED_KEY, JSON.stringify([...next]));
+    } catch {
+      /* ignore */
+    }
+  }
+
   function pickProject(id: string) {
     setProjectId(id);
     setFilter("all");
+    setAddAt(null);
     // Shareable, and it's where the retest bell lands. replaceState, not a
     // router push: the board already holds every row.
     const url = new URL(window.location.href);
@@ -176,9 +190,9 @@ export function TestingBoard({
     return map;
   }, [images]);
 
-  const groups = useMemo(() => {
+  const visible = useMemo(() => {
     const q = query.trim().toLowerCase();
-    const visible = projectCases.filter((c) => {
+    return projectCases.filter((c) => {
       if (filter === "stale" ? !isStale(c, now) : filter !== "all" && c.status !== filter) {
         return false;
       }
@@ -187,29 +201,24 @@ export function TestingBoard({
         f?.toLowerCase().includes(q)
       );
     });
-    // Group by area in order of first appearance; ungrouped last.
-    const byArea = new Map<string, TestCase[]>();
-    for (const c of visible) {
-      const key = c.area ?? "";
-      const list = byArea.get(key);
-      if (list) list.push(c);
-      else byArea.set(key, [c]);
-    }
-    return [...byArea.entries()].sort(([a], [b]) => Number(a === "") - Number(b === ""));
   }, [projectCases, filter, query, now]);
 
-  async function submitQuickAdd() {
-    if (!draft.trim() || busy) return;
-    setBusy(true);
-    const res = await quickAddCases(projectId, draft);
-    setBusy(false);
-    if (!res.ok) {
-      toast.error(res.message);
-      return;
+  const tree = useMemo(() => buildGroupTree(visible), [visible]);
+  const groupCounts = useMemo(() => countGroups(projectCases), [projectCases]);
+  // Every group in the project, for the "move to" suggestions and collapse-all.
+  const groupPaths = useMemo(() => [...groupCounts.keys()], [groupCounts]);
+
+  // A filter or search is looking for something; folded groups would hide it.
+  const searching = filter !== "all" || query.trim() !== "";
+  const anyCollapsed = groupPaths.some((p) => collapsed.has(`${projectId}|${p}`));
+
+  function toggleAll() {
+    const next = new Set(collapsed);
+    for (const p of groupPaths) {
+      if (anyCollapsed) next.delete(`${projectId}|${p}`);
+      else next.add(`${projectId}|${p}`);
     }
-    toast.success(res.message);
-    setDraft("");
-    setAdding(false);
+    saveCollapsed(next);
   }
 
   if (projects.length === 0) {
@@ -223,6 +232,54 @@ export function TestingBoard({
   }
 
   const total = projectCases.length;
+  const projectName = tabs.find((t) => t.id === projectId)?.name ?? "project";
+
+  const treeProps: TreeProps = {
+    projectId,
+    counts: groupCounts,
+    isOpen: (path) => searching || !collapsed.has(`${projectId}|${path}`),
+    onToggle: (path) => {
+      if (searching) return;
+      const key = `${projectId}|${path}`;
+      const next = new Set(collapsed);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      saveCollapsed(next);
+    },
+    addingAt: addAt,
+    onAddHere: (path) => {
+      setAddAt((at) => (at === path ? null : path));
+      const key = `${projectId}|${path}`;
+      if (collapsed.has(key)) {
+        const next = new Set(collapsed);
+        next.delete(key);
+        saveCollapsed(next);
+      }
+    },
+    renderAdd: (path) => (
+      <QuickAdd
+        projectId={projectId}
+        projectName={projectName}
+        base={path}
+        onClose={() => setAddAt(null)}
+      />
+    ),
+    renderCase: (c) => (
+      <CaseRow
+        key={c.id}
+        testCase={c}
+        stale={isStale(c, now)}
+        results={resultsByCase.get(c.id) ?? []}
+        imagesByResult={imagesByResult}
+        members={members}
+        env={env}
+        canEdit={canEdit}
+        canDelete={canEdit && (isAdmin || c.created_by === meId)}
+        canSeeDebug={canSeeDebug}
+      />
+    ),
+    canEdit,
+  };
   const filters: { key: Filter; label: string; count: number }[] = [
     { key: "all", label: "All", count: total },
     { key: "untested", label: STATUS_LABEL.untested, count: counts.untested },
@@ -289,22 +346,7 @@ export function TestingBoard({
             )}
           </p>
         </div>
-        <div
-          className="mt-2 flex h-1.5 overflow-hidden rounded-full bg-raised"
-          role="img"
-          aria-label={`${counts.pass} of ${total} checks working`}
-        >
-          {total > 0 &&
-            BAR.map(({ key, className }) =>
-              counts[key] > 0 ? (
-                <div
-                  key={key}
-                  className={className}
-                  style={{ width: `${(counts[key] / total) * 100}%` }}
-                />
-              ) : null
-            )}
-        </div>
+        <StatusBar counts={counts} total={total} className="mt-2 h-1.5" />
       </div>
 
       {/* Toolbar: status filter · search · environment · add */}
@@ -345,6 +387,28 @@ export function TestingBoard({
             className="pl-8"
           />
         </div>
+        {groupPaths.length > 0 && (
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={toggleAll}
+            disabled={searching}
+            title={
+              searching
+                ? "Groups stay open while filtering"
+                : anyCollapsed
+                  ? "Expand every group"
+                  : "Collapse every group"
+            }
+          >
+            {anyCollapsed ? (
+              <ChevronsUpDown className="size-3.5" aria-hidden />
+            ) : (
+              <ChevronsDownUp className="size-3.5" aria-hidden />
+            )}
+            <span className="hidden sm:inline">{anyCollapsed ? "Expand" : "Collapse"}</span>
+          </Button>
+        )}
         {canEdit && (
           <>
             <Segmented
@@ -358,7 +422,11 @@ export function TestingBoard({
               value={env}
               onChange={pickEnv}
             />
-            <Button size="sm" variant="primary" onClick={() => setAdding((v) => !v)}>
+            <Button
+              size="sm"
+              variant="primary"
+              onClick={() => setAddAt((at) => (at === "" ? null : ""))}
+            >
               <ListPlus className="size-3.5" aria-hidden />
               Add checks
             </Button>
@@ -366,42 +434,20 @@ export function TestingBoard({
         )}
       </div>
 
-      {adding && canEdit && (
-        <div className="space-y-2 rounded-lg border border-line bg-surface p-3">
-          <Textarea
-            autoFocus
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) submitQuickAdd();
-              if (e.key === "Escape") setAdding(false);
-            }}
-            rows={5}
-            placeholder={
-              "One check per line. Prefix an area to group them:\nAuth: Sign up with email\nAuth: Log in with Google\nCheckout: Pay with a Turkish card"
-            }
-            aria-label="Checks to add"
-          />
-          <div className="flex items-center justify-between gap-2">
-            <p className="text-[calc(12px*var(--text-scale,1))] text-faint">
-              Up to {MAX_CASES_PER_BATCH} at a time · Ctrl+Enter to add
-            </p>
-            <div className="flex gap-2">
-              <Button size="sm" variant="ghost" onClick={() => setAdding(false)}>
-                Cancel
-              </Button>
-              <Button
-                size="sm"
-                variant="primary"
-                disabled={busy || !draft.trim()}
-                onClick={submitQuickAdd}
-              >
-                Add to {tabs.find((t) => t.id === projectId)?.name ?? "project"}
-              </Button>
-            </div>
-          </div>
-        </div>
+      {addAt === "" && canEdit && (
+        <QuickAdd
+          projectId={projectId}
+          projectName={projectName}
+          base={null}
+          onClose={() => setAddAt(null)}
+        />
       )}
+
+      <datalist id={GROUPS_DATALIST}>
+        {groupPaths.map((p) => (
+          <option key={p} value={p} />
+        ))}
+      </datalist>
 
       {total === 0 ? (
         <EmptyState
@@ -409,46 +455,34 @@ export function TestingBoard({
           title="No checks on this project yet"
           hint="List what needs to work before it ships: logins, payments, the flows a client will try first."
           action={
-            canEdit && !adding ? (
-              <Button size="sm" onClick={() => setAdding(true)}>
+            canEdit && addAt !== "" ? (
+              <Button size="sm" onClick={() => setAddAt("")}>
                 <ListPlus className="size-3.5" aria-hidden />
                 Add checks
               </Button>
             ) : undefined
           }
         />
-      ) : groups.length === 0 ? (
+      ) : visible.length === 0 ? (
         <EmptyState icon={Search} title="Nothing matches" hint="Try another filter or search." />
       ) : (
         <div className="space-y-4">
-          {groups.map(([area, list]) => (
-            <section key={area || "_none"}>
-              {(groups.length > 1 || area) && (
+          {tree.children.map((node) => (
+            <GroupSection key={node.path} node={node} tree={treeProps} />
+          ))}
+          {tree.cases.length > 0 && (
+            <section>
+              {tree.children.length > 0 && (
                 <h3 className="mb-1.5 px-1 text-xs font-medium uppercase tracking-wide text-faint">
-                  {area || "Other"}
+                  Other
                   <span className="ml-1.5 font-mono normal-case">
-                    {list.filter((c) => c.status === "pass").length}/{list.length}
+                    {tree.cases.filter((c) => c.status === "pass").length}/{tree.cases.length}
                   </span>
                 </h3>
               )}
-              <ul className="divide-y divide-line overflow-hidden rounded-lg border border-line bg-surface">
-                {list.map((c) => (
-                  <CaseRow
-                    key={c.id}
-                    testCase={c}
-                    stale={isStale(c, now)}
-                    results={resultsByCase.get(c.id) ?? []}
-                    imagesByResult={imagesByResult}
-                    members={members}
-                    env={env}
-                    canEdit={canEdit}
-                    canDelete={canEdit && (isAdmin || c.created_by === meId)}
-                    canSeeDebug={canSeeDebug}
-                  />
-                ))}
-              </ul>
+              <CaseList cases={tree.cases} render={treeProps.renderCase} />
             </section>
-          ))}
+          )}
         </div>
       )}
     </div>

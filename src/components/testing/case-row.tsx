@@ -25,6 +25,7 @@ import { Input, Textarea } from "@/components/ui/input";
 import { useToast } from "@/components/ui/toast";
 import { FailSheet } from "@/components/testing/fail-sheet";
 import { ResultImages } from "@/components/testing/result-images";
+import { GROUPS_DATALIST } from "@/components/testing/group-tree";
 import { cn, formatRelative } from "@/lib/utils";
 import type {
   MembersMap,
@@ -193,14 +194,14 @@ export function CaseRow({
                   onChange={(e) => setForm({ ...form, title: e.target.value })}
                 />
               </Field>
-              <Field label="Area">
+              <Field label="Group" className="sm:col-span-2">
                 <Input
                   value={form.area}
-                  placeholder="e.g. Auth"
+                  list={GROUPS_DATALIST}
+                  placeholder="e.g. Mobile app > Home > Booking card"
                   onChange={(e) => setForm({ ...form, area: e.target.value })}
                 />
               </Field>
-              <div className="hidden sm:block" />
               <Field label="How to test">
                 <Textarea
                   value={form.steps}
