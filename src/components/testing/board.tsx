@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { ChevronsDownUp, ChevronsUpDown, FlaskConical, ListPlus, Search } from "lucide-react";
+import { ChevronsDownUp, ChevronsUpDown, FlaskConical, ListPlus, Search, X } from "lucide-react";
 import {
   ENV_LABEL,
   ENVIRONMENTS,
@@ -99,6 +99,19 @@ export function TestingBoard({
   });
   const [filter, setFilter] = useState<Filter>("all");
   const [query, setQuery] = useState("");
+  const searchRef = useRef<HTMLInputElement>(null);
+  // "/" jumps to the search box, like the rest of the app's list pages.
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key !== "/" || e.metaKey || e.ctrlKey || e.altKey) return;
+      const t = e.target as HTMLElement | null;
+      if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return;
+      e.preventDefault();
+      searchRef.current?.focus();
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
   // Where the add box is open: "" at the top, a group's path inside that
   // group, null closed.
   const [addAt, setAddAt] = useState<string | null>(null);
@@ -360,6 +373,11 @@ export function TestingBoard({
           <p className="text-sm text-ink">
             <span className="font-mono font-semibold">{counts.pass}</span>
             <span className="text-muted"> / {total} working</span>
+            {total > 0 && (
+              <span className="ml-2 font-mono text-[calc(12px*var(--text-scale,1))] text-faint">
+                {Math.round((counts.pass / total) * 100)}%
+              </span>
+            )}
           </p>
           <p className="text-[calc(12px*var(--text-scale,1))] text-muted">
             {counts.fail > 0 && <span className="text-danger">{counts.fail} broken · </span>}
@@ -407,12 +425,32 @@ export function TestingBoard({
             aria-hidden
           />
           <Input
+            ref={searchRef}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search checks…"
+            onKeyDown={(e) => {
+              if (e.key === "Escape") {
+                if (query) setQuery("");
+                else e.currentTarget.blur();
+              }
+            }}
+            placeholder="Search checks…  ( / )"
             aria-label="Search checks"
-            className="pl-8"
+            className="pl-8 pr-8"
           />
+          {query && (
+            <button
+              type="button"
+              onClick={() => {
+                setQuery("");
+                searchRef.current?.focus();
+              }}
+              aria-label="Clear search"
+              className="absolute right-1.5 top-1/2 grid size-5 -translate-y-1/2 place-items-center rounded text-faint transition-colors duration-150 hover:bg-raised hover:text-ink"
+            >
+              <X className="size-3.5" aria-hidden />
+            </button>
+          )}
         </div>
         {groupPaths.length > 0 && (
           <Button
@@ -491,7 +529,22 @@ export function TestingBoard({
           }
         />
       ) : visible.length === 0 ? (
-        <EmptyState icon={Search} title="Nothing matches" hint="Try another filter or search." />
+        <EmptyState
+          icon={Search}
+          title="Nothing matches"
+          hint="Try another filter or search."
+          action={
+            <Button
+              size="sm"
+              onClick={() => {
+                setFilter("all");
+                setQuery("");
+              }}
+            >
+              Clear filters
+            </Button>
+          }
+        />
       ) : (
         <div className="space-y-4">
           {tree.children.map((node) => (
