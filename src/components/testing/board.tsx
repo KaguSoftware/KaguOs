@@ -379,7 +379,7 @@ export function TestingBoard({
               </span>
             )}
           </p>
-          <p className="text-[calc(12px*var(--text-scale,1))] text-muted">
+          <p aria-live="polite" className="text-[calc(12px*var(--text-scale,1))] text-muted">
             {counts.fail > 0 && <span className="text-danger">{counts.fail} broken · </span>}
             {counts.retest > 0 && <span className="text-info">{counts.retest} to retest · </span>}
             {counts.blocked > 0 && <span className="text-amber">{counts.blocked} blocked · </span>}
